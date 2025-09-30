@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Certificate Management System</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>PDF</text></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 </head>
@@ -17,13 +17,13 @@
                 </h1>
                 <nav class="flex space-x-4">
                     <button onclick="showTab('master')" id="masterTab" class="px-3 py-2 rounded-md text-sm font-medium bg-indigo-600 text-white">
-                        📄 Master Certificates
+                        Master Certificates
                     </button>
                     <button onclick="showTab('holders')" id="holdersTab" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        👥 Certificate Holders
+                        Certificate Holders
                     </button>
                     <button onclick="showTab('generated')" id="generatedTab" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        📋 Generated Certificates
+                        Generated Certificates
                     </button>
                 </nav>
             </div>
@@ -53,7 +53,7 @@
         </main>
     </div>
 
-    </script>
+    <script>
         // Get account ID from URL
         function getAccountId() {
             const path = window.location.pathname;
@@ -101,14 +101,14 @@
                             ${data.templates.map(template => `
                                 <li class="py-4 flex items-center justify-between">
                                     <div class="flex items-center">
-                                        <div class="w-6 h-6 text-gray-500 mr-3">📄</div>
+                                        <div class="w-6 h-6 text-gray-500 mr-3">PDF</div>
                                         <div>
                                             <p class="text-sm font-medium text-gray-900">${template.template_name}</p>
                                             <p class="text-sm text-gray-500">Type: ${template.template_type}</p>
                                         </div>
                                     </div>
                                     <button onclick="editTemplate('${template.id}')" class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700">
-                                        ✏️ Edit
+                                        Edit
                                     </button>
                                 </li>
                             `).join('')}
@@ -146,9 +146,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>PDF Editor - Template</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://acrobatservices.adobe.com/view-sdk/viewer.js"></script>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>PDF</text></svg>">
+    <script src="https://cdn.tailwindcss.com"><\/script>
+    <script src="https://acrobatservices.adobe.com/view-sdk/viewer.js"><\/script>
 </head>
 <body class="bg-gray-100">
     <div class="h-screen flex flex-col">
@@ -158,13 +158,13 @@
                 <h1 class="text-xl font-semibold text-gray-900">PDF Editor</h1>
                 <div class="flex space-x-3">
                     <button onclick="savePDFFields('${templateId}')" id="saveBtn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700">
-                        💾 Save Fields
+                        Save Fields
                     </button>
                     <button onclick="downloadPDF('${templateId}')" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700">
-                        📥 Download PDF
+                        Download PDF
                     </button>
                     <button onclick="window.close()" class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50">
-                        ❌ Close
+                        Close
                     </button>
                 </div>
             </div>
@@ -190,8 +190,7 @@
             <div id="saveStatus" class="text-sm"></div>
         </div>
     </div>
-    
-    <\/script>
+    <script>
         // Global variables for popup window
         let currentPDFViewer = null;
         const accountId = '${accountId}';
@@ -267,7 +266,7 @@
         function showAdobeSDKError(templateId) {
             const container = document.getElementById('adobe-dc-view');
             if (container) {
-                container.innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="text-center p-8"><div class="text-6xl mb-4">📄</div><h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Editor Ready</h3><p class="text-gray-600 mb-4">Template ID: ' + templateId + '</p><div class="space-y-2 text-sm text-gray-500 mb-6"><p>• Click on form fields to edit them</p><p>• Use the Save Fields button to save your changes</p><p>• Data is automatically saved to the database</p></div><div class="p-4 bg-blue-50 rounded-lg"><p class="text-blue-800 text-sm"><strong>Adobe PDF Embed API:</strong> Demo mode - Form fields are simulated for testing.</p></div></div></div>';
+                container.innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="text-center p-8"><div class="text-6xl mb-4">PDF</div><h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Editor Ready</h3><p class="text-gray-600 mb-4">Template ID: ' + templateId + '</p><div class="space-y-2 text-sm text-gray-500 mb-6"><p>-  Click on form fields to edit them</p><p>-  Use the Save Fields button to save your changes</p><p>-  Data is automatically saved to the database</p></div><div class="p-4 bg-blue-50 rounded-lg"><p class="text-blue-800 text-sm"><strong>Adobe PDF Embed API:</strong> Demo mode - Form fields are simulated for testing.</p></div></div></div>';
             }
             
             // Simulate a PDF viewer for demo purposes
@@ -293,7 +292,7 @@
         function showPDFError(templateId, errorMessage) {
             const container = document.getElementById('adobe-dc-view');
             if (container) {
-                container.innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="text-center p-8"><div class="text-6xl mb-4">⚠️</div><h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Loading Error</h3><p class="text-gray-600 mb-4">Template ID: ' + templateId + '</p><p class="text-red-600 text-sm mb-6">Error: ' + errorMessage + '</p><div class="space-y-2 text-sm text-gray-500 mb-6"><p>• PDF file may not be available</p><p>• Check template storage configuration</p><p>• Try refreshing the page</p></div><button onclick="initializeAdobePDF(\'' + templateId + '\')" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Retry Loading PDF</button></div></div>';
+                container.innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="text-center p-8"><div class="text-6xl mb-4">Warning</div><h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Loading Error</h3><p class="text-gray-600 mb-4">Template ID: ' + templateId + '</p><p class="text-red-600 text-sm mb-6">Error: ' + errorMessage + '</p><div class="space-y-2 text-sm text-gray-500 mb-6"><p>-  PDF file may not be available</p><p>-  Check template storage configuration</p><p>-  Try refreshing the page</p></div><button onclick="initializeAdobePDF(\'' + templateId + '\')" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Retry Loading PDF</button></div></div>';
             }
             
             // Provide fallback PDF viewer
@@ -364,18 +363,18 @@
                     const result = await response.json();
                     
                     if (result.success) {
-                        saveStatus.innerHTML = '<span class="text-green-600">✅ Field values saved successfully!</span>';
+                        saveStatus.innerHTML = '<span class="text-green-600">Field values saved successfully.</span>';
                     } else {
-                        saveStatus.innerHTML = '<span class="text-red-600">❌ Save failed: ' + result.error + '</span>';
+                        saveStatus.innerHTML = '<span class="text-red-600">Save failed: ' + result.error + '</span>';
                     }
                 } else {
-                    saveStatus.innerHTML = '<span class="text-red-600">❌ PDF viewer not available</span>';
+                    saveStatus.innerHTML = '<span class="text-red-600">PDF viewer not available</span>';
                 }
             } catch (error) {
-                saveStatus.innerHTML = '<span class="text-red-600">❌ Save error: ' + error.message + '</span>';
+                saveStatus.innerHTML = '<span class="text-red-600">Save error: ' + error.message + '</span>';
             } finally {
                 saveBtn.disabled = false;
-                saveBtn.textContent = '💾 Save Fields';
+                saveBtn.textContent = 'Save Fields';
             }
         }
 
@@ -406,7 +405,7 @@
                 initializeAdobePDF(templateId);
             }, 1000);
         });
-    </script>
+    <\/script>
 </body>
 </html>`;
             
