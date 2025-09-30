@@ -201,49 +201,39 @@
                         // Initialize Adobe PDF Embed API
                         function initializeAdobePDF(templateId) {
                             // Show loading state
-                            document.getElementById('adobe-dc-view').innerHTML = \`
+                            document.getElementById('adobe-dc-view').innerHTML = `
                                 <div class="h-full flex flex-col items-center justify-center bg-gray-50">
                                     <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
                                     <p class="text-gray-600">Loading PDF...</p>
                                 </div>
-                            \`;
+                            `;
 
                             // Check if Adobe PDF Embed API is available
                             if (typeof window.AdobeDC === 'undefined') {
-                                document.getElementById('adobe-dc-view').innerHTML = \`
-                                    <div class="h-full flex flex-col items-center justify-center bg-gray-50">
-                                        <div class="text-center p-8">
-                                            <div class="text-6xl mb-4">📄</div>
-                                            <h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Editor Ready</h3>
-                                            <p class="text-gray-600 mb-4">Template ID: \${templateId}</p>
-                                            <div class="space-y-2 text-sm text-gray-500 mb-6">
-                                                <p>• Click on form fields to edit them</p>
-                                                <p>• Use the Save Fields button to save your changes</p>
-                                                <p>• Data is automatically saved to the database</p>
-                                            </div>
-                                            <div class="p-4 bg-blue-50 rounded-lg">
-                                                <p class="text-blue-800 text-sm">
-                                                    <strong>Adobe PDF Embed API:</strong> Loading... If this persists, 
-                                                    the API may need to be configured.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                \`;
+                                console.log('Adobe PDF Embed API not loaded yet, waiting...');
                                 
-                                // Simulate a PDF viewer for demo purposes
-                                currentPDFViewer = {
-                                    getFormFields: async function() {
-                                        return {
-                                            'company_name': 'Sample Company',
-                                            'policy_number': 'POL-123456',
-                                            'effective_date': '01/01/2025',
-                                            'expiration_date': '12/31/2025',
-                                            'insured_name': 'John Doe',
-                                            'address': '123 Main St, City, State 12345'
-                                        };
+                                // Wait for Adobe SDK to load
+                                let attempts = 0;
+                                const maxAttempts = 10;
+                                
+                                const checkAdobeSDK = setInterval(function() {
+                                    attempts++;
+                                    console.log(`Checking for Adobe SDK... attempt ${attempts}`);
+                                    
+                                    if (typeof window.AdobeDC !== 'undefined') {
+                                        clearInterval(checkAdobeSDK);
+                                        console.log('Adobe SDK loaded, initializing PDF...');
+                                        // Retry initialization
+                                        setTimeout(function() {
+                                            initializeAdobePDF(templateId);
+                                        }, 500);
+                                    } else if (attempts >= maxAttempts) {
+                                        clearInterval(checkAdobeSDK);
+                                        console.log('Adobe SDK failed to load after max attempts');
+                                        showAdobeSDKError(templateId);
                                     }
-                                };
+                                }, 1000);
+                                
                                 return;
                             }
 
@@ -258,11 +248,11 @@
                                 const previewFilePromise = adobeDCView.previewFile({
                                     content: {
                                         location: {
-                                            url: \`/api/pdf/template/\${templateId}\`
+                                            url: `/api/pdf/template/${templateId}`
                                         }
                                     },
                                     metaData: {
-                                        fileName: \`Template \${templateId}\`
+                                        fileName: `Template ${templateId}`
                                     }
                                 }, {
                                     embedMode: "FULL_WINDOW",
@@ -293,26 +283,63 @@
                             }
                         }
 
+                        // Show Adobe SDK loading error
+                        function showAdobeSDKError(templateId) {
+                            document.getElementById('adobe-dc-view').innerHTML = `
+                                <div class="h-full flex flex-col items-center justify-center bg-gray-50">
+                                    <div class="text-center p-8">
+                                        <div class="text-6xl mb-4">📄</div>
+                                        <h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Editor Ready</h3>
+                                        <p class="text-gray-600 mb-4">Template ID: ${templateId}</p>
+                                        <div class="space-y-2 text-sm text-gray-500 mb-6">
+                                            <p>• Click on form fields to edit them</p>
+                                            <p>• Use the Save Fields button to save your changes</p>
+                                            <p>• Data is automatically saved to the database</p>
+                                        </div>
+                                        <div class="p-4 bg-blue-50 rounded-lg">
+                                            <p class="text-blue-800 text-sm">
+                                                <strong>Adobe PDF Embed API:</strong> Demo mode - Form fields are simulated for testing.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                            
+                            // Simulate a PDF viewer for demo purposes
+                            currentPDFViewer = {
+                                getFormFields: async function() {
+                                    return {
+                                        'company_name': 'Sample Company',
+                                        'policy_number': 'POL-123456',
+                                        'effective_date': '01/01/2025',
+                                        'expiration_date': '12/31/2025',
+                                        'insured_name': 'John Doe',
+                                        'address': '123 Main St, City, State 12345'
+                                    };
+                                }
+                            };
+                        }
+
                         // Show PDF loading error
                         function showPDFError(templateId, errorMessage) {
-                            document.getElementById('adobe-dc-view').innerHTML = \`
+                            document.getElementById('adobe-dc-view').innerHTML = `
                                 <div class="h-full flex flex-col items-center justify-center bg-gray-50">
                                     <div class="text-center p-8">
                                         <div class="text-6xl mb-4">⚠️</div>
                                         <h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Loading Error</h3>
-                                        <p class="text-gray-600 mb-4">Template ID: \${templateId}</p>
-                                        <p class="text-red-600 text-sm mb-6">Error: \${errorMessage}</p>
+                                        <p class="text-gray-600 mb-4">Template ID: ${templateId}</p>
+                                        <p class="text-red-600 text-sm mb-6">Error: ${errorMessage}</p>
                                         <div class="space-y-2 text-sm text-gray-500 mb-6">
                                             <p>• PDF file may not be available</p>
                                             <p>• Check template storage configuration</p>
                                             <p>• Try refreshing the page</p>
                                         </div>
-                                        <button onclick="initializeAdobePDF('\${templateId}')" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                                        <button onclick="initializeAdobePDF('${templateId}')" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
                                             Retry Loading PDF
                                         </button>
                                     </div>
                                 </div>
-                            \`;
+                            `;
                             
                             // Provide fallback PDF viewer
                             currentPDFViewer = {
@@ -332,7 +359,7 @@
                         // Load existing field values for this template and account
                         async function loadExistingFieldValues(templateId) {
                             try {
-                                const response = await fetch(\`/api/pdf/get-fields/\${templateId}/\${accountId}\`);
+                                const response = await fetch(`/api/pdf/get-fields/${templateId}/${accountId}`);
                                 const data = await response.json();
                                 
                                 if (data.success && data.field_values && Object.keys(data.field_values).length > 0) {
@@ -379,13 +406,13 @@
                                     if (result.success) {
                                         saveStatus.innerHTML = '<span class="text-green-600">✅ Field values saved successfully!</span>';
                                     } else {
-                                        saveStatus.innerHTML = \`<span class="text-red-600">❌ Save failed: \${result.error}</span>\`;
+                                        saveStatus.innerHTML = `<span class="text-red-600">❌ Save failed: ${result.error}</span>`;
                                     }
                                 } else {
                                     saveStatus.innerHTML = '<span class="text-red-600">❌ PDF viewer not available</span>';
                                 }
                             } catch (error) {
-                                saveStatus.innerHTML = \`<span class="text-red-600">❌ Save error: \${error.message}</span>\`;
+                                saveStatus.innerHTML = `<span class="text-red-600">❌ Save error: ${error.message}</span>`;
                             } finally {
                                 saveBtn.disabled = false;
                                 saveBtn.textContent = '💾 Save Fields';
@@ -395,26 +422,29 @@
                         // Download PDF
                         async function downloadPDF(templateId) {
                             try {
-                                const response = await fetch(\`/api/pdf/template/\${templateId}\`);
+                                const response = await fetch(`/api/pdf/template/${templateId}`);
                                 if (!response.ok) throw new Error('Failed to download PDF');
                                 
                                 const blob = await response.blob();
                                 const url = window.URL.createObjectURL(blob);
                                 const a = document.createElement('a');
                                 a.href = url;
-                                a.download = \`template_\${templateId}.pdf\`;
+                                a.download = `template_${templateId}.pdf`;
                                 document.body.appendChild(a);
                                 a.click();
                                 a.remove();
                                 window.URL.revokeObjectURL(url);
                             } catch (error) {
-                                alert(\`Download failed: \${error.message}\`);
+                                alert(`Download failed: ${error.message}`);
                             }
                         }
 
                         // Initialize when popup loads
                         window.addEventListener('load', function() {
-                            initializeAdobePDF('${templateId}');
+                            // Add a small delay to ensure Adobe SDK is fully loaded
+                            setTimeout(function() {
+                                initializeAdobePDF('${templateId}');
+                            }, 1000);
                         });
                     </script>
                 </body>
