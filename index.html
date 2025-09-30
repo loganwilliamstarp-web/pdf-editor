@@ -89,11 +89,13 @@
         async function loadTemplates() {
             try {
                 const accountId = getAccountId();
+                console.log('Loading templates for account:', accountId);
                 const response = await fetch(`/api/account/${accountId}/templates`);
                 const data = await response.json();
+                console.log('Templates response:', data);
                 
                 const templatesList = document.getElementById('templatesList');
-                if (data.success && data.templates.length > 0) {
+                if (data.success && data.templates && data.templates.length > 0) {
                     templatesList.innerHTML = `
                         <ul class="divide-y divide-gray-200">
                             ${data.templates.map(template => `
@@ -102,10 +104,7 @@
                                         <div class="w-6 h-6 text-gray-500 mr-3">📄</div>
                                         <div>
                                             <p class="text-sm font-medium text-gray-900">${template.template_name}</p>
-                                            <p class="text-sm text-gray-500">
-                                                ${template.file_size ? `${(template.file_size / 1024).toFixed(2)} KB` : 'N/A'} | 
-                                                Created: ${new Date(template.created_at).toLocaleDateString()}
-                                            </p>
+                                            <p class="text-sm text-gray-500">Type: ${template.template_type}</p>
                                         </div>
                                     </div>
                                     <button onclick="editTemplate('${template.id}')" class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700">
@@ -119,6 +118,7 @@
                     templatesList.innerHTML = '<p class="text-gray-600">No templates found.</p>';
                 }
             } catch (error) {
+                console.error('Error loading templates:', error);
                 document.getElementById('templatesList').innerHTML = `<p class="text-red-600">Error loading templates: ${error.message}</p>`;
             }
         }
