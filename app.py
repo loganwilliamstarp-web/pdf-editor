@@ -4,9 +4,26 @@ import os
 import io
 import uuid
 import json
+from pathlib import Path
 from datetime import datetime
 
 # Optional imports with fallbacks
+
+LOCAL_TEMPLATE_DIR = Path(__file__).resolve().parent / "database" / "templates"
+LOCAL_TEMPLATE_FILES = {
+    "acord25": "acord25.pdf",
+    "acord27": "acord27.pdf",
+    "acord28": "acord28.pdf",
+    "acord30": "acord30.pdf",
+    "acord35": "acord35.pdf",
+    "acord36": "acord36.pdf",
+    "acord37": "acord37.pdf",
+    "acord125": "acord125.pdf",
+    "acord126": "acord126.pdf",
+    "acord130": "acord130.pdf",
+    "acord140": "acord140.pdf",
+}
+
 try:
     from supabase import create_client, Client
     SUPABASE_AVAILABLE = True
@@ -476,6 +493,37 @@ def upload_template_simple():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
+def resolve_local_template_file(template_type, storage_path):
+    """Resolve a local PDF template file path if available."""
+    candidates = []
+
+    if storage_path:
+        storage_path = storage_path.strip()
+        if storage_path:
+            candidate = Path(storage_path)
+            candidates.append(candidate)
+            candidates.append(Path(__file__).resolve().parent / storage_path)
+            normalized_name = candidate.stem.replace('acord_', 'acord').replace('_', '').lower()
+            if normalized_name:
+                candidates.append(LOCAL_TEMPLATE_DIR / f"{normalized_name}.pdf")
+            candidates.append(LOCAL_TEMPLATE_DIR / candidate.name)
+
+    if template_type:
+        template_type = template_type.lower()
+        mapped = LOCAL_TEMPLATE_FILES.get(template_type)
+        if mapped:
+            candidates.append(LOCAL_TEMPLATE_DIR / mapped)
+
+    for candidate in candidates:
+        try:
+            if candidate and candidate.exists():
+                return candidate
+        except TypeError:
+            continue
+
+    return None
+
 @app.route('/api/pdf/template/<template_id>')
 def serve_pdf_template(template_id):
     """Serve PDF template file for Adobe Embed API"""
@@ -484,18 +532,34 @@ def serve_pdf_template(template_id):
         cur = conn.cursor()
         
         # Get template from database
-        cur.execute('SELECT template_name, storage_path, form_fields FROM master_templates WHERE id = %s', (template_id,))
+        cur.execute('SELECT template_name, template_type, storage_path, form_fields FROM master_templates WHERE id = %s', (template_id,))
         template = cur.fetchone()
         
         if not template:
             return jsonify({'error': 'Template not found'}), 404
         
-        template_name, storage_path, form_fields = template
+        template_name, template_type, storage_path, form_fields = template
+        template_type = (template_type or '').lower()
+        storage_path = storage_path or ''
+
+        form_fields_data = {}
+        if form_fields:
+            if isinstance(form_fields, dict):
+                form_fields_data = form_fields
+            else:
+                try:
+                    form_fields_data = json.loads(form_fields) if form_fields else {}
+                except (TypeError, ValueError):
+                    form_fields_data = {}
+
         print(f"Serving PDF template: {template_name} (ID: {template_id})")
-        
-        # Since templates are stored in PostgreSQL database, we need to create a PDF with form fields
-        # For now, let's create a proper PDF template with form fields based on the template type
-        pdf_content = create_pdf_with_form_fields(template_name, form_fields)
+
+        local_file = resolve_local_template_file(template_type, storage_path)
+        if local_file:
+            pdf_content = local_file.read_bytes()
+        else:
+            # Fallback to generated PDF if no local asset is available
+            pdf_content = create_pdf_with_form_fields(template_name, form_fields_data)
         
         from flask import Response
         return Response(
