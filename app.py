@@ -475,9 +475,9 @@ def upload_template_simple():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/pdf/render/<template_id>')
-def render_pdf(template_id):
-    """Render PDF template for editing"""
+@app.route('/api/pdf/template/<template_id>')
+def serve_pdf_template(template_id):
+    """Serve PDF template file for Adobe Embed API"""
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -491,12 +491,58 @@ def render_pdf(template_id):
         
         template_name, storage_path = template
         
-        # For now, return a placeholder PDF URL
-        # In a full implementation, you'd serve the actual PDF file from storage
+        # Try to serve the PDF file from Supabase storage
+        if supabase and storage_path:
+            try:
+                # Download PDF from Supabase storage
+                response = supabase.storage.from_('files').download(storage_path)
+                if response:
+                    from flask import Response
+                    return Response(
+                        response,
+                        mimetype='application/pdf',
+                        headers={
+                            'Content-Disposition': f'inline; filename="{template_name}.pdf"',
+                            'Access-Control-Allow-Origin': '*'
+                        }
+                    )
+            except Exception as e:
+                print(f"Error downloading from Supabase: {e}")
+        
+        # Fallback: serve a placeholder PDF
+        return jsonify({
+            'error': 'PDF file not available',
+            'template_name': template_name,
+            'template_id': template_id
+        }), 404
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            cur.close()
+            conn.close()
+
+@app.route('/api/pdf/render/<template_id>')
+def render_pdf(template_id):
+    """Render PDF template for editing (legacy endpoint)"""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        
+        # Get template from database
+        cur.execute('SELECT template_name, storage_path FROM master_templates WHERE id = %s', (template_id,))
+        template = cur.fetchone()
+        
+        if not template:
+            return jsonify({'error': 'Template not found'}), 404
+        
+        template_name, storage_path = template
+        
         return jsonify({
             'success': True,
             'template_name': template_name,
-            'pdf_url': f'/static/placeholder.pdf'  # Placeholder for actual PDF serving
+            'pdf_url': f'/api/pdf/template/{template_id}'
         })
         
     except Exception as e:

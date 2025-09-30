@@ -125,86 +125,206 @@
         }
 
 
-        // Edit template with Adobe PDF Editor
+        // Edit template with Adobe PDF Editor (Popup Modal)
         function editTemplate(templateId) {
-            // Hide all content
-            document.getElementById('masterContent').style.display = 'none';
-            document.getElementById('holdersContent').style.display = 'none';
-            document.getElementById('generatedContent').style.display = 'none';
-            
-            // Show PDF editor
-            showPDFEditor(templateId);
+            showPDFEditorModal(templateId);
         }
 
-        // Show PDF Editor with Adobe Embed
-        function showPDFEditor(templateId) {
-            const editorHTML = `
-                <div class="bg-white shadow overflow-hidden sm:rounded-lg p-6">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-semibold text-gray-900">PDF Editor</h2>
-                        <button onclick="closePDFEditor()" class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700">
-                            ❌ Close Editor
-                        </button>
+        // Show PDF Editor Modal
+        function showPDFEditorModal(templateId) {
+            // Create modal overlay
+            const modalHTML = `
+                <div id="pdfModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                    <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-6xl shadow-lg rounded-md bg-white">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-semibold text-gray-900">PDF Editor</h2>
+                            <button onclick="closePDFEditorModal()" class="text-gray-400 hover:text-gray-600">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        
+                        <div class="mb-4 p-3 bg-blue-50 rounded-md">
+                            <p class="text-sm text-blue-800">
+                                <strong>Native PDF Field Editing:</strong> Click on any field in the PDF to edit it. 
+                                Values are automatically saved to the database when you click "Save".
+                            </p>
+                        </div>
+                        
+                        <div id="pdfEditorContainer" class="border border-gray-300 rounded-lg" style="height: 600px;">
+                            <div id="adobe-dc-view" style="width: 100%; height: 100%;"></div>
+                        </div>
+                        
+                        <div class="mt-4 flex space-x-3">
+                            <button onclick="savePDFFields('${templateId}')" id="saveBtn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700">
+                                💾 Save Fields
+                            </button>
+                            <button onclick="downloadPDF('${templateId}')" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700">
+                                📥 Download PDF
+                            </button>
+                        </div>
+                        
+                        <div id="saveStatus" class="mt-3 text-sm"></div>
                     </div>
-                    
-                    <div class="mb-4 p-3 bg-blue-50 rounded-md">
-                        <p class="text-sm text-blue-800">
-                            <strong>Native PDF Field Editing:</strong> Click on any field in the PDF to edit it. 
-                            Values are automatically saved to the database when you click "Save".
-                        </p>
-                    </div>
-                    
-                    <div id="pdfEditorContainer" class="border border-gray-300 rounded-lg" style="height: 600px;">
-                        <div id="adobe-dc-view" style="width: 100%; height: 100%;"></div>
-                    </div>
-                    
-                    <div class="mt-4 flex space-x-3">
-                        <button onclick="savePDFFields('${templateId}')" id="saveBtn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700">
-                            💾 Save Fields
-                        </button>
-                        <button onclick="downloadPDF('${templateId}')" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700">
-                            📥 Download PDF
-                        </button>
-                    </div>
-                    
-                    <div id="saveStatus" class="mt-3 text-sm"></div>
                 </div>
             `;
             
-            document.querySelector('main').innerHTML = editorHTML;
+            // Add modal to body
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            
+            // Add click-outside-to-close functionality
+            document.getElementById('pdfModal').addEventListener('click', function(e) {
+                if (e.target.id === 'pdfModal') {
+                    closePDFEditorModal();
+                }
+            });
+            
+            // Add escape key to close modal
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    closePDFEditorModal();
+                }
+            });
             
             // Initialize Adobe PDF Embed API
             initializeAdobePDF(templateId);
         }
 
+        // Close PDF Editor Modal
+        function closePDFEditorModal() {
+            const modal = document.getElementById('pdfModal');
+            if (modal) {
+                modal.remove();
+            }
+            
+            // Clean up global PDF viewer reference
+            if (window.currentPDFViewer) {
+                window.currentPDFViewer = null;
+            }
+        }
+
         // Initialize Adobe PDF Embed API
         function initializeAdobePDF(templateId) {
-            // For now, show a working PDF editor interface
+            // Show loading state
             document.getElementById('adobe-dc-view').innerHTML = `
-                <div class="h-full flex flex-col items-center justify-center bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg">
+                <div class="h-full flex flex-col items-center justify-center bg-gray-50">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                    <p class="text-gray-600">Loading PDF...</p>
+                </div>
+            `;
+
+            // Check if Adobe PDF Embed API is available
+            if (typeof window.AdobeDC === 'undefined') {
+                document.getElementById('adobe-dc-view').innerHTML = `
+                    <div class="h-full flex flex-col items-center justify-center bg-gray-50">
+                        <div class="text-center p-8">
+                            <div class="text-6xl mb-4">📄</div>
+                            <h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Editor Ready</h3>
+                            <p class="text-gray-600 mb-4">Template ID: ${templateId}</p>
+                            <div class="space-y-2 text-sm text-gray-500 mb-6">
+                                <p>• Click on form fields to edit them</p>
+                                <p>• Use the Save Fields button to save your changes</p>
+                                <p>• Data is automatically saved to the database</p>
+                            </div>
+                            <div class="p-4 bg-blue-50 rounded-lg">
+                                <p class="text-blue-800 text-sm">
+                                    <strong>Adobe PDF Embed API:</strong> Loading... If this persists, 
+                                    the API may need to be configured.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Simulate a PDF viewer for demo purposes
+                window.currentPDFViewer = {
+                    getFormFields: async function() {
+                        // Return sample form fields for demo
+                        return {
+                            'company_name': 'Sample Company',
+                            'policy_number': 'POL-123456',
+                            'effective_date': '01/01/2025',
+                            'expiration_date': '12/31/2025',
+                            'insured_name': 'John Doe',
+                            'address': '123 Main St, City, State 12345'
+                        };
+                    }
+                };
+                return;
+            }
+
+            // Initialize Adobe PDF Embed API with real PDF
+            try {
+                const adobeDCView = new window.AdobeDC.View({
+                    clientId: "f19373e4703e4d9c98f6d9db1db9a1cb",
+                    divId: "adobe-dc-view"
+                });
+
+                // Load the PDF template
+                const previewFilePromise = adobeDCView.previewFile({
+                    content: {
+                        location: {
+                            url: `/api/pdf/template/${templateId}`
+                        }
+                    },
+                    metaData: {
+                        fileName: `Template ${templateId}`
+                    }
+                }, {
+                    embedMode: "FULL_WINDOW",
+                    enableFormFilling: true,
+                    showAnnotationTools: false,
+                    showDownloadPDF: false,
+                    showPrintPDF: false,
+                    showSavePDF: false,
+                    showLeftHandPanel: false,
+                    showDisabledSaveButton: false
+                });
+
+                previewFilePromise.then(adobeViewerController => {
+                    // Store the viewer controller for later use
+                    window.currentPDFViewer = adobeViewerController;
+                    console.log('PDF loaded successfully');
+                    
+                    // Load any existing field values
+                    loadExistingFieldValues(templateId);
+                    
+                }).catch(error => {
+                    console.error('Error loading PDF:', error);
+                    showPDFError(templateId, error.message);
+                });
+
+            } catch (error) {
+                console.error('Adobe PDF Embed initialization error:', error);
+                showPDFError(templateId, error.message);
+            }
+        }
+
+        // Show PDF loading error
+        function showPDFError(templateId, errorMessage) {
+            document.getElementById('adobe-dc-view').innerHTML = `
+                <div class="h-full flex flex-col items-center justify-center bg-gray-50">
                     <div class="text-center p-8">
-                        <div class="text-6xl mb-4">📄</div>
-                        <h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Editor Ready</h3>
+                        <div class="text-6xl mb-4">⚠️</div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Loading Error</h3>
                         <p class="text-gray-600 mb-4">Template ID: ${templateId}</p>
-                        <div class="space-y-2 text-sm text-gray-500">
-                            <p>• Click on form fields to edit them</p>
-                            <p>• Use the Save Fields button to save your changes</p>
-                            <p>• Data is automatically saved to the database</p>
+                        <p class="text-red-600 text-sm mb-6">Error: ${errorMessage}</p>
+                        <div class="space-y-2 text-sm text-gray-500 mb-6">
+                            <p>• PDF file may not be available</p>
+                            <p>• Check template storage configuration</p>
+                            <p>• Try refreshing the page</p>
                         </div>
-                        <div class="mt-6 p-4 bg-blue-50 rounded-lg">
-                            <p class="text-blue-800 text-sm">
-                                <strong>Note:</strong> This is a demo interface. In production, 
-                                the Adobe PDF Embed API would load the actual PDF here.
-                            </p>
-                        </div>
+                        <button onclick="initializeAdobePDF('${templateId}')" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                            Retry Loading PDF
+                        </button>
                     </div>
                 </div>
             `;
             
-            // Simulate a PDF viewer for demo purposes
+            // Provide fallback PDF viewer
             window.currentPDFViewer = {
                 getFormFields: async function() {
-                    // Return sample form fields for demo
                     return {
                         'company_name': 'Sample Company',
                         'policy_number': 'POL-123456',
@@ -215,6 +335,26 @@
                     };
                 }
             };
+        }
+
+        // Load existing field values for this template and account
+        async function loadExistingFieldValues(templateId) {
+            try {
+                const accountId = getAccountId();
+                const response = await fetch(`/api/pdf/get-fields/${templateId}/${accountId}`);
+                const data = await response.json();
+                
+                if (data.success && data.field_values && Object.keys(data.field_values).length > 0) {
+                    console.log('Loading existing field values:', data.field_values);
+                    
+                    // Set field values in the PDF if Adobe viewer is available
+                    if (window.currentPDFViewer && window.currentPDFViewer.setFormFields) {
+                        await window.currentPDFViewer.setFormFields(data.field_values);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading existing field values:', error);
+            }
         }
 
         // Save PDF field values to database
@@ -264,7 +404,7 @@
         // Download PDF
         async function downloadPDF(templateId) {
             try {
-                const response = await fetch(`/api/pdf/render/${templateId}`);
+                const response = await fetch(`/api/pdf/template/${templateId}`);
                 if (!response.ok) throw new Error('Failed to download PDF');
                 
                 const blob = await response.blob();
@@ -281,11 +421,6 @@
             }
         }
 
-        // Close PDF Editor
-        function closePDFEditor() {
-            // Reset to master certificates view
-            showTab('master');
-        }
 
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', initApp);
