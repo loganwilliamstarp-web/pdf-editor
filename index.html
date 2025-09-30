@@ -147,8 +147,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>PDF Editor - Template</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>PDF</text></svg>">
-    <script src="https://cdn.tailwindcss.com"><\/script>
-    <script src="https://acrobatservices.adobe.com/view-sdk/viewer.js"><\/script>
+    <script src="https://cdn.tailwindcss.com">${"</scr" + "ipt>"}
+    <script src="https://acrobatservices.adobe.com/view-sdk/viewer.js">${"</scr" + "ipt>"}
 </head>
 <body class="bg-gray-100">
     <div class="h-screen flex flex-col">
@@ -206,7 +206,7 @@
             }
 
             // Use the correct Adobe PDF Embed API initialization
-            document.addEventListener("adobe_dc_view_sdk.ready", function() {
+            const initializeAdobeSDKView = () => {
                 console.log('Adobe PDF Embed API is ready');
 
                 try {
@@ -251,7 +251,13 @@
                     console.error('Adobe PDF Embed initialization error:', error);
                     showPDFError(templateId, error.message);
                 }
-            });
+            };
+
+            if (window.AdobeDC && window.AdobeDC.View) {
+                initializeAdobeSDKView();
+            } else {
+                document.addEventListener("adobe_dc_view_sdk.ready", initializeAdobeSDKView, { once: true });
+            }
 
             // Fallback if Adobe SDK doesn't load
             setTimeout(function() {
@@ -405,7 +411,7 @@
                 initializeAdobePDF(templateId);
             }, 1000);
         });
-    <\/script>
+    ${"</scr" + "ipt>"}
 </body>
 </html>`;
             
