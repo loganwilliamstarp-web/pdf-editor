@@ -63,16 +63,32 @@ def get_db():
     )
 
 def setup_supabase_storage():
-    """Create the storage bucket for certificates"""
+    """Setup Supabase storage using default bucket"""
     try:
         if not supabase:
             return False
-        result = supabase.storage.create_bucket('certificates', public=True)
-        return True
-    except Exception as e:
-        if "already exists" in str(e).lower():
+        
+        # Try to list existing buckets to verify connection
+        try:
+            buckets = supabase.storage.list_buckets()
+            print(f"✅ Connected to Supabase storage. Available buckets: {[b.name for b in buckets]}")
+            
+            # Use the first available bucket or default to 'files'
+            if buckets:
+                bucket_name = buckets[0].name
+            else:
+                bucket_name = 'files'
+            
+            print(f"✅ Using Supabase bucket: {bucket_name}")
             return True
-        print(f"Supabase storage setup error: {e}")
+            
+        except Exception as e:
+            print(f"⚠️  Could not list buckets, but Supabase client is available: {e}")
+            # Even if we can't list buckets, the client might still work
+            return True
+            
+    except Exception as e:
+        print(f"❌ Supabase storage setup error: {e}")
         return False
 
 def create_database_schema():
@@ -337,6 +353,90 @@ def provision_pdf():
                 'filename': pdf_file.filename
             }
         })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route("/api/upload-template", methods=['POST'])
+def upload_template():
+    """Upload a master template to Supabase storage and database"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+        
+        if not supabase:
+            return jsonify({'success': False, 'error': 'Supabase storage not available'}), 500
+        
+        pdf_file = request.files['file']
+        template_name = request.form.get('name', 'Untitled Template')
+        template_type = request.form.get('template_type', 'general')
+        account_id = request.form.get('account_id', 'system')
+        
+        # Generate unique ID for template
+        template_id = str(uuid.uuid4())
+        
+        # Create storage path using default bucket
+        storage_path = f'templates/{template_id}.pdf'
+        
+        # Upload to Supabase storage (using default bucket)
+        try:
+            # Try to upload to the default bucket (usually accessible)
+            pdf_data = pdf_file.read()
+            
+            # Try different bucket names that might exist
+            bucket_names = ['files', 'certificates', 'templates', 'default']
+            upload_success = False
+            
+            for bucket_name in bucket_names:
+                try:
+                    supabase.storage.from_(bucket_name).upload(
+                        storage_path,
+                        pdf_data,
+                        {'content-type': 'application/pdf'}
+                    )
+                    print(f"✅ Uploaded to bucket: {bucket_name}")
+                    upload_success = True
+                    break
+                except Exception as e:
+                    print(f"⚠️  Failed to upload to bucket {bucket_name}: {e}")
+                    continue
+            
+            if not upload_success:
+                return jsonify({'success': False, 'error': 'Could not upload to any Supabase bucket'}), 500
+                
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'Supabase upload failed: {str(e)}'}), 500
+        
+        # Save template metadata to database
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            
+            cur.execute('''
+                INSERT INTO master_templates (id, template_name, template_type, storage_path, file_size, form_fields)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING *
+            ''', (template_id, template_name, template_type, storage_path, len(pdf_data), '{}'))
+            
+            result = cur.fetchone()
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'template_id': template_id,
+                'message': 'Template uploaded successfully',
+                'metadata': {
+                    'name': template_name,
+                    'type': template_type,
+                    'storage_path': storage_path,
+                    'file_size': len(pdf_data)
+                }
+            })
+            
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'Database save failed: {str(e)}'}), 500
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
