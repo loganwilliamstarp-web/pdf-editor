@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, send_from_directory, Response
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import os
 import io
@@ -306,6 +306,46 @@ def get_account_info(account_id):
         "message": "Account data will be integrated with Salesforce",
         "status": "ready"
     })
+
+
+@app.route("/pdf-editor/<template_id>")
+def pdf_editor(template_id):
+    """Serve the interactive PDF editor popup."""
+    account_id = (request.args.get('account_id') or '').strip()
+    if not account_id:
+        account_id = '001000000000001'
+    else:
+        account_id = account_id[:18]
+
+    template_name = "PDF Template"
+
+    if PSYCOPG2_AVAILABLE:
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute(
+                'SELECT template_name FROM master_templates WHERE id = %s',
+                (template_id,)
+            )
+            row = cur.fetchone()
+            if row:
+                if isinstance(row, dict):
+                    template_name = row.get('template_name') or template_name
+                else:
+                    template_name = row[0] if row and row[0] else template_name
+        except Exception as db_error:
+            print(f"Warning: unable to load template metadata for editor: {db_error}")
+        finally:
+            if 'conn' in locals():
+                cur.close()
+                conn.close()
+
+    return render_template(
+        'pdf_editor.html',
+        template_id=template_id,
+        account_id=account_id,
+        template_name=template_name
+    )
 
 @app.route("/api/account/<account_id>/templates", methods=['GET'])
 def get_account_templates(account_id):
