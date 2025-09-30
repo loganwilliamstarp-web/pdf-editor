@@ -145,7 +145,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>PDF Editor - Template ${templateId}</title>
+    <title>PDF Editor - Template</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://acrobatservices.adobe.com/view-sdk/viewer.js"></script>
@@ -196,16 +196,20 @@
         let currentPDFViewer = null;
         const accountId = '${accountId}';
         const templateId = '${templateId}';
+        const templateName = 'PDF Template';
         
         // Initialize Adobe PDF Embed API
         function initializeAdobePDF(templateId) {
             // Show loading state
-            document.getElementById('adobe-dc-view').innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div><p class="text-gray-600">Loading PDF...</p></div>';
+            const container = document.getElementById('adobe-dc-view');
+            if (container) {
+                container.innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div><p class="text-gray-600">Loading PDF...</p></div>';
+            }
 
             // Use the correct Adobe PDF Embed API initialization
             document.addEventListener("adobe_dc_view_sdk.ready", function() {
                 console.log('Adobe PDF Embed API is ready');
-                
+
                 try {
                     const adobeDCView = new AdobeDC.View({
                         clientId: "f19373e4703e4d9c98f6d9db1db9a1cb",
@@ -234,7 +238,7 @@
                     }).then(adobeViewerController => {
                         currentPDFViewer = adobeViewerController;
                         console.log('PDF loaded successfully');
-                        
+
                         // Load any existing field values
                         loadExistingFieldValues(templateId);
                     }).catch(error => {
@@ -243,7 +247,7 @@
                     });
 
                     console.log('PDF loading initiated');
-                    
+
                 } catch (error) {
                     console.error('Adobe PDF Embed initialization error:', error);
                     showPDFError(templateId, error.message);
@@ -261,7 +265,10 @@
 
         // Show Adobe SDK loading error
         function showAdobeSDKError(templateId) {
-            document.getElementById('adobe-dc-view').innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="text-center p-8"><div class="text-6xl mb-4">📄</div><h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Editor Ready</h3><p class="text-gray-600 mb-4">Template ID: ' + templateId + '</p><div class="space-y-2 text-sm text-gray-500 mb-6"><p>• Click on form fields to edit them</p><p>• Use the Save Fields button to save your changes</p><p>• Data is automatically saved to the database</p></div><div class="p-4 bg-blue-50 rounded-lg"><p class="text-blue-800 text-sm"><strong>Adobe PDF Embed API:</strong> Demo mode - Form fields are simulated for testing.</p></div></div></div>';
+            const container = document.getElementById('adobe-dc-view');
+            if (container) {
+                container.innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="text-center p-8"><div class="text-6xl mb-4">📄</div><h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Editor Ready</h3><p class="text-gray-600 mb-4">Template ID: ' + templateId + '</p><div class="space-y-2 text-sm text-gray-500 mb-6"><p>• Click on form fields to edit them</p><p>• Use the Save Fields button to save your changes</p><p>• Data is automatically saved to the database</p></div><div class="p-4 bg-blue-50 rounded-lg"><p class="text-blue-800 text-sm"><strong>Adobe PDF Embed API:</strong> Demo mode - Form fields are simulated for testing.</p></div></div></div>';
+            }
             
             // Simulate a PDF viewer for demo purposes
             currentPDFViewer = {
@@ -284,7 +291,10 @@
 
         // Show PDF loading error
         function showPDFError(templateId, errorMessage) {
-            document.getElementById('adobe-dc-view').innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="text-center p-8"><div class="text-6xl mb-4">⚠️</div><h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Loading Error</h3><p class="text-gray-600 mb-4">Template ID: ' + templateId + '</p><p class="text-red-600 text-sm mb-6">Error: ' + errorMessage + '</p><div class="space-y-2 text-sm text-gray-500 mb-6"><p>• PDF file may not be available</p><p>• Check template storage configuration</p><p>• Try refreshing the page</p></div><button onclick="initializeAdobePDF(\'' + templateId + '\')" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Retry Loading PDF</button></div></div>';
+            const container = document.getElementById('adobe-dc-view');
+            if (container) {
+                container.innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="text-center p-8"><div class="text-6xl mb-4">⚠️</div><h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Loading Error</h3><p class="text-gray-600 mb-4">Template ID: ' + templateId + '</p><p class="text-red-600 text-sm mb-6">Error: ' + errorMessage + '</p><div class="space-y-2 text-sm text-gray-500 mb-6"><p>• PDF file may not be available</p><p>• Check template storage configuration</p><p>• Try refreshing the page</p></div><button onclick="initializeAdobePDF(\'' + templateId + '\')" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Retry Loading PDF</button></div></div>';
+            }
             
             // Provide fallback PDF viewer
             currentPDFViewer = {
@@ -310,10 +320,10 @@
             try {
                 const response = await fetch('/api/pdf/get-fields/' + templateId + '/' + accountId);
                 const data = await response.json();
-                
+
                 if (data.success && data.field_values && Object.keys(data.field_values).length > 0) {
                     console.log('Loading existing field values:', data.field_values);
-                    
+
                     // Set field values in the PDF if Adobe viewer is available
                     if (currentPDFViewer && currentPDFViewer.setFormFields) {
                         await currentPDFViewer.setFormFields(data.field_values);
@@ -328,6 +338,7 @@
         async function savePDFFields(templateId) {
             const saveBtn = document.getElementById('saveBtn');
             const saveStatus = document.getElementById('saveStatus');
+            if (!saveBtn || !saveStatus) return;
             
             saveBtn.disabled = true;
             saveBtn.textContent = 'Saving...';
@@ -373,7 +384,7 @@
             try {
                 const response = await fetch('/api/pdf/template/' + templateId);
                 if (!response.ok) throw new Error('Failed to download PDF');
-                
+
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
