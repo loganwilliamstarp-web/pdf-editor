@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Certificate Management System</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 </head>
@@ -145,6 +146,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>PDF Editor - Template ${templateId}</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://acrobatservices.adobe.com/view-sdk/viewer.js"></script>
 </head>
@@ -193,6 +195,7 @@
         // Global variables for popup window
         let currentPDFViewer = null;
         const accountId = '${accountId}';
+        const templateId = '${templateId}';
         
         // Initialize Adobe PDF Embed API
         function initializeAdobePDF(templateId) {
@@ -389,7 +392,7 @@
         window.addEventListener('load', function() {
             // Add a small delay to ensure Adobe SDK is fully loaded
             setTimeout(function() {
-                initializeAdobePDF('${templateId}');
+                initializeAdobePDF(templateId);
             }, 1000);
         });
     </script>
