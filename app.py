@@ -230,6 +230,22 @@ def health():
 def setup_system():
     """Initialize Supabase storage and database schema"""
     try:
+        # Check if this is a SQL execution request
+        if request.is_json and request.json.get('action') == 'create_tables':
+            sql = request.json.get('sql')
+            if sql:
+                try:
+                    conn = get_db()
+                    cur = conn.cursor()
+                    cur.execute(sql)
+                    conn.commit()
+                    cur.close()
+                    conn.close()
+                    return jsonify({'success': True, 'message': 'SQL executed successfully'})
+                except Exception as e:
+                    return jsonify({'success': False, 'error': f'SQL execution failed: {str(e)}'}), 500
+        
+        # Original setup functionality
         results = {}
         
         # Setup Supabase storage
