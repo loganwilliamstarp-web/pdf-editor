@@ -97,10 +97,13 @@ def create_database_schema():
         conn = get_db()
         cur = conn.cursor()
         
+        # Enable UUID extension
+        cur.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";')
+        
         # Master Templates Table
         cur.execute('''
             CREATE TABLE IF NOT EXISTS master_templates (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 template_name VARCHAR(100) NOT NULL UNIQUE,
                 template_type VARCHAR(50) NOT NULL,
                 storage_path VARCHAR(500) NOT NULL,
@@ -114,7 +117,7 @@ def create_database_schema():
         # Template Data by Account
         cur.execute('''
             CREATE TABLE IF NOT EXISTS template_data (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 account_id VARCHAR(18) NOT NULL,
                 template_id UUID REFERENCES master_templates(id),
                 field_values JSONB NOT NULL,
@@ -128,7 +131,7 @@ def create_database_schema():
         # Generated Certificates
         cur.execute('''
             CREATE TABLE IF NOT EXISTS generated_certificates (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 account_id VARCHAR(18) NOT NULL,
                 template_id UUID REFERENCES master_templates(id),
                 certificate_name VARCHAR(255),
@@ -141,7 +144,7 @@ def create_database_schema():
         # Certificate Holders
         cur.execute('''
             CREATE TABLE IF NOT EXISTS certificate_holders (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 account_id VARCHAR(18) NOT NULL,
                 name VARCHAR(255),
                 email VARCHAR(255),
