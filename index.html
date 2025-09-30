@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Certificate Management System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <script src="https://documentcloud.adobe.com/view-sdk/main.js"></script>
+</head>
+<body>
+    <div class="min-h-screen bg-gray-100">
+        <header class="bg-white shadow-sm">
+            <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+                <h1 class="text-2xl font-bold text-gray-900">
+                    Certificate Management System <span class="text-gray-500 text-sm" id="accountId">Loading...</span>
+                </h1>
+                <nav class="flex space-x-4">
+                    <button onclick="showTab('master')" id="masterTab" class="px-3 py-2 rounded-md text-sm font-medium bg-indigo-600 text-white">
+                        📄 Master Certificates
+                    </button>
+                    <button onclick="showTab('holders')" id="holdersTab" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        👥 Certificate Holders
+                    </button>
+                    <button onclick="showTab('generated')" id="generatedTab" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        📋 Generated Certificates
+                    </button>
+                </nav>
+            </div>
+        </header>
+
+        <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            <!-- Master Certificates Tab -->
+            <div id="masterContent" class="bg-white shadow overflow-hidden sm:rounded-lg p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">Master Certificates (Templates)</h2>
+                
+                <div class="mb-6 p-4 border rounded-md bg-gray-50">
+                    <h3 class="text-lg font-medium text-gray-800 mb-2">Upload New Template</h3>
+                    <div class="flex items-center space-x-3">
+                        <input type="file" id="fileInput" accept="application/pdf" class="block w-full text-sm text-gray-500
+                            file:mr-4 file:py-2 file:px-4
+                            file:rounded-md file:border-0
+                            file:text-sm file:font-semibold
+                            file:bg-indigo-50 file:text-indigo-700
+                            hover:file:bg-indigo-100" />
+                        <button onclick="uploadTemplate()" id="uploadBtn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            📤 Upload
+                        </button>
+                    </div>
+                    <div id="uploadStatus" class="mt-2 text-sm"></div>
+                </div>
+
+                <div id="templatesList">
+                    <p class="text-gray-600">Loading templates...</p>
+                </div>
+            </div>
+
+            <!-- Certificate Holders Tab -->
+            <div id="holdersContent" class="bg-white shadow overflow-hidden sm:rounded-lg p-6" style="display: none;">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">Certificate Holders</h2>
+                <p class="text-gray-600">This section will allow you to manage recipients of certificates. (Coming soon!)</p>
+            </div>
+
+            <!-- Generated Certificates Tab -->
+            <div id="generatedContent" class="bg-white shadow overflow-hidden sm:rounded-lg p-6" style="display: none;">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">Generated Certificates</h2>
+                <p class="text-gray-600">This section will display certificates generated from templates for specific holders. (Coming soon!)</p>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Get account ID from URL
+        function getAccountId() {
+            const path = window.location.pathname;
+            const pathParts = path.split('/').filter(part => part);
+            return pathParts[0] || '001000000000001';
+        }
+
+        // Initialize the app
+        function initApp() {
+            const accountId = getAccountId();
+            document.getElementById('accountId').textContent = `(${accountId})`;
+            loadTemplates();
+        }
+
+        // Show tab content
+        function showTab(tab) {
+            // Hide all content
+            document.getElementById('masterContent').style.display = 'none';
+            document.getElementById('holdersContent').style.display = 'none';
+            document.getElementById('generatedContent').style.display = 'none';
+            
+            // Remove active class from all tabs
+            document.getElementById('masterTab').className = 'px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50';
+            document.getElementById('holdersTab').className = 'px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50';
+            document.getElementById('generatedTab').className = 'px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50';
+            
+            // Show selected content and highlight tab
+            document.getElementById(tab + 'Content').style.display = 'block';
+            document.getElementById(tab + 'Tab').className = 'px-3 py-2 rounded-md text-sm font-medium bg-indigo-600 text-white';
+        }
+
+        // Load templates
+        async function loadTemplates() {
+            try {
+                const accountId = getAccountId();
+                const response = await fetch(`/api/account/${accountId}/templates`);
+                const data = await response.json();
+                
+                const templatesList = document.getElementById('templatesList');
+                if (data.success && data.templates.length > 0) {
+                    templatesList.innerHTML = `
+                        <ul class="divide-y divide-gray-200">
+                            ${data.templates.map(template => `
+                                <li class="py-4 flex items-center justify-between">
+                                    <div class="flex items-center">
+                                        <div class="w-6 h-6 text-gray-500 mr-3">📄</div>
+                                        <div>
+                                            <p class="text-sm font-medium text-gray-900">${template.template_name}</p>
+                                            <p class="text-sm text-gray-500">
+                                                ${template.file_size ? `${(template.file_size / 1024).toFixed(2)} KB` : 'N/A'} | 
+                                                Created: ${new Date(template.created_at).toLocaleDateString()}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button onclick="editTemplate('${template.id}')" class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700">
+                                        ✏️ Edit
+                                    </button>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    `;
+                } else {
+                    templatesList.innerHTML = '<p class="text-gray-600">No templates uploaded yet. Upload one above!</p>';
+                }
+            } catch (error) {
+                document.getElementById('templatesList').innerHTML = `<p class="text-red-600">Error loading templates: ${error.message}</p>`;
+            }
+        }
+
+        // Upload template
+        async function uploadTemplate() {
+            const fileInput = document.getElementById('fileInput');
+            const uploadBtn = document.getElementById('uploadBtn');
+            const uploadStatus = document.getElementById('uploadStatus');
+            
+            if (!fileInput.files[0]) {
+                uploadStatus.innerHTML = '<span class="text-red-600">Please select a PDF file to upload.</span>';
+                return;
+            }
+
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Uploading...';
+            uploadStatus.innerHTML = '<span class="text-blue-600">Uploading...</span>';
+
+            try {
+                const formData = new FormData();
+                formData.append('file', fileInput.files[0]);
+                formData.append('name', fileInput.files[0].name.split('.')[0] || 'Untitled Template');
+                formData.append('template_type', fileInput.files[0].name.split('.')[0].toLowerCase());
+                formData.append('account_id', getAccountId());
+
+                const response = await fetch('/api/upload-template-simple', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    uploadStatus.innerHTML = '<span class="text-green-600">✅ Template uploaded successfully!</span>';
+                    fileInput.value = '';
+                    loadTemplates(); // Refresh the list
+                } else {
+                    uploadStatus.innerHTML = `<span class="text-red-600">❌ Upload failed: ${result.error}</span>`;
+                }
+            } catch (error) {
+                uploadStatus.innerHTML = `<span class="text-red-600">❌ Upload error: ${error.message}</span>`;
+            } finally {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = '📤 Upload';
+            }
+        }
+
+        // Edit template (placeholder)
+        function editTemplate(templateId) {
+            alert(`Edit template ${templateId} - PDF editor coming soon!`);
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>

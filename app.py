@@ -181,9 +181,25 @@ def serve_account(account_id):
         # Check if this is a Salesforce Account ID (15 or 18 characters starting with 001)
         if len(account_id) >= 15 and account_id.startswith('001'):
             try:
+                # Try to serve from static folder first
                 return send_from_directory(app.static_folder, 'index.html')
-            except Exception as e:
-                return f"<h1>Certificate Management System</h1><p>Account: {account_id}</p><p>Error: {str(e)}</p>"
+            except Exception:
+                try:
+                    # Fallback to root directory
+                    return send_from_directory('.', 'index.html')
+                except Exception as e:
+                    return f"""
+                    <!DOCTYPE html>
+                    <html>
+                    <head><title>Certificate Management System</title></head>
+                    <body>
+                        <h1>Certificate Management System</h1>
+                        <p>Account: {account_id}</p>
+                        <p>Error: {str(e)}</p>
+                        <p><a href="/api/health">Check API Health</a></p>
+                    </body>
+                    </html>
+                    """
         else:
             return f"Invalid Account ID format: {account_id}", 400
     except Exception as e:
