@@ -59,6 +59,93 @@ def get_db():
         sslmode='require'
     )
 
+def setup_supabase_storage():
+    """Create the storage bucket for certificates"""
+    try:
+        if not supabase:
+            return False
+        result = supabase.storage.create_bucket('certificates', public=True)
+        return True
+    except Exception as e:
+        if "already exists" in str(e).lower():
+            return True
+        return False
+
+def create_database_schema():
+    """Create the complete database schema"""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        
+        # Master Templates Table
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS master_templates (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                template_name VARCHAR(100) NOT NULL UNIQUE,
+                template_type VARCHAR(50) NOT NULL,
+                storage_path VARCHAR(500) NOT NULL,
+                file_size INTEGER,
+                form_fields JSONB,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+        ''')
+        
+        # Template Data by Account
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS template_data (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                account_id VARCHAR(18) NOT NULL,
+                template_id UUID REFERENCES master_templates(id),
+                field_values JSONB NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW(),
+                version INTEGER DEFAULT 1,
+                UNIQUE(account_id, template_id)
+            );
+        ''')
+        
+        # Generated Certificates
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS generated_certificates (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                account_id VARCHAR(18) NOT NULL,
+                template_id UUID REFERENCES master_templates(id),
+                certificate_name VARCHAR(255),
+                storage_path VARCHAR(500),
+                status VARCHAR(50) DEFAULT 'draft',
+                generated_at TIMESTAMP DEFAULT NOW()
+            );
+        ''')
+        
+        # Certificate Holders
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS certificate_holders (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                account_id VARCHAR(18) NOT NULL,
+                name VARCHAR(255),
+                email VARCHAR(255),
+                address TEXT,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+        ''')
+        
+        # Create indexes
+        cur.execute('CREATE INDEX IF NOT EXISTS idx_template_data_account ON template_data(account_id);')
+        cur.execute('CREATE INDEX IF NOT EXISTS idx_template_data_template ON template_data(template_id);')
+        cur.execute('CREATE INDEX IF NOT EXISTS idx_master_templates_type ON master_templates(template_type);')
+        cur.execute('CREATE INDEX IF NOT EXISTS idx_generated_certificates_account ON generated_certificates(account_id);')
+        cur.execute('CREATE INDEX IF NOT EXISTS idx_certificate_holders_account ON certificate_holders(account_id);')
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        return True
+        
+    except Exception as e:
+        print(f"Error creating database schema: {e}")
+        return False
+
 @app.route("/")
 def serve_app():
     try:
@@ -71,7 +158,6 @@ def serve_static(path):
     try:
         # Check if this is a Salesforce Account ID (18 characters starting with 001)
         if len(path) == 18 and path.startswith('001'):
-            # This is a Salesforce Account ID, serve the app with the Account ID
             try:
                 return send_from_directory(app.static_folder, 'index.html')
             except Exception as e:
@@ -105,12 +191,12 @@ def serve_static(path):
                         </ul>
                         <p><a href="/api/health">Check API Health</a></p>
                         <p><a href="/api/account/{path}/templates">View Templates</a></p>
+                        <p><a href="/api/setup">Initialize Database</a></p>
                     </div>
                 </body>
                 </html>
                 """
         
-        # Try to serve static file
         return send_from_directory(app.static_folder, path)
     except Exception as e:
         return f"File not found: {path}", 404
@@ -127,6 +213,34 @@ def health():
             "database": PSYCOPG2_AVAILABLE
         }
     })
+
+@app.route("/api/setup", methods=['POST'])
+def setup_system():
+    """Initialize Supabase storage and database schema"""
+    try:
+        results = {}
+        
+        # Setup Supabase storage
+        if SUPABASE_AVAILABLE and supabase:
+            storage_result = setup_supabase_storage()
+            results['supabase_storage'] = storage_result
+        else:
+            results['supabase_storage'] = False
+        
+        # Setup database schema
+        if PSYCOPG2_AVAILABLE:
+            db_result = create_database_schema()
+            results['database_schema'] = db_result
+        else:
+            results['database_schema'] = False
+        
+        return jsonify({
+            'success': True,
+            'message': 'System setup completed',
+            'results': results
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route("/api/account/<account_id>")
 def get_account_info(account_id):
