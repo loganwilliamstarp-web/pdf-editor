@@ -25,6 +25,7 @@ try:
     import psycopg2
     from psycopg2.extras import RealDictCursor, Json
     PSYCOPG2_AVAILABLE = True
+    print("✅ psycopg2 available for database operations")
 except ImportError:
     print("Warning: psycopg2 not available. Database functionality will be limited.")
     PSYCOPG2_AVAILABLE = False
@@ -52,11 +53,11 @@ if SUPABASE_AVAILABLE:
 def get_db():
     if not PSYCOPG2_AVAILABLE:
         raise Exception("psycopg2 not available. Database functionality disabled.")
-    
+
     database_url = os.environ.get('DATABASE_URL')
     if not database_url:
         raise Exception("DATABASE_URL environment variable not set")
-    
+
     return psycopg2.connect(
         database_url,
         cursor_factory=RealDictCursor,
