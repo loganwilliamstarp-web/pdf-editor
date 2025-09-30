@@ -1,4 +1,4 @@
-﻿from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, Response
 from flask_cors import CORS
 import os
 import io
@@ -10,6 +10,8 @@ from datetime import datetime
 # Optional imports with fallbacks
 
 LOCAL_TEMPLATE_DIR = Path(__file__).resolve().parent / "database" / "templates"
+DEFAULT_TEMPLATE_PATH = LOCAL_TEMPLATE_DIR / "acord25.pdf"
+DEFAULT_TEMPLATE_NAME = "ACORD 25 Sample"
 LOCAL_TEMPLATE_FILES = {
     "acord25": "acord25.pdf",
     "acord27": "acord27.pdf",
@@ -529,21 +531,49 @@ def resolve_local_template_file(template_type, storage_path):
 
     return None
 
+
+def load_default_template_pdf():
+    """Load the bundled fallback PDF template if available."""
+    try:
+        if DEFAULT_TEMPLATE_PATH.exists():
+            return DEFAULT_TEMPLATE_PATH.read_bytes()
+    except Exception as fallback_error:
+        print(f"Warning: unable to load fallback PDF: {fallback_error}")
+    return None
+
+
+def build_pdf_response(pdf_content, filename):
+    """Return a Flask response for inline PDF display."""
+    return Response(
+        pdf_content,
+        mimetype='application/pdf',
+        headers={
+            'Content-Disposition': f'inline; filename="{filename}.pdf"',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'no-cache'
+        }
+    )
+
+
 @app.route('/api/pdf/template/<template_id>')
 def serve_pdf_template(template_id):
     """Serve PDF template file for Adobe Embed API"""
+    conn = None
+    cur = None
+    template_name = f"Template {template_id}"
+
     try:
         conn = get_db()
         cur = conn.cursor()
-        
+
         # Get template from database
         cur.execute('SELECT template_name, template_type, storage_path, file_size, pdf_blob, form_fields FROM master_templates WHERE id = %s', (template_id,))
         template = cur.fetchone()
-        
+
         if not template:
             return jsonify({'error': 'Template not found'}), 404
-        
-        template_name = template.get('template_name')
+
+        template_name = template.get('template_name') or template_name
         template_type = (template.get('template_type') or '').lower()
         storage_path = template.get('storage_path') or ''
         pdf_blob = template.get('pdf_blob')
@@ -574,26 +604,33 @@ def serve_pdf_template(template_id):
                 pdf_content = local_file.read_bytes()
 
         if not pdf_content:
+            fallback_pdf = load_default_template_pdf()
+            if fallback_pdf:
+                print('Using bundled fallback PDF template')
+                pdf_content = fallback_pdf
+                if template_name.startswith('Template '):
+                    template_name = DEFAULT_TEMPLATE_NAME
+
+        if not pdf_content:
             # Fallback to generated PDF if no stored asset is available
             pdf_content = create_pdf_with_form_fields(template_name, form_fields_data)
-        
-        from flask import Response
-        return Response(
-            pdf_content,
-            mimetype='application/pdf',
-            headers={
-                'Content-Disposition': f'inline; filename="{template_name}.pdf"',
-                'Access-Control-Allow-Origin': '*',
-                'Cache-Control': 'no-cache'
-            }
-        )
-        
+
+        if not pdf_content:
+            raise FileNotFoundError('Template PDF content is unavailable')
+
+        return build_pdf_response(pdf_content, template_name)
+
     except Exception as e:
-        print(f"Error serving PDF template: {e}")
+        print(f"Error serving PDF template: {e}. Falling back to bundled sample if possible.")
+        fallback_pdf = load_default_template_pdf()
+        if fallback_pdf:
+            display_name = DEFAULT_TEMPLATE_NAME if template_name.startswith('Template ') else f"{template_name} (Sample)"
+            return build_pdf_response(fallback_pdf, display_name)
         return jsonify({'error': str(e)}), 500
     finally:
-        if 'conn' in locals():
+        if cur:
             cur.close()
+        if conn:
             conn.close()
 
 def create_pdf_with_form_fields(template_name, form_fields_data):
