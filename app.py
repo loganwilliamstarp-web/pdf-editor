@@ -14,6 +14,7 @@ DEFAULT_TEMPLATE_PATH = LOCAL_TEMPLATE_DIR / "acord25.pdf"
 DEFAULT_TEMPLATE_NAME = "ACORD 25 Sample"
 LOCAL_TEMPLATE_FILES = {
     "acord25": "acord25.pdf",
+    "acord25certificateofliabilityinsurance": "acord25.pdf",
     "acord27": "acord27.pdf",
     "acord28": "acord28.pdf",
     "acord30": "acord30.pdf",
@@ -501,7 +502,7 @@ def upload_template_simple():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-def resolve_local_template_file(template_type, storage_path):
+def resolve_local_template_file(template_type, storage_path, template_name=None):
     """Resolve a local PDF template file path if available."""
     candidates = []
 
@@ -516,11 +517,24 @@ def resolve_local_template_file(template_type, storage_path):
                 candidates.append(LOCAL_TEMPLATE_DIR / f"{normalized_name}.pdf")
             candidates.append(LOCAL_TEMPLATE_DIR / candidate.name)
 
+    normalized_keys = []
+
     if template_type:
-        template_type = template_type.lower()
-        mapped = LOCAL_TEMPLATE_FILES.get(template_type)
+        lowered = template_type.lower()
+        normalized_keys.append(lowered.replace(' ', '').replace('-', ''))
+        normalized_keys.append(lowered.replace('acord ', 'acord').replace(' ', '').replace('-', ''))
+        normalized_keys.append(lowered.replace('form', '').replace(' ', '').replace('-', ''))
+
+    if template_name:
+        lowered_name = template_name.lower()
+        normalized_keys.append(''.join(ch for ch in lowered_name if ch.isalnum()))
+        normalized_keys.append(lowered_name.replace('acord ', 'acord').replace(' ', '').replace('-', ''))
+
+    for key in dict.fromkeys(filter(None, normalized_keys)):
+        mapped = LOCAL_TEMPLATE_FILES.get(key)
         if mapped:
             candidates.append(LOCAL_TEMPLATE_DIR / mapped)
+        candidates.append(LOCAL_TEMPLATE_DIR / f"{key}.pdf")
 
     for candidate in candidates:
         try:
@@ -579,15 +593,11 @@ def serve_pdf_template(template_id):
         pdf_blob = template.get('pdf_blob')
         form_fields_raw = template.get('form_fields')
 
-        form_fields_data = {}
-        if form_fields_raw:
-            if isinstance(form_fields_raw, dict):
-                form_fields_data = form_fields_raw
-            else:
-                try:
-                    form_fields_data = json.loads(form_fields_raw) if form_fields_raw else {}
-                except (TypeError, ValueError):
-                    form_fields_data = {}
+        if form_fields_raw and not isinstance(form_fields_raw, (dict, str)):
+            try:
+                form_fields_raw = json.loads(form_fields_raw)
+            except (TypeError, ValueError):
+                form_fields_raw = None
 
         print(f"Serving PDF template: {template_name} (ID: {template_id})")
 
@@ -599,7 +609,7 @@ def serve_pdf_template(template_id):
                 pdf_content = pdf_blob
 
         if not pdf_content:
-            local_file = resolve_local_template_file(template_type, storage_path)
+            local_file = resolve_local_template_file(template_type, storage_path, template_name)
             if local_file:
                 pdf_content = local_file.read_bytes()
 
@@ -610,10 +620,6 @@ def serve_pdf_template(template_id):
                 pdf_content = fallback_pdf
                 if template_name.startswith('Template '):
                     template_name = DEFAULT_TEMPLATE_NAME
-
-        if not pdf_content:
-            # Fallback to generated PDF if no stored asset is available
-            pdf_content = create_pdf_with_form_fields(template_name, form_fields_data)
 
         if not pdf_content:
             raise FileNotFoundError('Template PDF content is unavailable')
@@ -632,187 +638,6 @@ def serve_pdf_template(template_id):
             cur.close()
         if conn:
             conn.close()
-
-def create_pdf_with_form_fields(template_name, form_fields_data):
-    """Create a PDF with form fields based on template type"""
-    
-    # Define common ACORD form fields based on template name
-    acord_fields = {
-        'ACORD 25': [
-            {'name': 'company_name', 'label': 'Company Name', 'x': 100, 'y': 700},
-            {'name': 'policy_number', 'label': 'Policy Number', 'x': 400, 'y': 700},
-            {'name': 'effective_date', 'label': 'Effective Date', 'x': 100, 'y': 650},
-            {'name': 'expiration_date', 'label': 'Expiration Date', 'x': 400, 'y': 650},
-            {'name': 'insured_name', 'label': 'Insured Name', 'x': 100, 'y': 600},
-            {'name': 'address', 'label': 'Address', 'x': 100, 'y': 550},
-        ],
-        'ACORD 125': [
-            {'name': 'company_name', 'label': 'Company Name', 'x': 100, 'y': 700},
-            {'name': 'policy_number', 'label': 'Policy Number', 'x': 400, 'y': 700},
-            {'name': 'effective_date', 'label': 'Effective Date', 'x': 100, 'y': 650},
-            {'name': 'expiration_date', 'label': 'Expiration Date', 'x': 400, 'y': 650},
-            {'name': 'insured_name', 'label': 'Insured Name', 'x': 100, 'y': 600},
-            {'name': 'address', 'label': 'Address', 'x': 100, 'y': 550},
-            {'name': 'liability_limit', 'label': 'Liability Limit', 'x': 100, 'y': 500},
-        ],
-        'ACORD 126': [
-            {'name': 'company_name', 'label': 'Company Name', 'x': 100, 'y': 700},
-            {'name': 'policy_number', 'label': 'Policy Number', 'x': 400, 'y': 700},
-            {'name': 'effective_date', 'label': 'Effective Date', 'x': 100, 'y': 650},
-            {'name': 'expiration_date', 'label': 'Expiration Date', 'x': 400, 'y': 650},
-            {'name': 'insured_name', 'label': 'Insured Name', 'x': 100, 'y': 600},
-            {'name': 'address', 'label': 'Address', 'x': 100, 'y': 550},
-            {'name': 'liability_limit', 'label': 'Liability Limit', 'x': 100, 'y': 500},
-            {'name': 'additional_insured', 'label': 'Additional Insured', 'x': 100, 'y': 450},
-        ],
-        'ACORD 130': [
-            {'name': 'company_name', 'label': 'Company Name', 'x': 100, 'y': 700},
-            {'name': 'policy_number', 'label': 'Policy Number', 'x': 400, 'y': 700},
-            {'name': 'effective_date', 'label': 'Effective Date', 'x': 100, 'y': 650},
-            {'name': 'expiration_date', 'label': 'Expiration Date', 'x': 400, 'y': 650},
-            {'name': 'insured_name', 'label': 'Insured Name', 'x': 100, 'y': 600},
-            {'name': 'property_address', 'label': 'Property Address', 'x': 100, 'y': 550},
-        ]
-    }
-    
-    # Get fields for this template type
-    fields = acord_fields.get(template_name, acord_fields['ACORD 25'])  # Default to ACORD 25
-    
-    # Create a PDF with form fields
-    pdf_content = create_simple_pdf_with_fields(template_name, fields)
-    
-    return pdf_content
-
-def create_simple_pdf_with_fields(template_name, fields):
-    """Create a simple PDF with form fields using a working PDF structure"""
-    
-    # Create a simple working PDF with form fields
-    # This creates a valid PDF that Adobe PDF Embed can load and edit
-    
-    pdf_content = f"""%PDF-1.4
-1 0 obj
-<<
-/Type /Catalog
-/Pages 2 0 R
-/AcroForm <<
-/Fields ["""
-    
-    # Add field references
-    for i in range(len(fields)):
-        pdf_content += f"{10 + i} 0 R "
-    
-    pdf_content += """]
-/NeedAppearances true
->>
->>
-endobj
-
-2 0 obj
-<<
-/Type /Pages
-/Kids [3 0 R]
-/Count 1
->>
-endobj
-
-3 0 obj
-<<
-/Type /Page
-/Parent 2 0 R
-/MediaBox [0 0 612 792]
-/Contents 4 0 R
-/Annots ["""
-    
-    # Add annotation references
-    for i in range(len(fields)):
-        pdf_content += f"{20 + i} 0 R "
-    
-    pdf_content += """]
->>
-endobj
-
-4 0 obj
-<<
-/Length 300
->>
-stream
-BT
-/F1 18 Tf
-100 750 Td
-({template_name}) Tj
-0 -40 Td
-/F1 12 Tf
-(Certificate Management System) Tj
-0 -60 Td
-/F1 10 Tf
-(Form Fields - Click to edit) Tj
-ET
-endstream
-endobj"""
-    
-    # Add form field objects
-    for i, field in enumerate(fields):
-        field_num = 10 + i
-        annot_num = 20 + i
-        y_pos = 650 - (i * 30)  # Space fields vertically
-        
-        pdf_content += f"""
-
-{field_num} 0 obj
-<<
-/Type /Annot
-/Subtype /Widget
-/Rect [100 {y_pos} 450 {y_pos + 20}]
-/FT /Tx
-/T ({field['name']})
-/V ()
-/DA (/Helv 10 Tf 0 g)
-/F 4
-/BS <<
-/W 1
-/S /S
->>
->>
-endobj
-
-{annot_num} 0 obj
-<<
-/Type /Annot
-/Subtype /Widget
-/Rect [100 {y_pos} 450 {y_pos + 20}]
-/FT /Tx
-/T ({field['name']})
-/V ()
-/DA (/Helv 10 Tf 0 g)
-/F 4
-/BS <<
-/W 1
-/S /S
->>
->>
-endobj"""
-    
-    pdf_content += """
-
-xref
-0 30"""
-    
-    # Add xref entries (simplified)
-    for i in range(30):
-        pdf_content += f"\n0000000000 00000 n "
-    
-    pdf_content += """
-
-trailer
-<<
-/Size 30
-/Root 1 0 R
->>
-startxref
-2000
-%%EOF"""
-    
-    return pdf_content.encode('utf-8')
 
 @app.route('/api/pdf/render/<template_id>')
 def render_pdf(template_id):
