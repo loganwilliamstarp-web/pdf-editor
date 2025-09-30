@@ -6,14 +6,17 @@ CREATE TABLE IF NOT EXISTS master_templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     template_name VARCHAR(100) NOT NULL UNIQUE,
     template_type VARCHAR(50) NOT NULL,
-    storage_path VARCHAR(500) NOT NULL,
+    storage_path VARCHAR(500),
     file_size INTEGER,
+    pdf_blob BYTEA,
     form_fields JSONB,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- 2. Template Data by Account - Account-specific filled data
+ALTER TABLE master_templates ADD COLUMN IF NOT EXISTS pdf_blob BYTEA;
+
 CREATE TABLE IF NOT EXISTS template_data (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id VARCHAR(18) NOT NULL,
@@ -54,10 +57,10 @@ CREATE INDEX IF NOT EXISTS idx_generated_certificates_account ON generated_certi
 CREATE INDEX IF NOT EXISTS idx_certificate_holders_account ON certificate_holders(account_id);
 
 -- Insert some sample data to test
-INSERT INTO master_templates (template_name, template_type, storage_path, file_size, form_fields) VALUES
-('ACORD 25 - Certificate of Liability Insurance', 'acord25', 'master_templates/acord25.pdf', 1024, '{"fields": []}'),
-('ACORD 27 - Evidence of Property Insurance', 'acord27', 'master_templates/acord27.pdf', 1024, '{"fields": []}'),
-('ACORD 28 - Evidence of Commercial Property Insurance', 'acord28', 'master_templates/acord28.pdf', 1024, '{"fields": []}')
+INSERT INTO master_templates (template_name, template_type, storage_path, file_size, pdf_blob, form_fields) VALUES
+('ACORD 25 - Certificate of Liability Insurance', 'acord25', 'master_templates/acord25.pdf', 1024, NULL, '{"fields": []}'),
+('ACORD 27 - Evidence of Property Insurance', 'acord27', 'master_templates/acord27.pdf', 1024, NULL, '{"fields": []}'),
+('ACORD 28 - Evidence of Commercial Property Insurance', 'acord28', 'master_templates/acord28.pdf', 1024, NULL, '{"fields": []}')
 ON CONFLICT (template_name) DO NOTHING;
 
 -- Show the created tables

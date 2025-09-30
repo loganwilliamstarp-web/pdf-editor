@@ -103,10 +103,27 @@ def add_sample_templates():
         print(f"Adding {len(sample_templates)} sample templates...")
 
         for template in sample_templates:
+            file_name = Path(template['storage_path']).name
+            candidates = [
+                Path('database/templates') / file_name,
+                Path('database/templates') / file_name.replace('acord_', 'acord'),
+                Path(template['storage_path'])
+            ]
+            pdf_blob = None
+            for candidate in candidates:
+                if candidate.exists():
+                    pdf_blob = candidate.read_bytes()
+                    template['file_size'] = len(pdf_blob)
+                    template['storage_path'] = f"db://sample/{file_name}"
+                    break
+
+            if not pdf_blob:
+                pdf_blob = None
+
             try:
                 cur.execute('''
-                    INSERT INTO master_templates (id, template_name, template_type, storage_path, file_size, form_fields)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO master_templates (id, template_name, template_type, storage_path, file_size, pdf_blob, form_fields)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (id) DO NOTHING
                 ''', (
                     template['id'],
@@ -114,6 +131,7 @@ def add_sample_templates():
                     template['template_type'],
                     template['storage_path'],
                     template['file_size'],
+                    Binary(pdf_blob) if pdf_blob else None,
                     template['form_fields']
                 ))
                 print(f"Added template: {template['template_name']}")
