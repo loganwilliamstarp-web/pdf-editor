@@ -31,21 +31,18 @@ except ImportError:
 app = Flask(__name__, static_folder='frontend/build', static_url_path='')
 CORS(app)
 
-# Initialize Supabase (for storage only) - with better error handling
-supabase = None
+# Initialize Supabase (for storage only)
 if SUPABASE_AVAILABLE:
-    try:
-        supabase_url = os.environ.get('SUPABASE_URL')
-        supabase_key = os.environ.get('SUPABASE_KEY')
-        
-        if supabase_url and supabase_key:
-            supabase = create_client(supabase_url, supabase_key)
-            print("âœ… Supabase client initialized successfully")
-        else:
-            print("Warning: Supabase credentials not found. Storage functionality will be limited.")
-    except Exception as e:
-        print(f"Warning: Failed to initialize Supabase client: {e}")
+    supabase_url = os.environ.get('SUPABASE_URL')
+    supabase_key = os.environ.get('SUPABASE_KEY')
+    
+    if supabase_url and supabase_key:
+        supabase: Client = create_client(supabase_url, supabase_key)
+    else:
+        print("Warning: Supabase credentials not found. Storage functionality will be limited.")
         supabase = None
+else:
+    supabase = None
 
 # Connect to Heroku PostgreSQL
 def get_db():
@@ -72,7 +69,6 @@ def setup_supabase_storage():
     except Exception as e:
         if "already exists" in str(e).lower():
             return True
-        print(f"Supabase storage setup error: {e}")
         return False
 
 def create_database_schema():
@@ -144,11 +140,10 @@ def create_database_schema():
         conn.commit()
         cur.close()
         conn.close()
-        print("âœ… Database schema created successfully")
         return True
         
     except Exception as e:
-        print(f"Database schema creation error: {e}")
+        print(f"Error creating database schema: {e}")
         return False
 
 @app.route("/")
@@ -175,10 +170,6 @@ def serve_static(path):
                         body {{ font-family: Arial, sans-serif; margin: 40px; }}
                         .header {{ background: #0176d3; color: white; padding: 20px; border-radius: 5px; }}
                         .content {{ margin: 20px 0; }}
-                        .status {{ padding: 10px; margin: 10px 0; border-radius: 5px; }}
-                        .success {{ background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }}
-                        .warning {{ background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }}
-                        .error {{ background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }}
                     </style>
                 </head>
                 <body>
@@ -189,19 +180,7 @@ def serve_static(path):
                     <div class="content">
                         <h2>Welcome to Certificate Management</h2>
                         <p>This system is integrated with Salesforce Account: <strong>{path}</strong></p>
-                        
-                        <div class="status {'success' if PSYCOPG2_AVAILABLE else 'warning'}">
-                            <strong>Database:</strong> {'Available' if PSYCOPG2_AVAILABLE else 'Not Available'}
-                        </div>
-                        
-                        <div class="status {'success' if supabase else 'warning'}">
-                            <strong>Supabase Storage:</strong> {'Available' if supabase else 'Not Available'}
-                        </div>
-                        
-                        <div class="status {'success' if PYPDF_AVAILABLE else 'warning'}">
-                            <strong>PDF Processing:</strong> {'Available' if PYPDF_AVAILABLE else 'Not Available'}
-                        </div>
-                        
+                        <p>Frontend is loading... Please wait a moment.</p>
                         <hr>
                         <h3>Available Features:</h3>
                         <ul>
@@ -210,26 +189,10 @@ def serve_static(path):
                             <li>Generate Certificates</li>
                             <li>Manage Certificate Holders</li>
                         </ul>
-                        
-                        <h3>Quick Actions:</h3>
                         <p><a href="/api/health">Check API Health</a></p>
                         <p><a href="/api/account/{path}/templates">View Templates</a></p>
-                        <p><a href="/api/setup" onclick="initializeSystem(); return false;">Initialize System</a></p>
+                        <p><a href="/api/setup">Initialize Database</a></p>
                     </div>
-                    
-                    <script>
-                        function initializeSystem() {{
-                            fetch('/api/setup', {{method: 'POST'}})
-                                .then(response => response.json())
-                                .then(data => {{
-                                    alert('System initialization: ' + (data.success ? 'Success' : 'Failed'));
-                                    location.reload();
-                                }})
-                                .catch(error => {{
-                                    alert('Error: ' + error);
-                                }});
-                        }}
-                    </script>
                 </body>
                 </html>
                 """
@@ -309,6 +272,78 @@ def get_account_templates(account_id):
             'success': True,
             'account_id': account_id,
             'templates': [dict(row) for row in templates]
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route("/api/account/<account_id>/template/<template_id>/data", methods=['GET'])
+def get_template_data(account_id, template_id):
+    """Get account-specific data for a template"""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        
+        cur.execute('''
+            SELECT field_values, version, updated_at
+            FROM template_data
+            WHERE account_id = %s AND template_id = %s
+        ''', (account_id, template_id))
+        
+        result = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        if result:
+            return jsonify({
+                'success': True,
+                'account_id': account_id,
+                'template_id': template_id,
+                'field_values': result['field_values'],
+                'version': result['version'],
+                'updated_at': result['updated_at'].isoformat()
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'account_id': account_id,
+                'template_id': template_id,
+                'field_values': {},
+                'version': 0,
+                'updated_at': None
+            })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route("/api/account/<account_id>/template/<template_id>/data", methods=['POST'])
+def save_template_data(account_id, template_id):
+    """Save account-specific data for a template"""
+    try:
+        data = request.get_json()
+        field_values = data.get('field_values', {})
+        
+        conn = get_db()
+        cur = conn.cursor()
+        
+        cur.execute('''
+            INSERT INTO template_data (account_id, template_id, field_values)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (account_id, template_id) DO UPDATE
+            SET field_values = EXCLUDED.field_values,
+                updated_at = NOW(),
+                version = template_data.version + 1
+            RETURNING version
+        ''', (account_id, template_id, Json(field_values)))
+        
+        result = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'account_id': account_id,
+            'template_id': template_id,
+            'version': result['version']
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
