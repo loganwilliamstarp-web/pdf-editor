@@ -174,82 +174,25 @@ def serve_app():
     except Exception as e:
         return f"<h1>Certificate Management System</h1><p>Frontend not available: {str(e)}</p>"
 
-@app.route("/<path:path>")
-def serve_static(path):
+@app.route("/<account_id>")
+def serve_account(account_id):
+    """Serve the app for a specific Salesforce Account ID"""
     try:
         # Check if this is a Salesforce Account ID (18 characters starting with 001)
-        if len(path) == 18 and path.startswith('001'):
+        if len(account_id) == 18 and account_id.startswith('001'):
             try:
                 return send_from_directory(app.static_folder, 'index.html')
             except Exception as e:
-                return f"""
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>Certificate Management System</title>
-                    <style>
-                        body {{ font-family: Arial, sans-serif; margin: 40px; }}
-                        .header {{ background: #0176d3; color: white; padding: 20px; border-radius: 5px; }}
-                        .content {{ margin: 20px 0; }}
-                        .status {{ padding: 10px; margin: 10px 0; border-radius: 5px; }}
-                        .success {{ background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }}
-                        .warning {{ background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }}
-                        .error {{ background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }}
-                    </style>
-                </head>
-                <body>
-                    <div class="header">
-                        <h1>Certificate Management System</h1>
-                        <p>Account ID: {path}</p>
-                    </div>
-                    <div class="content">
-                        <h2>Welcome to Certificate Management</h2>
-                        <p>This system is integrated with Salesforce Account: <strong>{path}</strong></p>
-                        
-                        <div class="status {'success' if PSYCOPG2_AVAILABLE else 'warning'}">
-                            <strong>Database:</strong> {'Available' if PSYCOPG2_AVAILABLE else 'Not Available'}
-                        </div>
-                        
-                        <div class="status {'success' if supabase else 'warning'}">
-                            <strong>Supabase Storage:</strong> {'Available' if supabase else 'Not Available'}
-                        </div>
-                        
-                        <div class="status {'success' if PYPDF_AVAILABLE else 'warning'}">
-                            <strong>PDF Processing:</strong> {'Available' if PYPDF_AVAILABLE else 'Not Available'}
-                        </div>
-                        
-                        <hr>
-                        <h3>Available Features:</h3>
-                        <ul>
-                            <li>Upload ACORD PDF Templates</li>
-                            <li>Fill PDF Forms with Account Data</li>
-                            <li>Generate Certificates</li>
-                            <li>Manage Certificate Holders</li>
-                        </ul>
-                        
-                        <h3>Quick Actions:</h3>
-                        <p><a href="/api/health">Check API Health</a></p>
-                        <p><a href="/api/account/{path}/templates">View Templates</a></p>
-                        <p><a href="/api/setup" onclick="initializeSystem(); return false;">Initialize System</a></p>
-                    </div>
-                    
-                    <script>
-                        function initializeSystem() {{
-                            fetch('/api/setup', {{method: 'POST'}})
-                                .then(response => response.json())
-                                .then(data => {{
-                                    alert('System initialization: ' + (data.success ? 'Success' : 'Failed'));
-                                    location.reload();
-                                }})
-                                .catch(error => {{
-                                    alert('Error: ' + error);
-                                }});
-                        }}
-                    </script>
-                </body>
-                </html>
-                """
-        
+                return f"<h1>Certificate Management System</h1><p>Account: {account_id}</p><p>Error: {str(e)}</p>"
+        else:
+            return f"Invalid Account ID format: {account_id}", 400
+    except Exception as e:
+        return f"Error: {str(e)}", 500
+
+@app.route("/<path:path>")
+def serve_static(path):
+    """Serve static files"""
+    try:
         return send_from_directory(app.static_folder, path)
     except Exception as e:
         return f"File not found: {path}", 404
