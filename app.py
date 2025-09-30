@@ -3,6 +3,7 @@ from flask_cors import CORS
 import os
 import io
 import uuid
+import json
 from datetime import datetime
 
 # Optional imports with fallbacks
@@ -473,6 +474,123 @@ def upload_template_simple():
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/pdf/render/<template_id>')
+def render_pdf(template_id):
+    """Render PDF template for editing"""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        
+        # Get template from database
+        cur.execute('SELECT template_name, storage_path FROM master_templates WHERE id = %s', (template_id,))
+        template = cur.fetchone()
+        
+        if not template:
+            return jsonify({'error': 'Template not found'}), 404
+        
+        template_name, storage_path = template
+        
+        # For now, return a placeholder PDF URL
+        # In a full implementation, you'd serve the actual PDF file from storage
+        return jsonify({
+            'success': True,
+            'template_name': template_name,
+            'pdf_url': f'/static/placeholder.pdf'  # Placeholder for actual PDF serving
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            cur.close()
+            conn.close()
+
+@app.route('/api/pdf/save-fields', methods=['POST'])
+def save_pdf_fields():
+    """Save PDF field values to database"""
+    try:
+        data = request.get_json()
+        template_id = data.get('template_id')
+        account_id = data.get('account_id')
+        field_values = data.get('field_values', {})
+        
+        if not template_id or not account_id:
+            return jsonify({'success': False, 'error': 'Missing template_id or account_id'}), 400
+        
+        conn = get_db()
+        cur = conn.cursor()
+        
+        # Check if template data already exists for this account
+        cur.execute('''
+            SELECT id FROM template_data 
+            WHERE account_id = %s AND template_id = %s
+        ''', (account_id, template_id))
+        
+        existing_data = cur.fetchone()
+        
+        if existing_data:
+            # Update existing data
+            cur.execute('''
+                UPDATE template_data 
+                SET field_values = %s, updated_at = NOW(), version = version + 1
+                WHERE account_id = %s AND template_id = %s
+            ''', (json.dumps(field_values), account_id, template_id))
+        else:
+            # Insert new data
+            cur.execute('''
+                INSERT INTO template_data (account_id, template_id, field_values)
+                VALUES (%s, %s, %s)
+            ''', (account_id, template_id, json.dumps(field_values)))
+        
+        conn.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Field values saved successfully',
+            'template_id': template_id,
+            'account_id': account_id,
+            'field_count': len(field_values)
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            cur.close()
+            conn.close()
+
+@app.route('/api/pdf/get-fields/<template_id>/<account_id>')
+def get_pdf_fields(template_id, account_id):
+    """Get saved PDF field values for a template and account"""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        
+        cur.execute('''
+            SELECT field_values FROM template_data 
+            WHERE account_id = %s AND template_id = %s
+        ''', (account_id, template_id))
+        
+        data = cur.fetchone()
+        
+        if data:
+            return jsonify({
+                'success': True,
+                'field_values': json.loads(data[0]) if data[0] else {}
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'field_values': {}
+            })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            cur.close()
+            conn.close()
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
