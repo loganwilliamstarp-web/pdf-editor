@@ -1,0 +1,47 @@
+﻿# Certificate Management System - Deployment Package
+
+## Files Created:
+1. backend/app.py - Main Flask application
+2. backend/requirements.txt - Python dependencies  
+3. backend/Procfile - Heroku process configuration
+4. backend/runtime.txt - Python version
+5. frontend/build/index.html - Frontend interface
+
+## To Deploy:
+
+### Option 1: Using Heroku CLI (if installed)
+`ash
+cd backend
+git init
+git add .
+git commit -m "Initial deployment"
+git remote add heroku https://git.heroku.com/pdfeditorsalesforce.git
+git push heroku main
+`
+
+### Option 2: Manual Upload via GitHub
+1. Go to your GitHub repository: https://github.com/loganwilliamstarp-web/pdf-editor
+2. Upload these files to the repository
+3. Connect Heroku to GitHub and deploy
+
+### Option 3: Heroku Dashboard
+1. Go to Heroku dashboard
+2. Select your app: pdfeditorsalesforce
+3. Go to Deploy tab
+4. Connect to GitHub repository
+5. Deploy
+
+## Environment Variables to Set:
+`ash
+heroku config:set REACT_APP_ADOBE_CLIENT_ID=f19373e4703e4d9c98f6d9db1db9a1cb -a pdfeditorsalesforce
+heroku config:set DATABASE_URL=postgresql://postgres:DJyX-3pAu6+85+6@db.lpvzcfvcfckgdeuhzhrj.supabase.co:5432/postgres -a pdfeditorsalesforce
+`
+
+## Test After Deployment:
+- https://pdfeditorsalesforce-49dc376497fd.herokuapp.com/
+- https://pdfeditorsalesforce-49dc376497fd.herokuapp.com/api/health
+
+## Next Steps:
+1. Verify the app is working
+2. Upload your ACORD templates
+3. Set up Salesforce integration
