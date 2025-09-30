@@ -178,8 +178,8 @@ def serve_app():
 def serve_account(account_id):
     """Serve the app for a specific Salesforce Account ID"""
     try:
-        # Check if this is a Salesforce Account ID (18 characters starting with 001)
-        if len(account_id) == 18 and account_id.startswith('001'):
+        # Check if this is a Salesforce Account ID (15 or 18 characters starting with 001)
+        if len(account_id) >= 15 and account_id.startswith('001'):
             try:
                 return send_from_directory(app.static_folder, 'index.html')
             except Exception as e:
