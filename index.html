@@ -448,42 +448,6 @@
             popupWindow.focus();
         }
 
-
-        // Initialize Adobe PDF Embed API
-        function initializeAdobePDF(templateId) {
-            // Show loading state
-            document.getElementById('adobe-dc-view').innerHTML = `
-                <div class="h-full flex flex-col items-center justify-center bg-gray-50">
-                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-                    <p class="text-gray-600">Loading PDF...</p>
-                </div>
-            `;
-
-            // Check if Adobe PDF Embed API is available
-            if (typeof window.AdobeDC === 'undefined') {
-                document.getElementById('adobe-dc-view').innerHTML = `
-                    <div class="h-full flex flex-col items-center justify-center bg-gray-50">
-                        <div class="text-center p-8">
-                            <div class="text-6xl mb-4">📄</div>
-                            <h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Editor Ready</h3>
-                            <p class="text-gray-600 mb-4">Template ID: ${templateId}</p>
-                            <div class="space-y-2 text-sm text-gray-500 mb-6">
-                                <p>• Click on form fields to edit them</p>
-                                <p>• Use the Save Fields button to save your changes</p>
-                                <p>• Data is automatically saved to the database</p>
-                            </div>
-                            <div class="p-4 bg-blue-50 rounded-lg">
-                                <p class="text-blue-800 text-sm">
-                                    <strong>Adobe PDF Embed API:</strong> Loading... If this persists, 
-                                    the API may need to be configured.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                
-
-
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', initApp);
     </script>
