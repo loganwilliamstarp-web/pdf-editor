@@ -6,7 +6,6 @@
     <title>Certificate Management System</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
-    <script src="https://documentcloud.adobe.com/view-sdk/main.js"></script>
 </head>
 <body>
     <div class="min-h-screen bg-gray-100">
@@ -150,7 +149,7 @@
                     <meta name="viewport" content="width=device-width, initial-scale=1">
                     <title>PDF Editor - Template ${templateId}</title>
                     <script src="https://cdn.tailwindcss.com"></script>
-                    <script src="https://documentcloud.adobe.com/view-sdk/main.js"></script>
+                    <script src="https://acrobatservices.adobe.com/view-sdk/viewer.js"></script>
                 </head>
                 <body class="bg-gray-100">
                     <div class="h-screen flex flex-col">
@@ -208,79 +207,61 @@
                                 </div>
                             `;
 
-                            // Check if Adobe PDF Embed API is available
-                            if (typeof window.AdobeDC === 'undefined') {
-                                console.log('Adobe PDF Embed API not loaded yet, waiting...');
+                            // Use the correct Adobe PDF Embed API initialization
+                            document.addEventListener("adobe_dc_view_sdk.ready", function() {
+                                console.log('Adobe PDF Embed API is ready');
                                 
-                                // Wait for Adobe SDK to load
-                                let attempts = 0;
-                                const maxAttempts = 10;
-                                
-                                const checkAdobeSDK = setInterval(function() {
-                                    attempts++;
-                                    console.log(`Checking for Adobe SDK... attempt ${attempts}`);
-                                    
-                                    if (typeof window.AdobeDC !== 'undefined') {
-                                        clearInterval(checkAdobeSDK);
-                                        console.log('Adobe SDK loaded, initializing PDF...');
-                                        // Retry initialization
-                                        setTimeout(function() {
-                                            initializeAdobePDF(templateId);
-                                        }, 500);
-                                    } else if (attempts >= maxAttempts) {
-                                        clearInterval(checkAdobeSDK);
-                                        console.log('Adobe SDK failed to load after max attempts');
-                                        showAdobeSDKError(templateId);
-                                    }
-                                }, 1000);
-                                
-                                return;
-                            }
+                                try {
+                                    const adobeDCView = new AdobeDC.View({
+                                        clientId: "f19373e4703e4d9c98f6d9db1db9a1cb",
+                                        divId: "adobe-dc-view"
+                                    });
 
-                            // Initialize Adobe PDF Embed API with real PDF
-                            try {
-                                const adobeDCView = new window.AdobeDC.View({
-                                    clientId: "f19373e4703e4d9c98f6d9db1db9a1cb",
-                                    divId: "adobe-dc-view"
-                                });
-
-                                // Load the PDF template
-                                const previewFilePromise = adobeDCView.previewFile({
-                                    content: {
-                                        location: {
-                                            url: `/api/pdf/template/${templateId}`
+                                    // Load the PDF template using the official method
+                                    adobeDCView.previewFile({
+                                        content: {
+                                            location: {
+                                                url: `/api/pdf/template/${templateId}`
+                                            }
+                                        },
+                                        metaData: {
+                                            fileName: `Template ${templateId}`
                                         }
-                                    },
-                                    metaData: {
-                                        fileName: `Template ${templateId}`
-                                    }
-                                }, {
-                                    embedMode: "FULL_WINDOW",
-                                    enableFormFilling: true,
-                                    showAnnotationTools: false,
-                                    showDownloadPDF: false,
-                                    showPrintPDF: false,
-                                    showSavePDF: false,
-                                    showLeftHandPanel: false,
-                                    showDisabledSaveButton: false
-                                });
+                                    }, {
+                                        embedMode: "FULL_WINDOW",
+                                        enableFormFilling: true,
+                                        showAnnotationTools: false,
+                                        showDownloadPDF: false,
+                                        showPrintPDF: false,
+                                        showSavePDF: false,
+                                        showLeftHandPanel: false,
+                                        showDisabledSaveButton: false
+                                    }).then(adobeViewerController => {
+                                        currentPDFViewer = adobeViewerController;
+                                        console.log('PDF loaded successfully');
+                                        
+                                        // Load any existing field values
+                                        loadExistingFieldValues(templateId);
+                                    }).catch(error => {
+                                        console.error('Error loading PDF:', error);
+                                        showPDFError(templateId, error.message);
+                                    });
 
-                                previewFilePromise.then(adobeViewerController => {
-                                    currentPDFViewer = adobeViewerController;
-                                    console.log('PDF loaded successfully');
+                                    console.log('PDF loading initiated');
                                     
-                                    // Load any existing field values
-                                    loadExistingFieldValues(templateId);
-                                    
-                                }).catch(error => {
-                                    console.error('Error loading PDF:', error);
+                                } catch (error) {
+                                    console.error('Adobe PDF Embed initialization error:', error);
                                     showPDFError(templateId, error.message);
-                                });
+                                }
+                            });
 
-                            } catch (error) {
-                                console.error('Adobe PDF Embed initialization error:', error);
-                                showPDFError(templateId, error.message);
-                            }
+                            // Fallback if Adobe SDK doesn't load
+                            setTimeout(function() {
+                                if (typeof AdobeDC === 'undefined') {
+                                    console.log('Adobe SDK not loaded, showing demo mode');
+                                    showAdobeSDKError(templateId);
+                                }
+                            }, 5000);
                         }
 
                         // Show Adobe SDK loading error
@@ -305,19 +286,23 @@
                                 </div>
                             `;
                             
-                            // Simulate a PDF viewer for demo purposes
-                            currentPDFViewer = {
-                                getFormFields: async function() {
-                                    return {
-                                        'company_name': 'Sample Company',
-                                        'policy_number': 'POL-123456',
-                                        'effective_date': '01/01/2025',
-                                        'expiration_date': '12/31/2025',
-                                        'insured_name': 'John Doe',
-                                        'address': '123 Main St, City, State 12345'
-                                    };
-                                }
-                            };
+                                // Simulate a PDF viewer for demo purposes
+                                currentPDFViewer = {
+                                    getFormFields: async function() {
+                                        return {
+                                            'company_name': 'Sample Company',
+                                            'policy_number': 'POL-123456',
+                                            'effective_date': '01/01/2025',
+                                            'expiration_date': '12/31/2025',
+                                            'insured_name': 'John Doe',
+                                            'address': '123 Main St, City, State 12345'
+                                        };
+                                    },
+                                    setFormFields: async function(fields) {
+                                        console.log('Demo: Setting form fields:', fields);
+                                        return true;
+                                    }
+                                };
                         }
 
                         // Show PDF loading error
@@ -341,19 +326,23 @@
                                 </div>
                             `;
                             
-                            // Provide fallback PDF viewer
-                            currentPDFViewer = {
-                                getFormFields: async function() {
-                                    return {
-                                        'company_name': 'Sample Company',
-                                        'policy_number': 'POL-123456',
-                                        'effective_date': '01/01/2025',
-                                        'expiration_date': '12/31/2025',
-                                        'insured_name': 'John Doe',
-                                        'address': '123 Main St, City, State 12345'
-                                    };
-                                }
-                            };
+                                // Provide fallback PDF viewer
+                                currentPDFViewer = {
+                                    getFormFields: async function() {
+                                        return {
+                                            'company_name': 'Sample Company',
+                                            'policy_number': 'POL-123456',
+                                            'effective_date': '01/01/2025',
+                                            'expiration_date': '12/31/2025',
+                                            'insured_name': 'John Doe',
+                                            'address': '123 Main St, City, State 12345'
+                                        };
+                                    },
+                                    setFormFields: async function(fields) {
+                                        console.log('Fallback: Setting form fields:', fields);
+                                        return true;
+                                    }
+                                };
                         }
 
                         // Load existing field values for this template and account
@@ -459,18 +448,6 @@
             popupWindow.focus();
         }
 
-        // Close PDF Editor Modal
-        function closePDFEditorModal() {
-            const modal = document.getElementById('pdfModal');
-            if (modal) {
-                modal.remove();
-            }
-            
-            // Clean up global PDF viewer reference
-            if (window.currentPDFViewer) {
-                window.currentPDFViewer = null;
-            }
-        }
 
         // Initialize Adobe PDF Embed API
         function initializeAdobePDF(templateId) {
@@ -505,189 +482,6 @@
                     </div>
                 `;
                 
-                // Simulate a PDF viewer for demo purposes
-                window.currentPDFViewer = {
-                    getFormFields: async function() {
-                        // Return sample form fields for demo
-                        return {
-                            'company_name': 'Sample Company',
-                            'policy_number': 'POL-123456',
-                            'effective_date': '01/01/2025',
-                            'expiration_date': '12/31/2025',
-                            'insured_name': 'John Doe',
-                            'address': '123 Main St, City, State 12345'
-                        };
-                    }
-                };
-                return;
-            }
-
-            // Initialize Adobe PDF Embed API with real PDF
-            try {
-                const adobeDCView = new window.AdobeDC.View({
-                    clientId: "f19373e4703e4d9c98f6d9db1db9a1cb",
-                    divId: "adobe-dc-view"
-                });
-
-                // Load the PDF template
-                const previewFilePromise = adobeDCView.previewFile({
-                    content: {
-                        location: {
-                            url: `/api/pdf/template/${templateId}`
-                        }
-                    },
-                    metaData: {
-                        fileName: `Template ${templateId}`
-                    }
-                }, {
-                    embedMode: "FULL_WINDOW",
-                    enableFormFilling: true,
-                    showAnnotationTools: false,
-                    showDownloadPDF: false,
-                    showPrintPDF: false,
-                    showSavePDF: false,
-                    showLeftHandPanel: false,
-                    showDisabledSaveButton: false
-                });
-
-                previewFilePromise.then(adobeViewerController => {
-                    // Store the viewer controller for later use
-                    window.currentPDFViewer = adobeViewerController;
-                    console.log('PDF loaded successfully');
-                    
-                    // Load any existing field values
-                    loadExistingFieldValues(templateId);
-                    
-                }).catch(error => {
-                    console.error('Error loading PDF:', error);
-                    showPDFError(templateId, error.message);
-                });
-
-            } catch (error) {
-                console.error('Adobe PDF Embed initialization error:', error);
-                showPDFError(templateId, error.message);
-            }
-        }
-
-        // Show PDF loading error
-        function showPDFError(templateId, errorMessage) {
-            document.getElementById('adobe-dc-view').innerHTML = `
-                <div class="h-full flex flex-col items-center justify-center bg-gray-50">
-                    <div class="text-center p-8">
-                        <div class="text-6xl mb-4">⚠️</div>
-                        <h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Loading Error</h3>
-                        <p class="text-gray-600 mb-4">Template ID: ${templateId}</p>
-                        <p class="text-red-600 text-sm mb-6">Error: ${errorMessage}</p>
-                        <div class="space-y-2 text-sm text-gray-500 mb-6">
-                            <p>• PDF file may not be available</p>
-                            <p>• Check template storage configuration</p>
-                            <p>• Try refreshing the page</p>
-                        </div>
-                        <button onclick="initializeAdobePDF('${templateId}')" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                            Retry Loading PDF
-                        </button>
-                    </div>
-                </div>
-            `;
-            
-            // Provide fallback PDF viewer
-            window.currentPDFViewer = {
-                getFormFields: async function() {
-                    return {
-                        'company_name': 'Sample Company',
-                        'policy_number': 'POL-123456',
-                        'effective_date': '01/01/2025',
-                        'expiration_date': '12/31/2025',
-                        'insured_name': 'John Doe',
-                        'address': '123 Main St, City, State 12345'
-                    };
-                }
-            };
-        }
-
-        // Load existing field values for this template and account
-        async function loadExistingFieldValues(templateId) {
-            try {
-                const accountId = getAccountId();
-                const response = await fetch(`/api/pdf/get-fields/${templateId}/${accountId}`);
-                const data = await response.json();
-                
-                if (data.success && data.field_values && Object.keys(data.field_values).length > 0) {
-                    console.log('Loading existing field values:', data.field_values);
-                    
-                    // Set field values in the PDF if Adobe viewer is available
-                    if (window.currentPDFViewer && window.currentPDFViewer.setFormFields) {
-                        await window.currentPDFViewer.setFormFields(data.field_values);
-                    }
-                }
-            } catch (error) {
-                console.error('Error loading existing field values:', error);
-            }
-        }
-
-        // Save PDF field values to database
-        async function savePDFFields(templateId) {
-            const saveBtn = document.getElementById('saveBtn');
-            const saveStatus = document.getElementById('saveStatus');
-            
-            saveBtn.disabled = true;
-            saveBtn.textContent = 'Saving...';
-            saveStatus.innerHTML = '<span class="text-blue-600">Saving field values...</span>';
-
-            try {
-                // Get field values from Adobe PDF Embed API
-                if (window.currentPDFViewer) {
-                    const formFields = await window.currentPDFViewer.getFormFields();
-                    
-                    const response = await fetch('/api/pdf/save-fields', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            template_id: templateId,
-                            account_id: getAccountId(),
-                            field_values: formFields
-                        })
-                    });
-
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        saveStatus.innerHTML = '<span class="text-green-600">✅ Field values saved successfully!</span>';
-                    } else {
-                        saveStatus.innerHTML = `<span class="text-red-600">❌ Save failed: ${result.error}</span>`;
-                    }
-                } else {
-                    saveStatus.innerHTML = '<span class="text-red-600">❌ PDF viewer not available</span>';
-                }
-            } catch (error) {
-                saveStatus.innerHTML = `<span class="text-red-600">❌ Save error: ${error.message}</span>`;
-            } finally {
-                saveBtn.disabled = false;
-                saveBtn.textContent = '💾 Save Fields';
-            }
-        }
-
-        // Download PDF
-        async function downloadPDF(templateId) {
-            try {
-                const response = await fetch(`/api/pdf/template/${templateId}`);
-                if (!response.ok) throw new Error('Failed to download PDF');
-                
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `template_${templateId}.pdf`;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(url);
-            } catch (error) {
-                alert(`Download failed: ${error.message}`);
-            }
-        }
 
 
         // Initialize when page loads
