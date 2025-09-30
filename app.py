@@ -15,6 +15,47 @@ def serve_app():
 @app.route("/<path:path>")
 def serve_static(path):
     try:
+        # Check if this is a Salesforce Account ID (18 characters starting with 001)
+        if len(path) == 18 and path.startswith('001'):
+            # This is a Salesforce Account ID, serve the app with the Account ID
+            try:
+                return send_from_directory(app.static_folder, 'index.html')
+            except Exception as e:
+                return f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Certificate Management System</title>
+                    <style>
+                        body {{ font-family: Arial, sans-serif; margin: 40px; }}
+                        .header {{ background: #0176d3; color: white; padding: 20px; border-radius: 5px; }}
+                        .content {{ margin: 20px 0; }}
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>Certificate Management System</h1>
+                        <p>Account ID: {path}</p>
+                    </div>
+                    <div class="content">
+                        <h2>Welcome to Certificate Management</h2>
+                        <p>This system is integrated with Salesforce Account: <strong>{path}</strong></p>
+                        <p>Frontend is loading... Please wait a moment.</p>
+                        <hr>
+                        <h3>Available Features:</h3>
+                        <ul>
+                            <li>Upload ACORD PDF Templates</li>
+                            <li>Fill PDF Forms with Account Data</li>
+                            <li>Generate Certificates</li>
+                            <li>Manage Certificate Holders</li>
+                        </ul>
+                        <p><a href="/api/health">Check API Health</a></p>
+                    </div>
+                </body>
+                </html>
+                """
+        
+        # Try to serve static file
         return send_from_directory(app.static_folder, path)
     except Exception as e:
         return f"File not found: {path}", 404
@@ -25,6 +66,15 @@ def health():
         "status": "healthy", 
         "message": "Certificate Management System is working",
         "timestamp": "2025-01-01T00:00:00.000000"
+    })
+
+@app.route("/api/account/<account_id>")
+def get_account_info(account_id):
+    """Get account information for the given Salesforce Account ID"""
+    return jsonify({
+        "account_id": account_id,
+        "message": "Account data will be integrated with Salesforce",
+        "status": "ready"
     })
 
 @app.route("/api/provision-pdf", methods=['POST'])
