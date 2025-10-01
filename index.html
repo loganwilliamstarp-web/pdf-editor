@@ -225,6 +225,7 @@ function initializePDFEditorPopup(popupWindow, context) {
     let pendingChanges = false;
     let isSaving = false;
     let savedFieldValues = null; // Store field values to apply when PDF loads
+    let lastKnownFieldValues = {}; // Track last known values for change detection
 
     const saveBtn = doc.getElementById('saveBtn');
     const downloadBtn = doc.getElementById('downloadBtn');
@@ -720,6 +721,7 @@ function initializePDFEditorPopup(popupWindow, context) {
             if (result.success) {
                 lastSaveTime = new Date();
                 pendingChanges = false;
+                lastKnownFieldValues = { ...fieldValuesPayload }; // Update last known values
                 if (showStatus) {
                     setSaveStatus('success', 'Field values saved successfully.');
                 }
@@ -793,20 +795,26 @@ function initializePDFEditorPopup(popupWindow, context) {
             }
         }
         
-        // Fallback: Poll for changes every 2 seconds if Adobe API events don't work
+        // Fallback: Poll for changes every 3 seconds with proper change detection
         setInterval(() => {
             if (currentPDFViewer && !isSaving) {
                 collectPdfFieldData().then(data => {
-                    if (data.values && Object.keys(data.values).length > 0) {
-                        // Simple change detection - if we have field values, assume changes
+                    const currentValues = data.values || {};
+                    
+                    // Compare current values with last known values
+                    const hasChanges = JSON.stringify(currentValues) !== JSON.stringify(lastKnownFieldValues);
+                    
+                    if (hasChanges && Object.keys(currentValues).length > 0) {
                         pendingChanges = true;
+                        lastKnownFieldValues = { ...currentValues };
                         setAutoSaveStatus('Auto-save: Changes detected');
+                        console.log('[PDF Popup] Field values changed, marking for save');
                     }
                 }).catch(error => {
                     console.warn('[PDF Popup] Change detection polling failed:', error);
                 });
             }
-        }, 2000);
+        }, 3000);
     }
 
     // Reliable save on visibility change
@@ -827,8 +835,8 @@ function initializePDFEditorPopup(popupWindow, context) {
                 
                 // Use sendBeacon for reliable exit saves
                 try {
-                    const data = collectPdfFieldData();
-                    const fieldValuesPayload = (data.values && typeof data.values === 'object') ? data.values : {};
+                    // Use the last known field values for exit save
+                    const fieldValuesPayload = lastKnownFieldValues || {};
                     
                     if (Object.keys(fieldValuesPayload).length > 0) {
                         const body = JSON.stringify({
@@ -844,6 +852,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                                 new Blob([body], { type: 'application/json' })
                             );
                             console.log('[PDF Popup] Exit save sent via sendBeacon');
+                            pendingChanges = false; // Mark as saved
                         }
                     }
                 } catch (error) {
@@ -925,6 +934,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                         // Apply saved field values immediately after APIs are ready
                         if (savedFieldValues) {
                             await applySavedFieldValues(savedFieldValues);
+                            lastKnownFieldValues = { ...savedFieldValues }; // Initialize last known values
                         } else {
                             setSaveStatus('info', 'PDF ready for editing. Save to store your changes.');
                         }
@@ -944,6 +954,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                         // Apply saved field values even without Adobe APIs
                         if (savedFieldValues) {
                             await applySavedFieldValues(savedFieldValues);
+                            lastKnownFieldValues = { ...savedFieldValues }; // Initialize last known values
                         } else {
                             setSaveStatus('info', 'PDF ready for editing. Save to store your changes.');
                         }
