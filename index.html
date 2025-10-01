@@ -816,6 +816,7 @@ function initializePDFEditorPopup(popupWindow, context) {
     function createCustomFormUI(fieldValues = {}) {
         try {
             console.log('[PDF Popup] Creating custom form UI with', Object.keys(fieldValues).length, 'fields');
+            console.log('[PDF Popup] Sample field values:', Object.entries(fieldValues).slice(0, 5));
             
             const formContainer = popupWindow.document.getElementById('formFieldsContainer');
             if (!formContainer) {
@@ -897,6 +898,9 @@ function initializePDFEditorPopup(popupWindow, context) {
                     input.value = value || '';
                     input.placeholder = `Enter ${name.replace(/_/g, ' ').toLowerCase()}`;
                     
+                    // Store the field name as a data attribute for easier retrieval
+                    input.setAttribute('data-field-name', name);
+                    
                     // Add change event listener
                     input.addEventListener('input', () => {
                         fieldValues[name] = input.value;
@@ -920,6 +924,7 @@ function initializePDFEditorPopup(popupWindow, context) {
             formContainer.appendChild(saveButton);
             
             console.log('[PDF Popup] Custom form UI created successfully');
+            console.log('[PDF Popup] Form container has', formContainer.children.length, 'sections');
             setSaveStatus('success', 'Custom form UI ready for editing. Fields are organized by category.');
             
         } catch (error) {
@@ -956,10 +961,9 @@ function initializePDFEditorPopup(popupWindow, context) {
             if (formContainer) {
                 const inputs = formContainer.querySelectorAll('input[type="text"]');
                 inputs.forEach(input => {
-                    // Extract field name from input's previous sibling (label)
-                    const label = input.previousElementSibling;
-                    if (label && label.tagName === 'LABEL') {
-                        const fieldName = label.textContent.replace(/\s+/g, '_').toUpperCase();
+                    // Get field name from data attribute
+                    const fieldName = input.getAttribute('data-field-name');
+                    if (fieldName) {
                         fieldValuesPayload[fieldName] = input.value;
                     }
                 });
