@@ -381,8 +381,13 @@ function initializePDFEditorPopup(popupWindow, context) {
                     }
                 }
 
-                if (currentPDFViewer && currentPDFViewer.setFormFields) {
-                    await currentPDFViewer.setFormFields(data.field_values);
+                const viewerValueMap = mapObjectToViewerFieldValues(data.field_values);
+                if (Object.keys(viewerValueMap).length && currentPDFViewer && currentPDFViewer.setFormFields) {
+                    try {
+                        await currentPDFViewer.setFormFields(viewerValueMap);
+                    } catch (viewerError) {
+                        console.warn('[PDF Popup] setFormFields fallback failed', viewerError);
+                    }
                 }
 
                 setSaveStatus('success', 'Existing field values applied from the database.');
@@ -400,6 +405,17 @@ function initializePDFEditorPopup(popupWindow, context) {
             return [];
         }
         return Object.keys(obj).map(name => ({ fieldName: name, value: obj[name] }));
+    }
+
+    function mapObjectToViewerFieldValues(obj) {
+        if (!obj || typeof obj !== 'object') {
+            return {};
+        }
+        const result = {};
+        Object.keys(obj).forEach(name => {
+            result[name] = { value: obj[name] };
+        });
+        return result;
     }
 
     function normalizeAdobeFieldDefinitions(raw) {
