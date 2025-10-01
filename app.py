@@ -867,149 +867,67 @@ def serve_pdf_template_with_fields(template_id, account_id):
                 pdf_doc.set_need_appearances(True)
                 print("Set need_appearances=True for proper form field rendering")
                 
-                # DEBUG: Check actual field types in your PDF
-                print("\n=== PDF FIELD TYPES DEBUG ===")
-                checkbox_fields = []
-                for page in pdf_doc:
-                    for widget in page.widgets():
-                        if 'checkbox' in widget.field_type_string.lower() or widget.field_type_string == 'CheckBox':
-                            checkbox_fields.append({
-                                'name': widget.field_name,
-                                'type': widget.field_type_string,
-                                'current_value': widget.field_value,
-                                'saved_value': field_values.get(widget.field_name, 'NOT_FOUND')
-                            })
-                        print(f"Field: {widget.field_name}")
-                        print(f"  Type: {widget.field_type}")
-                        print(f"  Type String: {widget.field_type_string}")
-                        print(f"  Current Value: {widget.field_value}")
-                print("=== END DEBUG ===\n")
-                
-                # DEBUG: Check for X-style checkboxes specifically
-                print("\n=== CHECKING FOR X-STYLE CHECKBOXES ===")
-                page = pdf_doc[0]
-                all_widgets = list(page.widgets())
-                print(f"Total widgets on page: {len(all_widgets)}")
-
-                # Look for the specific checkboxes from ACORD forms
-                checkbox_names = [
-                    'COMMERCIAL GENERAL LIABILITY',
-                    'CLAIMS-MADE',
-                    'OCCUR',
-                    'COVERAGE',
-                    'CLAIMS',
-                    'OCCURRENCE'
-                ]
-
-                for widget in all_widgets:
-                    field_name = widget.field_name
-                    # Check if this might be one of those X checkboxes
-                    if any(name.replace(' ', '').replace('-', '').lower() in field_name.lower().replace('_', '') 
-                           for name in checkbox_names):
-                        print(f"\n=== X-STYLE CHECKBOX ===")
-                        print(f"Field name: {widget.field_name}")
-                        print(f"Field type: {widget.field_type}")
-                        print(f"Field type string: {widget.field_type_string}")
-                        print(f"Field value: {widget.field_value}")
-                        print(f"Field flags: {widget.field_flags}")
-                        
-                        # Check if it's actually a button
-                        if hasattr(widget, 'button_states'):
-                            print(f"Button states: {widget.button_states}")
-                        if hasattr(widget, 'field_states'):
-                            print(f"Field states: {widget.field_states}")
-                        
-                        print(f"Widget rect: {widget.rect}")
-                        print(f"=========================\n")
-                
-                print("=== END X-STYLE CHECKBOX DEBUG ===\n")
-                
-                if checkbox_fields:
-                    print("=== CHECKBOX FIELDS FOUND ===")
-                    for cb in checkbox_fields:
-                        print(f"Checkbox: {cb['name']}")
-                        print(f"  Type: {cb['type']}")
-                        print(f"  Current Value: {cb['current_value']}")
-                        print(f"  Saved Value: {cb['saved_value']}")
-                        # Check if this checkbox should be filled
-                        if cb['saved_value'] != 'NOT_FOUND':
-                            is_checked = cb['saved_value'] in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', '/1']
-                            print(f"  Should be filled: {is_checked}")
-                    print("=== END CHECKBOX DEBUG ===\n")
-                
                 filled_count = 0
                 failed_fields = []
                 
-                # Iterate through all pages (ACORD forms can have multiple pages)
+                # Simple approach: iterate through all pages and widgets
                 for page_num in range(len(pdf_doc)):
                     page = pdf_doc[page_num]
+                    print(f"Processing page {page_num + 1}")
                     
                     # Get all widgets on this page
-                    for widget in page.widgets():
+                    widgets = list(page.widgets())
+                    print(f"Found {len(widgets)} widgets on page {page_num + 1}")
+                    
+                    for widget in widgets:
                         field_name = widget.field_name
                         
                         # Check if we have a saved value for this field
                         if field_name in field_values:
                             saved_value = field_values[field_name]
                             
-                            # Handle empty values - PyMuPDF needs explicit empty strings
-                            if saved_value is None or saved_value == '':
-                                saved_value = ''
+                            # Skip empty values
+                            if not saved_value or saved_value == '':
+                                continue
                             
                             try:
                                 field_type = widget.field_type_string
+                                print(f"Processing field '{field_name}' (type: {field_type}, value: '{saved_value}')")
                                 
                                 if field_type == 'Text':
                                     widget.field_value = str(saved_value)
                                     widget.update()
                                     filled_count += 1
-                                    if saved_value:  # Only log non-empty
-                                        print(f"Filled text field '{field_name}': '{saved_value}'")
+                                    print(f"✓ Filled text field '{field_name}': '{saved_value}'")
                                 
                                 elif field_type in ['CheckBox', 'Button', 'Btn']:
-                                    # Simplified checkbox/button handling
-                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On']
-                                    
-                                    # Just set boolean value - let PDF handle appearance
+                                    # Simple boolean approach
+                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X']
                                     widget.field_value = is_checked
                                     widget.update()
-                                    
                                     filled_count += 1
-                                    print(f"Set checkbox/button '{field_name}' to: {is_checked}")
-                                
+                                    print(f"✓ Set checkbox/button '{field_name}' to: {is_checked}")
                                 
                                 elif field_type == 'RadioButton':
-                                    # X-style boxes might be radio buttons
-                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X']
-                                    
-                                    print(f"Processing radio button '{field_name}': saved_value='{saved_value}', is_checked={is_checked}")
-                                    
-                                    if is_checked:
-                                        # Try common ACORD radio values
-                                        for state in ['X', 'Yes', '1', 'On']:
-                                            try:
-                                                widget.field_value = state
-                                                widget.update()
-                                                filled_count += 1
-                                                print(f"Radio button {field_name} set to: {state} - SUCCESS")
-                                                break
-                                            except Exception as radio_error:
-                                                print(f"Radio button {field_name} failed with state {state}: {radio_error}")
-                                                continue
+                                    # Try different values for radio buttons
+                                    if saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X']:
+                                        widget.field_value = 'X'
                                     else:
-                                        # For unchecked radio buttons
-                                        try:
-                                            widget.field_value = 'Off'
-                                            widget.update()
-                                            filled_count += 1
-                                            print(f"Radio button {field_name} set to: Off - SUCCESS")
-                                        except Exception as radio_error:
-                                            print(f"Radio button {field_name} failed to set to Off: {radio_error}")
-                                            failed_fields.append((field_name, f"Radio button error: {radio_error}"))
+                                        widget.field_value = 'Off'
+                                    widget.update()
+                                    filled_count += 1
+                                    print(f"✓ Set radio button '{field_name}' to: {widget.field_value}")
+                                
+                                else:
+                                    # Generic approach for other field types
+                                    widget.field_value = str(saved_value)
+                                    widget.update()
+                                    filled_count += 1
+                                    print(f"✓ Filled generic field '{field_name}': '{saved_value}'")
                                 
                             except Exception as field_error:
                                 failed_fields.append((field_name, str(field_error)))
-                                print(f"Failed to fill '{field_name}': {field_error}")
+                                print(f"✗ Failed to fill '{field_name}': {field_error}")
                 
                 print(f"=== PRE-FILL COMPLETE ===")
                 print(f"Successfully filled: {filled_count} fields")
@@ -1050,6 +968,8 @@ def serve_pdf_template_with_fields(template_id, account_id):
                 
         except Exception as fill_error:
             print(f"Error filling PDF fields: {fill_error}")
+            import traceback
+            traceback.print_exc()
             # Return original template if filling fails
             from flask import Response
             return Response(
