@@ -471,6 +471,7 @@ function initializePDFEditorPopup(popupWindow, context) {
         // Method 1: Try Adobe API setFormFieldValues
         if (adobeValueEntries.length && currentPDFAPIs && currentPDFAPIs.setFormFieldValues) {
             try {
+                console.log('[PDF Popup] Attempting setFormFieldValues with:', adobeValueEntries.slice(0, 3));
                 await currentPDFAPIs.setFormFieldValues({ formFieldValues: adobeValueEntries });
                 console.log('[PDF Popup] Applied field values via Adobe API setFormFieldValues');
                 setSaveStatus('success', 'Existing field values applied from the database.');
@@ -478,11 +479,14 @@ function initializePDFEditorPopup(popupWindow, context) {
             } catch (apiError) {
                 console.warn('[PDF Popup] Adobe API setFormFieldValues failed', apiError);
             }
+        } else {
+            console.log('[PDF Popup] setFormFieldValues not available - apis:', !!currentPDFAPIs, 'method:', typeof currentPDFAPIs?.setFormFieldValues);
         }
 
         // Method 2: Try Adobe API updateFormFieldValues
         if (adobeValueEntries.length && currentPDFAPIs && currentPDFAPIs.updateFormFieldValues) {
             try {
+                console.log('[PDF Popup] Attempting updateFormFieldValues with:', adobeValueEntries.slice(0, 3));
                 await currentPDFAPIs.updateFormFieldValues(adobeValueEntries);
                 console.log('[PDF Popup] Applied field values via Adobe API updateFormFieldValues');
                 setSaveStatus('success', 'Existing field values applied from the database.');
@@ -490,12 +494,15 @@ function initializePDFEditorPopup(popupWindow, context) {
             } catch (apiError) {
                 console.warn('[PDF Popup] Adobe API updateFormFieldValues failed', apiError);
             }
+        } else {
+            console.log('[PDF Popup] updateFormFieldValues not available - apis:', !!currentPDFAPIs, 'method:', typeof currentPDFAPIs?.updateFormFieldValues);
         }
 
         // Method 3: Try individual field updates
         if (currentPDFAPIs && currentPDFAPIs.updateFormFieldValue) {
             try {
-                for (const entry of adobeValueEntries) {
+                console.log('[PDF Popup] Attempting individual field updates for', adobeValueEntries.length, 'fields');
+                for (const entry of adobeValueEntries.slice(0, 5)) { // Only try first 5 for testing
                     await currentPDFAPIs.updateFormFieldValue(entry.name, entry.value);
                 }
                 console.log('[PDF Popup] Applied field values via individual updates');
@@ -504,11 +511,14 @@ function initializePDFEditorPopup(popupWindow, context) {
             } catch (apiError) {
                 console.warn('[PDF Popup] Individual field updates failed', apiError);
             }
+        } else {
+            console.log('[PDF Popup] updateFormFieldValue not available - apis:', !!currentPDFAPIs, 'method:', typeof currentPDFAPIs?.updateFormFieldValue);
         }
 
         // Method 4: Try viewer setFormFields
         if (currentPDFViewer && currentPDFViewer.setFormFields) {
             try {
+                console.log('[PDF Popup] Attempting viewer setFormFields with:', Object.keys(fieldValues).slice(0, 5));
                 await currentPDFViewer.setFormFields(fieldValues);
                 console.log('[PDF Popup] Applied viewer field map');
                 setSaveStatus('success', 'Existing field values applied from the database.');
@@ -516,6 +526,8 @@ function initializePDFEditorPopup(popupWindow, context) {
             } catch (viewerError) {
                 console.warn('[PDF Popup] Primary setFormFields failed', viewerError);
             }
+        } else {
+            console.log('[PDF Popup] setFormFields not available - viewer:', !!currentPDFViewer, 'method:', typeof currentPDFViewer?.setFormFields);
         }
 
         // Method 5: Try alternate viewer format
@@ -523,6 +535,7 @@ function initializePDFEditorPopup(popupWindow, context) {
             try {
                 const viewerValueMap = mapObjectToViewerFieldValues(fieldValues);
                 if (Object.keys(viewerValueMap).length) {
+                    console.log('[PDF Popup] Attempting alternate viewer setFormFields with:', Object.keys(viewerValueMap).slice(0, 5));
                     await currentPDFViewer.setFormFields(viewerValueMap);
                     console.log('[PDF Popup] Applied alternate viewer field map');
                     setSaveStatus('success', 'Existing field values applied from the database.');
@@ -794,6 +807,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                     
                     if (result.success && result.form_data) {
                         console.log('[PDF Popup] Successfully extracted', result.field_count, 'fields from PDF');
+                        console.log('[PDF Popup] Sample extracted values:', Object.entries(result.form_data).slice(0, 5));
                         values = result.form_data;
                     }
                 }
