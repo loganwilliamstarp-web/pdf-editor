@@ -721,6 +721,148 @@ def serve_pdf_template(template_id):
             cur.close()
             conn.close()
 
+
+@app.route('/api/pdf/template/<template_id>/<account_id>')
+def serve_pdf_template_with_fields(template_id, account_id):
+    """Serve PDF template with account-specific field values filled in"""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        
+        # Get template and account-specific data
+        cur.execute('''
+            SELECT
+                mt.template_name, mt.template_type, mt.storage_path, mt.file_size, mt.pdf_blob, mt.form_fields,
+                td.field_values
+            FROM master_templates mt
+            LEFT JOIN template_data td
+                ON td.template_id = mt.id AND td.account_id = %s
+            WHERE mt.id = %s
+        ''', (account_id, template_id))
+        
+        result = cur.fetchone()
+        if not result:
+            return jsonify({'error': 'Template not found'}), 404
+        
+        template_name = result.get('template_name')
+        template_type = (result.get('template_type') or '').lower()
+        storage_path = result.get('storage_path') or ''
+        pdf_blob = result.get('pdf_blob')
+        form_fields_payload = coerce_form_fields_payload(result.get('form_fields'))
+        field_values = result.get('field_values') or {}
+
+        print(f"Serving PDF template with fields: {template_name} (ID: {template_id}, Account: {account_id})")
+
+        # Get PDF content
+        pdf_content = None
+        if pdf_blob:
+            try:
+                pdf_content = bytes(pdf_blob)
+            except (TypeError, ValueError):
+                pdf_content = pdf_blob
+
+        if not pdf_content:
+            local_file = resolve_local_template_file(template_type, storage_path)
+            if local_file:
+                pdf_content = local_file.read_bytes()
+
+        if not pdf_content:
+            # Fallback to generated PDF if no stored asset is available
+            pdf_content = create_pdf_with_form_fields(template_name, form_fields_payload)
+
+        # If no field values saved, return original template
+        if not field_values:
+            print("No field values found, returning original template")
+            from flask import Response
+            return Response(
+                pdf_content,
+                mimetype='application/pdf',
+                headers={
+                    'Content-Disposition': f'inline; filename="{template_name}.pdf"',
+                    'Access-Control-Allow-Origin': '*',
+                    'Cache-Control': 'no-cache'
+                }
+            )
+        
+        # Fill PDF with saved field values
+        try:
+            if PYPDF_AVAILABLE:
+                print(f"Filling PDF with {len(field_values)} field values")
+                # Create a new PDF with filled fields
+                pdf_reader = PdfReader(io.BytesIO(pdf_content))
+                pdf_writer = PdfWriter()
+                
+                # Copy all pages
+                for page in pdf_reader.pages:
+                    pdf_writer.add_page(page)
+                
+                # Fill form fields if they exist
+                if '/AcroForm' in pdf_reader.trailer['/Root']:
+                    acro_form = pdf_reader.trailer['/Root']['/AcroForm']
+                    if '/Fields' in acro_form:
+                        fields = acro_form['/Fields']
+                        filled_count = 0
+                        for field in fields:
+                            field_obj = field.get_object()
+                            if '/T' in field_obj:  # Field name
+                                field_name = field_obj['/T']
+                                if field_name in field_values and field_values[field_name]:
+                                    # Set field value
+                                    field_obj[NameObject('/V')] = TextStringObject(field_values[field_name])
+                                    filled_count += 1
+                        print(f"Filled {filled_count} form fields")
+                
+                # Write filled PDF to bytes
+                output_buffer = io.BytesIO()
+                pdf_writer.write(output_buffer)
+                filled_pdf_content = output_buffer.getvalue()
+                
+                from flask import Response
+                return Response(
+                    filled_pdf_content,
+                    mimetype='application/pdf',
+                    headers={
+                        'Content-Disposition': f'inline; filename="{template_name}_filled.pdf"',
+                        'Access-Control-Allow-Origin': '*',
+                        'Cache-Control': 'no-cache'
+                    }
+                )
+            else:
+                print("pypdf not available, returning original template")
+                # pypdf not available, return original template
+                from flask import Response
+                return Response(
+                    pdf_content,
+                    mimetype='application/pdf',
+                    headers={
+                        'Content-Disposition': f'inline; filename="{template_name}.pdf"',
+                        'Access-Control-Allow-Origin': '*',
+                        'Cache-Control': 'no-cache'
+                    }
+                )
+                
+        except Exception as fill_error:
+            print(f"Error filling PDF fields: {fill_error}")
+            # Return original template if filling fails
+            from flask import Response
+            return Response(
+                pdf_content,
+                mimetype='application/pdf',
+                headers={
+                    'Content-Disposition': f'inline; filename="{template_name}.pdf"',
+                    'Access-Control-Allow-Origin': '*',
+                    'Cache-Control': 'no-cache'
+                }
+            )
+        
+    except Exception as e:
+        print(f"Error serving PDF template with fields: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            cur.close()
+            conn.close()
+
 def create_pdf_with_form_fields(template_name, form_fields_payload):
     """Create a PDF with form fields based on template type"""
     
