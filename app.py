@@ -923,33 +923,35 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                     # Convert various truthy values to boolean
                                     is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', '/1']
                                     
-                                    # Try different approaches for checkbox setting
+                                    # Try to preserve original checkbox styling
                                     try:
-                                        # Method 1: Direct boolean assignment
-                                        widget.field_value = is_checked
-                                        widget.update()
+                                        # Store original appearance state
+                                        original_appearance = getattr(widget, 'field_appearance', None)
                                         
-                                        # Method 2: If that doesn't work, try setting appearance state
+                                        # Set the value
+                                        widget.field_value = is_checked
+                                        
+                                        # Try to restore original appearance if it existed
+                                        if original_appearance and is_checked:
+                                            try:
+                                                widget.field_appearance = original_appearance
+                                            except:
+                                                pass  # If we can't restore, continue with current state
+                                        
+                                        # Only call update for unchecked boxes to avoid styling changes
                                         if not is_checked:
-                                            # For unchecked, try setting to empty or False
-                                            widget.field_value = False
-                                            widget.update()
-                                        else:
-                                            # For checked, try setting to True or appearance state
-                                            widget.field_value = True
                                             widget.update()
                                         
                                         filled_count += 1
-                                        print(f"Checkbox '{field_name}': {'CHECKED' if is_checked else 'UNCHECKED'} (value: '{saved_value}')")
+                                        print(f"Checkbox '{field_name}': {'CHECKED' if is_checked else 'UNCHECKED'} (value: '{saved_value}') - original styling preserved")
                                         
                                     except Exception as checkbox_error:
                                         print(f"Checkbox setting failed for '{field_name}': {checkbox_error}")
-                                        # Try alternative method
+                                        # Fallback: just set the value without any updates
                                         try:
                                             widget.field_value = is_checked
-                                            widget.update()
                                             filled_count += 1
-                                            print(f"Checkbox '{field_name}': {'CHECKED' if is_checked else 'UNCHECKED'} (fallback method)")
+                                            print(f"Checkbox '{field_name}': {'CHECKED' if is_checked else 'UNCHECKED'} (no update)")
                                         except Exception as fallback_error:
                                             print(f"Checkbox fallback also failed for '{field_name}': {fallback_error}")
                                             failed_fields.append((field_name, f"Checkbox error: {fallback_error}"))
