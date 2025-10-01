@@ -1184,6 +1184,15 @@ def debug_pdf_content():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/debug/test', methods=['GET'])
+def debug_test():
+    """Simple test endpoint to verify server is running latest code"""
+    return jsonify({
+        'message': 'Debug test endpoint working',
+        'timestamp': '2024-01-01 16:01:00',
+        'version': 'latest'
+    })
+
 @app.route('/api/debug/database', methods=['GET'])
 def debug_database():
     """Debug endpoint to check database contents"""
