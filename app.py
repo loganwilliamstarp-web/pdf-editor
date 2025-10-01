@@ -856,6 +856,13 @@ def serve_pdf_template_with_fields(template_id, account_id):
         print(f"Field values count: {len(field_values)}")
         print(f"Field values type: {type(field_values)}")
         
+        # Check what checkbox values are actually saved in database
+        print("\n=== CHECKBOX VALUES IN DATABASE ===")
+        for key, value in field_values.items():
+            if 'claims' in key.lower() or 'occur' in key.lower() or 'coverage' in key.lower():
+                print(f"{key}: '{value}' (type: {type(value).__name__})")
+        print("=== END DATABASE VALUES ===\n")
+        
         try:
             if PYMUPDF_AVAILABLE and field_values:
                 print(f"Filling PDF with {len(field_values)} field values using PyMuPDF")
@@ -897,25 +904,29 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                     print(f"✓ Filled text field '{field_name}': '{saved_value}'")
                                 
                                 elif field_type in ['CheckBox', 'Button', 'Btn']:
-                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X']
+                                    print(f"\n=== CHECKBOX DIAGNOSTIC: {field_name} ===")
+                                    print(f"Saved value: '{saved_value}' (type: {type(saved_value)})")
+                                    print(f"Current widget value: '{widget.field_value}'")
+                                    print(f"Field flags: {widget.field_flags}")
                                     
-                                    # ACORD forms often use string values, not booleans
-                                    if is_checked:
-                                        # Try multiple checkbox states
-                                        for state in [True, 'Yes', '1', 'On']:
-                                            try:
-                                                widget.field_value = state
-                                                widget.update()
-                                                filled_count += 1
-                                                print(f"✓ Checkbox '{field_name}' checked with state: {state}")
-                                                break
-                                            except:
-                                                continue
-                                    else:
-                                        widget.field_value = False
+                                    # Check what states this checkbox accepts
+                                    if hasattr(widget, 'field_states'):
+                                        print(f"Valid states: {widget.field_states}")
+                                    
+                                    # Try to set it and see what happens
+                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X']
+                                    print(f"Should be checked: {is_checked}")
+                                    
+                                    # Try setting as boolean
+                                    try:
+                                        widget.field_value = is_checked
                                         widget.update()
-                                        filled_count += 1
-                                        print(f"✓ Checkbox '{field_name}' unchecked")
+                                        print(f"After boolean set: '{widget.field_value}'")
+                                    except Exception as e:
+                                        print(f"Boolean set failed: {e}")
+                                    
+                                    filled_count += 1
+                                    print(f"=== END DIAGNOSTIC ===\n")
                                 
                                 elif field_type == 'RadioButton':
                                     # Try different values for radio buttons
@@ -955,7 +966,9 @@ def serve_pdf_template_with_fields(template_id, account_id):
                     headers={
                         'Content-Disposition': f'inline; filename="{template_name}_filled.pdf"',
                         'Access-Control-Allow-Origin': '*',
-                        'Cache-Control': 'no-cache'
+                        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+                        'Pragma': 'no-cache',
+                        'Expires': '0'
                     }
                 )
             else:
