@@ -851,22 +851,10 @@ def serve_pdf_template_with_fields(template_id, account_id):
             )
         
         # Pre-fill PDF with saved field values using PyMuPDF (fitz)
-        print(f"=== STARTING PDF PRE-FILLING ===")
-        print(f"PYMUPDF_AVAILABLE: {PYMUPDF_AVAILABLE}")
-        print(f"Field values count: {len(field_values)}")
-        print(f"Field values type: {type(field_values)}")
-        
-        # Check what checkbox values are actually saved in database
-        print("\n=== CHECKBOX VALUES IN DATABASE ===")
-        for key, value in field_values.items():
-            if 'claims' in key.lower() or 'occur' in key.lower() or 'coverage' in key.lower():
-                print(f"{key}: '{value}' (type: {type(value).__name__})")
-        print("=== END DATABASE VALUES ===\n")
+        print(f"Pre-filling PDF with {len(field_values)} saved field values")
         
         try:
             if PYMUPDF_AVAILABLE and field_values:
-                print(f"Filling PDF with {len(field_values)} field values using PyMuPDF")
-                
                 # Load PDF with PyMuPDF
                 pdf_doc = fitz.open(stream=pdf_content, filetype="pdf")
                 
@@ -876,11 +864,9 @@ def serve_pdf_template_with_fields(template_id, account_id):
                 # Simple approach: iterate through all pages and widgets
                 for page_num in range(len(pdf_doc)):
                     page = pdf_doc[page_num]
-                    print(f"Processing page {page_num + 1}")
                     
                     # Get all widgets on this page
                     widgets = list(page.widgets())
-                    print(f"Found {len(widgets)} widgets on page {page_num + 1}")
                     
                     for widget in widgets:
                         field_name = widget.field_name
@@ -898,69 +884,27 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                 continue
                             
                             try:
-                                print(f"Processing field '{field_name}' (type: {field_type}, value: '{saved_value}')")
-                                
                                 if field_type == 'Text':
                                     widget.field_value = str(saved_value)
                                     widget.update()
                                     filled_count += 1
-                                    print(f"✓ Filled text field '{field_name}': '{saved_value}'")
                                 
                                 elif field_type in ['CheckBox', 'Button', 'Btn']:
-                                    print(f"\n=== CHECKBOX: {field_name} ===")
+                                    # For checkboxes, we need to use the EXACT appearance state
+                                    # The extraction captures the /AS value (e.g. '/1', '/Yes', '/Off')
+                                    # We need to strip the leading '/' to get the state name PyMuPDF expects
                                     
-                                    # Check if should be checked
-                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X', '/1', '/Yes', '/On']
-                                    print(f"Saved value: '{saved_value}' (type: {type(saved_value)}), Is checked: {is_checked}")
-                                    
-                                    # The saved value from extraction has the / prefix (e.g. '/1', '/Yes', '/Off')
-                                    # PyMuPDF requires the value WITHOUT the / prefix when setting
-                                    # So we need to strip it if present
                                     if isinstance(saved_value, str) and saved_value.startswith('/'):
-                                        # Strip the leading / to get the actual state name
-                                        state_without_slash = saved_value[1:]  # Remove first character
-                                        print(f"Stripped state: '{state_without_slash}'")
+                                        state_name = saved_value[1:]  # Strip leading '/'
                                     else:
-                                        state_without_slash = str(saved_value) if saved_value else 'Off'
+                                        state_name = str(saved_value) if saved_value else 'Off'
                                     
-                                    # Try to set the checkbox using the exact state from the database
                                     try:
-                                        if is_checked:
-                                            # Use the state without the slash (e.g. '1', 'Yes', 'On')
-                                            widget.field_value = state_without_slash
-                                            print(f"Set to: '{state_without_slash}'")
-                                        else:
-                                            # Unchecked
-                                            widget.field_value = 'Off'
-                                            print(f"Set to: 'Off'")
-                                        
+                                        widget.field_value = state_name
                                         widget.update()
                                         filled_count += 1
-                                        print(f"✓ Checkbox set successfully")
                                     except Exception as e:
-                                        print(f"✗ Direct state failed: {e}, trying fallback...")
-                                        # Fallback: try common states
-                                        test_states = ['1', 'Yes', 'On', 'X']
-                                        for test_state in test_states:
-                                            try:
-                                                if is_checked:
-                                                    widget.field_value = test_state
-                                                    widget.update()
-                                                    print(f"✓ Fallback worked with: '{test_state}'")
-                                                    filled_count += 1
-                                                    break
-                                            except:
-                                                continue
-                                        
-                                        # If nothing worked and we're unchecked
-                                        if not is_checked:
-                                            try:
-                                                widget.field_value = 'Off'
-                                                widget.update()
-                                                print(f"✓ Set to unchecked")
-                                                filled_count += 1
-                                            except:
-                                                print(f"✗ Failed to uncheck")
+                                        print(f"✗ Checkbox '{field_name}' failed: {e}")
                                 
                                 elif field_type == 'RadioButton':
                                     # Try different values for radio buttons
