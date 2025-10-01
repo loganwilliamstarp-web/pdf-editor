@@ -865,13 +865,30 @@ def serve_pdf_template_with_fields(template_id, account_id):
                 
                 # DEBUG: Check actual field types in your PDF
                 print("\n=== PDF FIELD TYPES DEBUG ===")
+                checkbox_fields = []
                 for page in pdf_doc:
                     for widget in page.widgets():
+                        if 'checkbox' in widget.field_type_string.lower() or widget.field_type_string == 'CheckBox':
+                            checkbox_fields.append({
+                                'name': widget.field_name,
+                                'type': widget.field_type_string,
+                                'current_value': widget.field_value,
+                                'saved_value': field_values.get(widget.field_name, 'NOT_FOUND')
+                            })
                         print(f"Field: {widget.field_name}")
                         print(f"  Type: {widget.field_type}")
                         print(f"  Type String: {widget.field_type_string}")
                         print(f"  Current Value: {widget.field_value}")
                 print("=== END DEBUG ===\n")
+                
+                if checkbox_fields:
+                    print("=== CHECKBOX FIELDS FOUND ===")
+                    for cb in checkbox_fields:
+                        print(f"Checkbox: {cb['name']}")
+                        print(f"  Type: {cb['type']}")
+                        print(f"  Current Value: {cb['current_value']}")
+                        print(f"  Saved Value: {cb['saved_value']}")
+                    print("=== END CHECKBOX DEBUG ===\n")
                 
                 filled_count = 0
                 failed_fields = []
@@ -904,12 +921,38 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                 
                                 elif field_type == 'CheckBox':
                                     # Convert various truthy values to boolean
-                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On']
-                                    widget.field_value = is_checked
-                                    widget.update()
-                                    filled_count += 1
-                                    if is_checked:
-                                        print(f"Checked checkbox '{field_name}'")
+                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', '/1']
+                                    
+                                    # Try different approaches for checkbox setting
+                                    try:
+                                        # Method 1: Direct boolean assignment
+                                        widget.field_value = is_checked
+                                        widget.update()
+                                        
+                                        # Method 2: If that doesn't work, try setting appearance state
+                                        if not is_checked:
+                                            # For unchecked, try setting to empty or False
+                                            widget.field_value = False
+                                            widget.update()
+                                        else:
+                                            # For checked, try setting to True or appearance state
+                                            widget.field_value = True
+                                            widget.update()
+                                        
+                                        filled_count += 1
+                                        print(f"Checkbox '{field_name}': {'CHECKED' if is_checked else 'UNCHECKED'} (value: '{saved_value}')")
+                                        
+                                    except Exception as checkbox_error:
+                                        print(f"Checkbox setting failed for '{field_name}': {checkbox_error}")
+                                        # Try alternative method
+                                        try:
+                                            widget.field_value = is_checked
+                                            widget.update()
+                                            filled_count += 1
+                                            print(f"Checkbox '{field_name}': {'CHECKED' if is_checked else 'UNCHECKED'} (fallback method)")
+                                        except Exception as fallback_error:
+                                            print(f"Checkbox fallback also failed for '{field_name}': {fallback_error}")
+                                            failed_fields.append((field_name, f"Checkbox error: {fallback_error}"))
                                 
                                 elif field_type == 'RadioButton':
                                     if saved_value:
