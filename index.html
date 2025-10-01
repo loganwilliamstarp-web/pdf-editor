@@ -606,11 +606,17 @@ function initializePDFEditorPopup(popupWindow, context) {
     }
 
     async function collectPdfFieldData() {
+        console.log('[PDF Popup] collectPdfFieldData called');
+        console.log('[PDF Popup] currentPDFAPIs:', !!currentPDFAPIs);
+        console.log('[PDF Popup] currentPDFViewer:', !!currentPDFViewer);
+        
         let apis = currentPDFAPIs;
         if ((!apis || typeof apis.getFormFieldList !== 'function') && currentPDFViewer && typeof currentPDFViewer.getAPIs === 'function') {
             try {
+                console.log('[PDF Popup] Attempting to get APIs from viewer...');
                 apis = await currentPDFViewer.getAPIs();
                 currentPDFAPIs = apis;
+                console.log('[PDF Popup] Got APIs from viewer:', !!apis);
             } catch (error) {
                 console.warn('[PDF Popup] Unable to resolve Adobe APIs on demand', error);
                 apis = null;
@@ -622,6 +628,7 @@ function initializePDFEditorPopup(popupWindow, context) {
 
         if (apis && typeof apis.getFormFieldList === 'function') {
             try {
+                console.log('[PDF Popup] Calling getFormFieldList...');
                 const rawDefinitions = await apis.getFormFieldList({ includeFieldDefinition: true });
                 console.log('[PDF Popup] Raw Adobe definitions', rawDefinitions);
                 definitions = normalizeAdobeFieldDefinitions(rawDefinitions);
@@ -629,10 +636,13 @@ function initializePDFEditorPopup(popupWindow, context) {
             } catch (error) {
                 console.warn('[PDF Popup] Error fetching Adobe form field definitions', error);
             }
+        } else {
+            console.log('[PDF Popup] No Adobe APIs available for getFormFieldList');
         }
 
         if (apis && typeof apis.getFormFieldValues === 'function') {
             try {
+                console.log('[PDF Popup] Calling getFormFieldValues...');
                 const rawValues = await apis.getFormFieldValues();
                 console.log('[PDF Popup] Raw Adobe values', rawValues);
                 values = normalizeAdobeFieldValues(rawValues);
@@ -640,11 +650,15 @@ function initializePDFEditorPopup(popupWindow, context) {
             } catch (error) {
                 console.warn('[PDF Popup] Error fetching Adobe form field values', error);
             }
+        } else {
+            console.log('[PDF Popup] No Adobe APIs available for getFormFieldValues');
         }
 
         if ((!definitions.length || Object.keys(values).length === 0) && currentPDFViewer && typeof currentPDFViewer.getFormFields === 'function') {
             try {
+                console.log('[PDF Popup] Trying fallback getFormFields...');
                 const fallback = await currentPDFViewer.getFormFields();
+                console.log('[PDF Popup] Fallback result:', fallback);
                 if (fallback && typeof fallback === 'object') {
                     if (Object.keys(values).length === 0) {
                         values = normalizeViewerFieldMap(fallback);
@@ -663,8 +677,11 @@ function initializePDFEditorPopup(popupWindow, context) {
             } catch (error) {
                 console.warn('[PDF Popup] Fallback getFormFields failed', error);
             }
+        } else {
+            console.log('[PDF Popup] Fallback not attempted - definitions:', definitions.length, 'values:', Object.keys(values).length);
         }
 
+        console.log('[PDF Popup] Final result - definitions:', definitions.length, 'values:', Object.keys(values).length);
         popupWindow.PDF_DEBUG = popupWindow.PDF_DEBUG || {};
         popupWindow.PDF_DEBUG.lastCollected = { definitions, values };
         return { definitions, values };
