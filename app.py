@@ -863,10 +863,6 @@ def serve_pdf_template_with_fields(template_id, account_id):
                 # Load PDF with PyMuPDF
                 pdf_doc = fitz.open(stream=pdf_content, filetype="pdf")
                 
-                # Set need_appearances flag for ACORD forms to ensure proper rendering
-                pdf_doc.set_need_appearances(True)
-                print("Set need_appearances=True for proper form field rendering")
-                
                 filled_count = 0
                 failed_fields = []
                 
