@@ -416,6 +416,23 @@ function initializePDFEditorPopup(popupWindow, context) {
         return Object.keys(obj).map(name => ({ fieldName: name, value: obj[name] }));
     }
 
+    function normalizeViewerFieldMap(raw) {
+        if (!raw || typeof raw !== 'object') {
+            return {};
+        }
+        return Object.keys(raw).reduce((acc, key) => {
+            const entry = raw[key];
+            if (entry && typeof entry === 'object' && entry.value !== undefined) {
+                acc[key] = entry.value;
+            } else if (entry && typeof entry === 'object' && entry.defaultValue !== undefined) {
+                acc[key] = entry.defaultValue;
+            } else {
+                acc[key] = entry;
+            }
+            return acc;
+        }, {});
+    }
+
     function mapObjectToViewerFieldValues(obj) {
         if (!obj || typeof obj !== 'object') {
             return {};
@@ -567,7 +584,8 @@ function initializePDFEditorPopup(popupWindow, context) {
                 const fallback = await currentPDFViewer.getFormFields();
                 if (fallback && typeof fallback === 'object') {
                     if (Object.keys(values).length === 0) {
-                        values = fallback;
+                        values = normalizeViewerFieldMap(fallback);
+                        console.log('[PDF Popup] Values from viewer fallback', values);
                     }
                     if (!definitions.length) {
                         definitions = Object.keys(fallback).map(name => ({
@@ -575,7 +593,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                             type: 'text',
                             label: name,
                             required: false,
-                            default_value: fallback[name] ?? null,
+                            default_value: normalizeViewerFieldMap({ temp: fallback[name] }).temp ?? null,
                         }));
                     }
                 }
