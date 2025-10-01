@@ -774,6 +774,14 @@ def serve_pdf_template_with_fields(template_id, account_id):
         field_values = result.get('field_values') or {}
 
         print(f"Serving PDF template with fields: {template_name} (ID: {template_id}, Account: {account_id})")
+        print(f"Field values retrieved: {len(field_values)} fields")
+        if field_values:
+            non_empty_fields = {k: v for k, v in field_values.items() if v and str(v).strip()}
+            print(f"Non-empty field values: {len(non_empty_fields)}")
+            if non_empty_fields:
+                print(f"Sample non-empty fields: {list(non_empty_fields.items())[:3]}")
+        else:
+            print("No field values found in database")
 
         # Get PDF content
         pdf_content = None
@@ -795,6 +803,7 @@ def serve_pdf_template_with_fields(template_id, account_id):
         # If no field values saved, create initial template data for this account
         if not field_values:
             print("No field values found, creating initial template data for account")
+            print("Field values type:", type(field_values), "Content:", field_values)
             
             # Create initial template_data record with empty field values
             try:
@@ -825,6 +834,7 @@ def serve_pdf_template_with_fields(template_id, account_id):
         try:
             if PYPDF_AVAILABLE:
                 print(f"Filling PDF with {len(field_values)} field values")
+                print(f"Field values to fill: {list(field_values.items())[:5] if field_values else 'None'}")
                 # Create a new PDF with filled fields
                 pdf_reader = PdfReader(io.BytesIO(pdf_content))
                 pdf_writer = PdfWriter()
