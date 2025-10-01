@@ -6,6 +6,7 @@ import uuid
 import json
 from pathlib import Path
 from datetime import datetime
+import base64
 
 # Optional imports with fallbacks
 
@@ -1007,6 +1008,54 @@ def save_pdf_fields():
             cur.close()
             conn.close()
 
+
+@app.route('/api/extract-fields', methods=['POST'])
+def extract_pdf_fields():
+    """Extract field values from PDF blob using pypdf"""
+    try:
+        data = request.get_json()
+        if not data or 'pdf_content' not in data:
+            return jsonify({'success': False, 'error': 'No PDF content provided'}), 400
+        
+        # Decode base64 PDF content
+        pdf_content = data['pdf_content']
+        if pdf_content.startswith('data:application/pdf;base64,'):
+            pdf_content = pdf_content.split(',')[1]
+        
+        pdf_bytes = base64.b64decode(pdf_content)
+        
+        if not PYPDF_AVAILABLE:
+            return jsonify({'success': False, 'error': 'pypdf not available'}), 500
+        
+        # Extract field values using pypdf
+        pdf_reader = PdfReader(io.BytesIO(pdf_bytes))
+        form_data = {}
+        
+        if '/AcroForm' in pdf_reader.trailer['/Root']:
+            acro_form = pdf_reader.trailer['/Root']['/AcroForm']
+            if '/Fields' in acro_form:
+                fields = acro_form['/Fields']
+                for field in fields:
+                    field_obj = field.get_object()
+                    if '/T' in field_obj:  # Field name
+                        field_name = field_obj['/T']
+                        field_value = ''
+                        
+                        if '/V' in field_obj:  # Field value
+                            field_value = str(field_obj['/V'])
+                        elif '/AS' in field_obj:  # Appearance state (for checkboxes)
+                            field_value = str(field_obj['/AS'])
+                        
+                        form_data[field_name] = field_value
+        
+        return jsonify({
+            'success': True,
+            'form_data': form_data,
+            'field_count': len(form_data)
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/pdf/get-fields/<template_id>/<account_id>')
 def get_pdf_fields(template_id, account_id):

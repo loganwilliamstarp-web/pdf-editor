@@ -670,117 +670,75 @@ function initializePDFEditorPopup(popupWindow, context) {
 
     async function collectPdfFieldData() {
         console.log('[PDF Popup] collectPdfFieldData called');
-        console.log('[PDF Popup] currentPDFAPIs:', !!currentPDFAPIs);
-        console.log('[PDF Popup] currentPDFViewer:', !!currentPDFViewer);
         
-        let apis = currentPDFAPIs;
-        if ((!apis || typeof apis.getFormFieldList !== 'function') && currentPDFViewer && typeof currentPDFViewer.getAPIs === 'function') {
-            try {
-                console.log('[PDF Popup] Attempting to get APIs from viewer...');
-                apis = await currentPDFViewer.getAPIs();
-                currentPDFAPIs = apis;
-                console.log('[PDF Popup] Got APIs from viewer:', !!apis);
-            } catch (error) {
-                console.warn('[PDF Popup] Unable to resolve Adobe APIs on demand', error);
-                apis = null;
-            }
-        }
-
-        let definitions = [];
-        let values = {};
-
-        if (apis && typeof apis.getFormFieldList === 'function') {
-            try {
-                console.log('[PDF Popup] Calling getFormFieldList...');
-                const rawDefinitions = await apis.getFormFieldList({ includeFieldDefinition: true });
-                console.log('[PDF Popup] Raw Adobe definitions', rawDefinitions);
-                definitions = normalizeAdobeFieldDefinitions(rawDefinitions);
-                console.log('[PDF Popup] Normalized definitions', definitions.slice(0, 5));
-            } catch (error) {
-                console.warn('[PDF Popup] Error fetching Adobe form field definitions', error);
-            }
-        } else {
-            console.log('[PDF Popup] No Adobe APIs available for getFormFieldList');
-            console.log('[PDF Popup] Available API methods:', Object.keys(apis || {}));
-        }
-
-        if (apis && typeof apis.getFormFieldValues === 'function') {
-            try {
-                console.log('[PDF Popup] Calling getFormFieldValues...');
-                const rawValues = await apis.getFormFieldValues();
-                console.log('[PDF Popup] Raw Adobe values', rawValues);
-                values = normalizeAdobeFieldValues(rawValues);
-                console.log('[PDF Popup] Normalized values', values);
-            } catch (error) {
-                console.warn('[PDF Popup] Error fetching Adobe form field values', error);
-            }
-        } else {
-            console.log('[PDF Popup] No Adobe APIs available for getFormFieldValues');
-            console.log('[PDF Popup] Available API methods:', Object.keys(apis || {}));
-        }
-
-        // Use server-side field definitions as fallback
-        if (Object.keys(values).length === 0 && savedFieldValues === null) {
-            try {
-                console.log('[PDF Popup] Using server-side field definitions...');
-                // Get field definitions from the server response
-                const serverFields = popupWindow.PDF_DEBUG?.serverFields || {};
-                if (serverFields && Object.keys(serverFields).length > 0) {
-                    values = serverFields;
-                    console.log('[PDF Popup] Values from server definitions', values);
+        // Try server-side field extraction first
+        try {
+            console.log('[PDF Popup] Attempting server-side field extraction...');
+            const pdfContent = await getCurrentPdfContent();
+            if (pdfContent) {
+                const response = await fetch(appOrigin + '/api/extract-fields', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        pdf_content: pdfContent
+                    })
+                });
+                
+                const result = await response.json();
+                console.log('[PDF Popup] Server extraction result:', result);
+                
+                if (result.success && result.form_data) {
+                    console.log('[PDF Popup] Successfully extracted', result.field_count, 'fields from PDF');
+                    return {
+                        definitions: [],
+                        values: result.form_data
+                    };
                 }
-            } catch (error) {
-                console.warn('[PDF Popup] Server field definitions failed', error);
             }
+        } catch (error) {
+            console.warn('[PDF Popup] Server-side extraction failed:', error);
         }
 
-        // Try DOM-based field collection as ultimate fallback
-        if (Object.keys(values).length === 0) {
-            try {
-                console.log('[PDF Popup] Trying DOM-based field collection...');
-                const domFields = collectFieldsFromDOM();
-                if (domFields && Object.keys(domFields).length > 0) {
-                    values = domFields;
-                    console.log('[PDF Popup] Values from DOM collection', values);
-                }
-            } catch (error) {
-                console.warn('[PDF Popup] DOM field collection failed', error);
+        // Fallback to server-side field definitions
+        try {
+            console.log('[PDF Popup] Using server-side field definitions...');
+            const serverFields = popupWindow.PDF_DEBUG?.serverFields || {};
+            if (serverFields && Object.keys(serverFields).length > 0) {
+                console.log('[PDF Popup] Values from server definitions', Object.keys(serverFields).length);
+                return {
+                    definitions: [],
+                    values: serverFields
+                };
             }
+        } catch (error) {
+            console.warn('[PDF Popup] Server field definitions failed', error);
         }
 
-        // Always try fallback if we don't have both definitions and values
-        if (currentPDFViewer && typeof currentPDFViewer.getFormFields === 'function') {
-            try {
-                console.log('[PDF Popup] Trying fallback getFormFields...');
-                const fallback = await currentPDFViewer.getFormFields();
-                console.log('[PDF Popup] Fallback result:', fallback);
-                if (fallback && typeof fallback === 'object') {
-                    if (Object.keys(values).length === 0) {
-                        values = normalizeViewerFieldMap(fallback);
-                        console.log('[PDF Popup] Values from viewer fallback', values);
-                    }
-                    if (!definitions.length) {
-                        definitions = Object.keys(fallback).map(name => ({
-                            name,
-                            type: 'text',
-                            label: name,
-                            required: false,
-                            default_value: normalizeViewerFieldMap({ temp: fallback[name] }).temp ?? null,
-                        }));
-                        console.log('[PDF Popup] Definitions from viewer fallback', definitions.length);
-                    }
-                }
-            } catch (error) {
-                console.warn('[PDF Popup] Fallback getFormFields failed', error);
-            }
-        } else {
-            console.log('[PDF Popup] Fallback not available - viewer:', !!currentPDFViewer, 'getFormFields:', typeof currentPDFViewer?.getFormFields);
-        }
+        console.log('[PDF Popup] No field values collected');
+        return { definitions: [], values: {} };
+    }
 
-        console.log('[PDF Popup] Final result - definitions:', definitions.length, 'values:', Object.keys(values).length);
-        popupWindow.PDF_DEBUG = popupWindow.PDF_DEBUG || {};
-        popupWindow.PDF_DEBUG.lastCollected = { definitions, values };
-        return { definitions, values };
+    async function getCurrentPdfContent() {
+        try {
+            // Get the current PDF content from the Adobe viewer
+            if (currentPDFViewer && typeof currentPDFViewer.getPDFStream === 'function') {
+                const pdfStream = await currentPDFViewer.getPDFStream();
+                return pdfStream;
+            }
+            
+            // Alternative: fetch the PDF from the server
+            const response = await fetch(appOrigin + '/api/pdf/template/' + templateId);
+            if (response.ok) {
+                const arrayBuffer = await response.arrayBuffer();
+                const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+                return 'data:application/pdf;base64,' + base64;
+            }
+        } catch (error) {
+            console.warn('[PDF Popup] Failed to get PDF content:', error);
+        }
+        return null;
     }
 
     async function savePDFFields(showStatus = true) {
