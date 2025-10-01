@@ -1239,6 +1239,9 @@ def debug_database():
 @app.route('/api/pdf/save-fields', methods=['POST'])
 def save_pdf_fields():
     """Save PDF field values to database with automatic field extraction from PDF content."""
+    print("=== SAVE PDF FIELDS CALLED ===")
+    print(f"Request method: {request.method}")
+    print(f"Request content type: {request.content_type}")
     try:
         data = request.get_json()
         if not isinstance(data, dict):
