@@ -868,7 +868,7 @@ def serve_pdf_template_with_fields(template_id, account_id):
                 failed_fields = []
                 
                 # Get all form fields
-                form_fields = pdf_doc[0].widgets()  # Get widgets from first page
+                form_fields = list(pdf_doc[0].widgets())  # Convert generator to list
                 print(f"Found {len(form_fields)} form fields in PDF")
                 
                 # Fill each field from saved values
@@ -1382,7 +1382,7 @@ def debug_pymupdf_test(template_id, account_id):
                 pdf_doc = fitz.open(stream=pdf_content, filetype="pdf")
                 
                 # Get all form fields
-                form_fields = pdf_doc[0].widgets()  # Get widgets from first page
+                form_fields = list(pdf_doc[0].widgets())  # Convert generator to list
                 debug_info['test_results']['form_fields_found'] = len(form_fields)
                 debug_info['test_results']['form_field_names'] = [widget.field_name for widget in form_fields[:10]]  # First 10
                 
