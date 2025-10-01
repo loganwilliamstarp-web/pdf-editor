@@ -912,51 +912,68 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                     # Check if should be checked
                                     is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X', '/1', '/Yes', '/On']
                                     
-                                    # Get the original checkbox state from the PDF to preserve appearance
-                                    # PyMuPDF stores the current appearance state in field_value
-                                    original_value = widget.field_value
-                                    print(f"Original value: '{original_value}'")
-                                    
-                                    # Get button states - this contains the list of valid appearance states
+                                    # Try to get the correct "on" state from the widget's annotation
                                     on_state = None
                                     try:
-                                        # For PyMuPDF, we need to check the button_states() method
-                                        if hasattr(widget, 'button_states'):
-                                            states = widget.button_states()
-                                            print(f"Button states: {states}")
-                                            if states:
-                                                # states is a dict like {0: 'Off', 1: 'Yes'}
-                                                for value, state in states.items():
-                                                    if state not in ['Off', 'off', '']:
-                                                        on_state = state
-                                                        break
-                                        
-                                        # Alternative: check field_display for appearance info
-                                        if not on_state and hasattr(widget, 'field_display'):
-                                            print(f"Field display: {widget.field_display}")
+                                        # Access the widget's PDF annotation object
+                                        annot = widget._annot
+                                        if annot:
+                                            # Get the appearance dictionary
+                                            ap_dict = annot.get_key("AP")
+                                            if ap_dict:
+                                                # Get normal appearances
+                                                n_dict = ap_dict.get_key("N")
+                                                if n_dict and hasattr(n_dict, 'get_keys'):
+                                                    keys = n_dict.get_keys()
+                                                    print(f"Appearance keys: {keys}")
+                                                    # Find the non-Off state
+                                                    for key in keys:
+                                                        key_str = str(key).strip('/')
+                                                        if key_str not in ['Off', 'off']:
+                                                            on_state = key_str
+                                                            break
                                     except Exception as e:
-                                        print(f"Error getting button states: {e}")
+                                        print(f"Could not read appearance dict: {e}")
                                     
-                                    # If we still don't have on_state, try common ACORD values
+                                    # If we couldn't find the on_state, try multiple common values
                                     if not on_state:
-                                        # ACORD forms typically use 'Yes' for checkboxes
-                                        on_state = 'Yes'
-                                        print(f"Using default ACORD state: '{on_state}'")
-                                    
-                                    # Set checkbox value using the correct appearance state
-                                    try:
-                                        if is_checked:
-                                            widget.field_value = on_state
-                                            print(f"✓ Checked using state: '{on_state}'")
-                                        else:
-                                            widget.field_value = 'Off'
-                                            print(f"✓ Unchecked: 'Off'")
+                                        print("Trying multiple checkbox states...")
+                                        # Try common states in order of likelihood
+                                        test_states = ['Yes', '1', 'On', 'X', True]
+                                        for test_state in test_states:
+                                            try:
+                                                if is_checked:
+                                                    widget.field_value = test_state
+                                                    widget.update()
+                                                    # If it worked, use this state
+                                                    on_state = test_state
+                                                    print(f"✓ Found working state: '{test_state}'")
+                                                    filled_count += 1
+                                                    break
+                                            except:
+                                                continue
                                         
-                                        widget.update()
-                                    except Exception as e:
-                                        print(f"✗ Checkbox set failed: {e}")
-                                    
-                                    filled_count += 1
+                                        # If none worked and we're unchecked, just set to Off
+                                        if not is_checked and not on_state:
+                                            widget.field_value = 'Off'
+                                            widget.update()
+                                            print(f"✓ Unchecked: 'Off'")
+                                            filled_count += 1
+                                    else:
+                                        # We found the on_state, use it
+                                        print(f"Using appearance state: '{on_state}'")
+                                        try:
+                                            if is_checked:
+                                                widget.field_value = on_state
+                                                print(f"✓ Checked: '{on_state}'")
+                                            else:
+                                                widget.field_value = 'Off'
+                                                print(f"✓ Unchecked: 'Off'")
+                                            
+                                            widget.update()
+                                            filled_count += 1
+                                        except Exception as e:
+                                            print(f"✗ Checkbox set failed: {e}")
                                 
                                 elif field_type == 'RadioButton':
                                     # Try different values for radio buttons
