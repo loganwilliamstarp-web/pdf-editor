@@ -856,10 +856,14 @@ def serve_pdf_template_with_fields(template_id, account_id):
                             field_obj = field.get_object()
                             if '/T' in field_obj:  # Field name
                                 field_name = field_obj['/T']
+                                print(f"PDF field: '{field_name}' - Saved value: '{field_values.get(field_name, 'NOT_FOUND')}'")
                                 if field_name in field_values and field_values[field_name]:
                                     # Set field value
                                     field_obj[NameObject('/V')] = TextStringObject(field_values[field_name])
                                     filled_count += 1
+                                    print(f"  -> FILLED with: '{field_values[field_name]}'")
+                                else:
+                                    print(f"  -> SKIPPED (empty or not found)")
                         print(f"Filled {filled_count} form fields")
                 
                 # Write filled PDF to bytes
