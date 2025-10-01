@@ -1120,6 +1120,70 @@ def render_pdf(template_id):
             cur.close()
             conn.close()
 
+@app.route('/api/debug/pdf-content', methods=['POST'])
+def debug_pdf_content():
+    """Debug endpoint to inspect PDF content being sent"""
+    try:
+        data = request.get_json()
+        pdf_content = data.get('pdf_content')
+        
+        if not pdf_content:
+            return jsonify({'error': 'No PDF content provided'}), 400
+        
+        # Decode base64 PDF content
+        if pdf_content.startswith('data:application/pdf;base64,'):
+            pdf_content = pdf_content.split(',')[1]
+        
+        try:
+            pdf_bytes = base64.b64decode(pdf_content)
+            print(f"PDF content size: {len(pdf_bytes)} bytes")
+            
+            # Try to extract fields using pypdf
+            if PYPDF_AVAILABLE:
+                pdf_reader = PdfReader(io.BytesIO(pdf_bytes))
+                print(f"PDF pages: {len(pdf_reader.pages)}")
+                
+                # Try get_fields() method
+                fields_dict = pdf_reader.get_fields()
+                if fields_dict:
+                    print(f"Found {len(fields_dict)} fields using get_fields()")
+                    field_info = []
+                    for field_name, field_obj in list(fields_dict.items())[:5]:
+                        field_value = ''
+                        if hasattr(field_obj, 'get') and field_obj.get('/V'):
+                            field_value = str(field_obj.get('/V'))
+                        elif hasattr(field_obj, 'get') and field_obj.get('/AS'):
+                            field_value = str(field_obj.get('/AS'))
+                        field_info.append({
+                            'name': field_name,
+                            'value': field_value,
+                            'type': str(field_obj.get('/FT', 'unknown'))
+                        })
+                    
+                    return jsonify({
+                        'success': True,
+                        'pdf_size': len(pdf_bytes),
+                        'pages': len(pdf_reader.pages),
+                        'fields_found': len(fields_dict),
+                        'sample_fields': field_info
+                    })
+                else:
+                    return jsonify({
+                        'success': True,
+                        'pdf_size': len(pdf_bytes),
+                        'pages': len(pdf_reader.pages),
+                        'fields_found': 0,
+                        'message': 'No fields found using get_fields()'
+                    })
+            else:
+                return jsonify({'error': 'pypdf not available'}), 500
+                
+        except Exception as e:
+            return jsonify({'error': f'PDF processing error: {str(e)}'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/debug/database', methods=['GET'])
 def debug_database():
     """Debug endpoint to check database contents"""
@@ -1262,6 +1326,14 @@ def save_pdf_fields():
                         if non_empty_fields:
                             sample_non_empty = list(non_empty_fields.items())[:3]
                             print(f"Sample non-empty fields: {sample_non_empty}")
+                        else:
+                            print("WARNING: All extracted fields are empty strings!")
+                            # Show first 10 fields with their exact values
+                            first_10 = list(extracted_fields.items())[:10]
+                            print(f"First 10 extracted fields: {first_10}")
+                            # Check for any non-empty values
+                            any_non_empty = any(v and str(v).strip() for v in extracted_fields.values())
+                            print(f"Any non-empty values found: {any_non_empty}")
                     
                     # Use extracted fields if they have values, otherwise use provided field_values
                     if extracted_fields:
