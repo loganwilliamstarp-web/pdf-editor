@@ -963,86 +963,90 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                         print(f"Filled text field '{field_name}': '{saved_value}'")
                                 
                                 elif field_type == 'CheckBox':
-                                    # Convert various truthy values to boolean
-                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', '/1']
+                                    # Handle ACORD checkbox values like /Yes, /Off, /1
+                                    print(f"Processing checkbox '{field_name}': saved_value='{saved_value}'")
                                     
-                                    print(f"Processing checkbox '{field_name}': saved_value='{saved_value}', is_checked={is_checked}")
+                                    # Determine if checkbox should be checked based on ACORD values
+                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', '/1', '/Yes', '/On']
+                                    is_unchecked = saved_value in [False, 'false', 'False', '0', 'No', 'no', 'Off', '/Off', '/No']
                                     
-                                    # Try to preserve original checkbox styling
+                                    print(f"  is_checked={is_checked}, is_unchecked={is_unchecked}")
+                                    
                                     try:
-                                        # Store original appearance state
-                                        original_appearance = getattr(widget, 'field_appearance', None)
-                                        print(f"  Original appearance: {original_appearance}")
+                                        # For ACORD forms, use the exact saved value to preserve appearance
+                                        if saved_value and not is_unchecked:
+                                            # Use the exact value from database (e.g., '/Yes', '/1')
+                                            widget.field_value = saved_value
+                                            print(f"  Set checkbox to exact value: '{saved_value}'")
+                                        elif is_unchecked:
+                                            # Use the exact unchecked value (e.g., '/Off')
+                                            widget.field_value = saved_value
+                                            print(f"  Set checkbox to exact unchecked value: '{saved_value}'")
+                                        else:
+                                            # Fallback to boolean
+                                            widget.field_value = is_checked
+                                            print(f"  Set checkbox to boolean: {is_checked}")
                                         
-                                        # Set the value
-                                        widget.field_value = is_checked
-                                        print(f"  Set field_value to: {is_checked}")
-                                        
-                                        # Try to restore original appearance if it existed
-                                        if original_appearance and is_checked:
-                                            try:
-                                                widget.field_appearance = original_appearance
-                                                print(f"  Restored appearance: {original_appearance}")
-                                            except Exception as restore_error:
-                                                print(f"  Could not restore appearance: {restore_error}")
-                                        
-                                        # Always call update for checkboxes to ensure they render
-                                        widget.update()
-                                        print(f"  Called widget.update()")
+                                        # Don't call update() to preserve original appearance
+                                        # widget.update()  # Commented out to preserve styling
                                         
                                         filled_count += 1
-                                        print(f"Checkbox '{field_name}': {'CHECKED' if is_checked else 'UNCHECKED'} (value: '{saved_value}') - SUCCESS")
+                                        print(f"Checkbox '{field_name}': SUCCESS (value: '{saved_value}')")
                                         
                                     except Exception as checkbox_error:
                                         print(f"Checkbox setting failed for '{field_name}': {checkbox_error}")
-                                        # Fallback: try different approaches
+                                        # Fallback: try with update
                                         try:
-                                            # Try setting as string
-                                            widget.field_value = str(is_checked).lower()
+                                            widget.field_value = saved_value if saved_value else is_checked
                                             widget.update()
                                             filled_count += 1
-                                            print(f"Checkbox '{field_name}': {'CHECKED' if is_checked else 'UNCHECKED'} (string method)")
-                                        except Exception as string_error:
-                                            print(f"String method failed: {string_error}")
-                                            try:
-                                                # Try setting as integer
-                                                widget.field_value = 1 if is_checked else 0
-                                                widget.update()
-                                                filled_count += 1
-                                                print(f"Checkbox '{field_name}': {'CHECKED' if is_checked else 'UNCHECKED'} (integer method)")
-                                            except Exception as int_error:
-                                                print(f"Integer method failed: {int_error}")
-                                                failed_fields.append((field_name, f"All checkbox methods failed: {int_error}"))
+                                            print(f"Checkbox '{field_name}': SUCCESS with update (value: '{saved_value}')")
+                                        except Exception as fallback_error:
+                                            print(f"Checkbox fallback failed: {fallback_error}")
+                                            failed_fields.append((field_name, f"Checkbox error: {fallback_error}"))
                                 
                                 elif field_type in ['Button', 'Btn']:
                                     # These X-style checkboxes are buttons, not checkboxes
-                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X']
+                                    print(f"Processing button field '{field_name}': saved_value='{saved_value}'")
                                     
-                                    print(f"Processing button field '{field_name}': saved_value='{saved_value}', is_checked={is_checked}")
+                                    # Handle ACORD button values like /Yes, /Off, /1
+                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X', '/1', '/Yes', '/On']
+                                    is_unchecked = saved_value in [False, 'false', 'False', '0', 'No', 'no', 'Off', '/Off', '/No']
                                     
-                                    # Get valid button states
-                                    if hasattr(widget, 'field_states'):
-                                        states = widget.field_states
-                                        print(f"Button {field_name} states: {states}")
-                                        
-                                        # Usually something like: ('/Off', '/X') or ('/Off', '/Yes')
-                                        if is_checked and len(states) > 1:
-                                            checked_state = [s for s in states if s != '/Off' and s != 'Off'][0]
-                                            # Remove leading slash if present
-                                            checked_state = checked_state.lstrip('/')
-                                            widget.field_value = checked_state
-                                            print(f"  Set button to checked state: {checked_state}")
+                                    print(f"  is_checked={is_checked}, is_unchecked={is_unchecked}")
+                                    
+                                    try:
+                                        # For ACORD forms, use the exact saved value to preserve appearance
+                                        if saved_value and not is_unchecked:
+                                            # Use the exact value from database (e.g., '/Yes', '/1')
+                                            widget.field_value = saved_value
+                                            print(f"  Set button to exact value: '{saved_value}'")
+                                        elif is_unchecked:
+                                            # Use the exact unchecked value (e.g., '/Off')
+                                            widget.field_value = saved_value
+                                            print(f"  Set button to exact unchecked value: '{saved_value}'")
                                         else:
-                                            widget.field_value = 'Off'
-                                            print(f"  Set button to unchecked state: Off")
-                                    else:
-                                        # Fallback
-                                        widget.field_value = 'X' if is_checked else 'Off'
-                                        print(f"  Set button to fallback state: {'X' if is_checked else 'Off'}")
-                                    
-                                    widget.update()
-                                    filled_count += 1
-                                    print(f"Button '{field_name}': {'CHECKED' if is_checked else 'UNCHECKED'} (value: '{saved_value}') - SUCCESS")
+                                            # Fallback
+                                            widget.field_value = 'X' if is_checked else 'Off'
+                                            print(f"  Set button to fallback state: {'X' if is_checked else 'Off'}")
+                                        
+                                        # Don't call update() to preserve original appearance
+                                        # widget.update()  # Commented out to preserve styling
+                                        
+                                        filled_count += 1
+                                        print(f"Button '{field_name}': SUCCESS (value: '{saved_value}')")
+                                        
+                                    except Exception as button_error:
+                                        print(f"Button setting failed for '{field_name}': {button_error}")
+                                        # Fallback: try with update
+                                        try:
+                                            widget.field_value = saved_value if saved_value else ('X' if is_checked else 'Off')
+                                            widget.update()
+                                            filled_count += 1
+                                            print(f"Button '{field_name}': SUCCESS with update (value: '{saved_value}')")
+                                        except Exception as fallback_error:
+                                            print(f"Button fallback failed: {fallback_error}")
+                                            failed_fields.append((field_name, f"Button error: {fallback_error}"))
                                 
                                 elif field_type == 'RadioButton':
                                     # X-style boxes might be radio buttons
