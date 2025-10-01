@@ -135,6 +135,15 @@ def create_database_schema():
             );
         ''')
         cur.execute('ALTER TABLE master_templates ADD COLUMN IF NOT EXISTS pdf_blob BYTEA;')
+        
+        # Ensure pdf_blob column exists (migration for existing databases)
+        try:
+            cur.execute('SELECT pdf_blob FROM master_templates LIMIT 1;')
+        except psycopg2.errors.UndefinedColumn:
+            print("Adding missing pdf_blob column to master_templates...")
+            cur.execute('ALTER TABLE master_templates ADD COLUMN pdf_blob BYTEA;')
+            conn.commit()
+            print("Successfully added pdf_blob column")
         cur.execute('ALTER TABLE master_templates ALTER COLUMN storage_path DROP NOT NULL;')
         
         # Template Data by Account
