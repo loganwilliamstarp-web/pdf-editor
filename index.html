@@ -527,9 +527,34 @@ function initializePDFEditorPopup(popupWindow, context) {
             }
         }
 
-        // If all methods fail, show error
+        // If all methods fail, try to reload PDF with pre-filled values
         console.error('[PDF Popup] All field value application methods failed');
-        setSaveStatus('error', 'Unable to apply saved field values. Fields may not be editable in this PDF.');
+        console.log('[PDF Popup] Attempting to reload PDF with pre-filled values from server');
+        
+        try {
+            // Reload the PDF with pre-filled values from the server endpoint
+            const prefilledUrl = appOrigin + '/api/pdf/template/' + localTemplateId + '/' + accountId;
+            console.log('[PDF Popup] Reloading PDF from:', prefilledUrl);
+            
+            // Re-initialize the viewer with the pre-filled PDF
+            currentPDFViewer.previewFile({
+                content: {
+                    location: {
+                        url: prefilledUrl
+                    }
+                },
+                metaData: {
+                    fileName: "Certificate of Insurance",
+                    id: localTemplateId
+                }
+            });
+            
+            setSaveStatus('success', 'PDF reloaded with saved field values.');
+            console.log('[PDF Popup] PDF reloaded with pre-filled values');
+        } catch (reloadError) {
+            console.error('[PDF Popup] Failed to reload PDF with pre-filled values:', reloadError);
+            setSaveStatus('error', 'Unable to apply saved field values. Fields may not be editable in this PDF.');
+        }
     }
 
     function mapObjectToAdobeFormFieldValues(obj) {
@@ -965,6 +990,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                         popupWindow.PDF_DEBUG.apis = currentPDFAPIs;
                         
                         console.log('[PDF Popup] Adobe APIs loaded, PDF ready for editing');
+                        console.log('[PDF Popup] Available API methods:', Object.keys(apis || {}));
                         setSaveStatus('success', 'PDF loaded. Click on fields to edit, then press Ctrl+S to save.');
                         
                         // Apply saved field values if they exist
