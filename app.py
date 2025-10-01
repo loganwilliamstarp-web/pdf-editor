@@ -881,6 +881,45 @@ def serve_pdf_template_with_fields(template_id, account_id):
                         print(f"  Current Value: {widget.field_value}")
                 print("=== END DEBUG ===\n")
                 
+                # DEBUG: Check for X-style checkboxes specifically
+                print("\n=== CHECKING FOR X-STYLE CHECKBOXES ===")
+                page = pdf_doc[0]
+                all_widgets = list(page.widgets())
+                print(f"Total widgets on page: {len(all_widgets)}")
+
+                # Look for the specific checkboxes from ACORD forms
+                checkbox_names = [
+                    'COMMERCIAL GENERAL LIABILITY',
+                    'CLAIMS-MADE',
+                    'OCCUR',
+                    'COVERAGE',
+                    'CLAIMS',
+                    'OCCURRENCE'
+                ]
+
+                for widget in all_widgets:
+                    field_name = widget.field_name
+                    # Check if this might be one of those X checkboxes
+                    if any(name.replace(' ', '').replace('-', '').lower() in field_name.lower().replace('_', '') 
+                           for name in checkbox_names):
+                        print(f"\n=== X-STYLE CHECKBOX ===")
+                        print(f"Field name: {widget.field_name}")
+                        print(f"Field type: {widget.field_type}")
+                        print(f"Field type string: {widget.field_type_string}")
+                        print(f"Field value: {widget.field_value}")
+                        print(f"Field flags: {widget.field_flags}")
+                        
+                        # Check if it's actually a button
+                        if hasattr(widget, 'button_states'):
+                            print(f"Button states: {widget.button_states}")
+                        if hasattr(widget, 'field_states'):
+                            print(f"Field states: {widget.field_states}")
+                        
+                        print(f"Widget rect: {widget.rect}")
+                        print(f"=========================\n")
+                
+                print("=== END X-STYLE CHECKBOX DEBUG ===\n")
+                
                 if checkbox_fields:
                     print("=== CHECKBOX FIELDS FOUND ===")
                     for cb in checkbox_fields:
@@ -975,12 +1014,64 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                                 print(f"Integer method failed: {int_error}")
                                                 failed_fields.append((field_name, f"All checkbox methods failed: {int_error}"))
                                 
+                                elif field_type in ['Button', 'Btn']:
+                                    # These X-style checkboxes are buttons, not checkboxes
+                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X']
+                                    
+                                    print(f"Processing button field '{field_name}': saved_value='{saved_value}', is_checked={is_checked}")
+                                    
+                                    # Get valid button states
+                                    if hasattr(widget, 'field_states'):
+                                        states = widget.field_states
+                                        print(f"Button {field_name} states: {states}")
+                                        
+                                        # Usually something like: ('/Off', '/X') or ('/Off', '/Yes')
+                                        if is_checked and len(states) > 1:
+                                            checked_state = [s for s in states if s != '/Off' and s != 'Off'][0]
+                                            # Remove leading slash if present
+                                            checked_state = checked_state.lstrip('/')
+                                            widget.field_value = checked_state
+                                            print(f"  Set button to checked state: {checked_state}")
+                                        else:
+                                            widget.field_value = 'Off'
+                                            print(f"  Set button to unchecked state: Off")
+                                    else:
+                                        # Fallback
+                                        widget.field_value = 'X' if is_checked else 'Off'
+                                        print(f"  Set button to fallback state: {'X' if is_checked else 'Off'}")
+                                    
+                                    widget.update()
+                                    filled_count += 1
+                                    print(f"Button '{field_name}': {'CHECKED' if is_checked else 'UNCHECKED'} (value: '{saved_value}') - SUCCESS")
+                                
                                 elif field_type == 'RadioButton':
-                                    if saved_value:
-                                        widget.field_value = str(saved_value)
-                                        widget.update()
-                                        filled_count += 1
-                                        print(f"Selected radio '{field_name}': '{saved_value}'")
+                                    # X-style boxes might be radio buttons
+                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X']
+                                    
+                                    print(f"Processing radio button '{field_name}': saved_value='{saved_value}', is_checked={is_checked}")
+                                    
+                                    if is_checked:
+                                        # Try common ACORD radio values
+                                        for state in ['X', 'Yes', '1', 'On']:
+                                            try:
+                                                widget.field_value = state
+                                                widget.update()
+                                                filled_count += 1
+                                                print(f"Radio button {field_name} set to: {state} - SUCCESS")
+                                                break
+                                            except Exception as radio_error:
+                                                print(f"Radio button {field_name} failed with state {state}: {radio_error}")
+                                                continue
+                                    else:
+                                        # For unchecked radio buttons
+                                        try:
+                                            widget.field_value = 'Off'
+                                            widget.update()
+                                            filled_count += 1
+                                            print(f"Radio button {field_name} set to: Off - SUCCESS")
+                                        except Exception as radio_error:
+                                            print(f"Radio button {field_name} failed to set to Off: {radio_error}")
+                                            failed_fields.append((field_name, f"Radio button error: {radio_error}"))
                                 
                             except Exception as field_error:
                                 failed_fields.append((field_name, str(field_error)))
