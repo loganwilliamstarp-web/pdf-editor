@@ -404,6 +404,19 @@ function initializePDFEditorPopup(popupWindow, context) {
             const data = await response.json();
             console.log('[PDF Popup] Load response data:', data);
 
+            // Store server field definitions for fallback
+            if (data.success && data.form_fields && Array.isArray(data.form_fields)) {
+                const serverFields = {};
+                data.form_fields.forEach(field => {
+                    if (field.name) {
+                        serverFields[field.name] = field.default_value || '';
+                    }
+                });
+                popupWindow.PDF_DEBUG = popupWindow.PDF_DEBUG || {};
+                popupWindow.PDF_DEBUG.serverFields = serverFields;
+                console.log('[PDF Popup] Stored server field definitions:', Object.keys(serverFields).length);
+            }
+
             if (data.success && data.field_values && Object.keys(data.field_values).length > 0) {
                 console.log('[PDF Popup] Loading existing field values', data.field_values);
                 savedFieldValues = data.field_values; // Store for later application
@@ -704,6 +717,21 @@ function initializePDFEditorPopup(popupWindow, context) {
         } else {
             console.log('[PDF Popup] No Adobe APIs available for getFormFieldValues');
             console.log('[PDF Popup] Available API methods:', Object.keys(apis || {}));
+        }
+
+        // Use server-side field definitions as fallback
+        if (Object.keys(values).length === 0 && savedFieldValues === null) {
+            try {
+                console.log('[PDF Popup] Using server-side field definitions...');
+                // Get field definitions from the server response
+                const serverFields = popupWindow.PDF_DEBUG?.serverFields || {};
+                if (serverFields && Object.keys(serverFields).length > 0) {
+                    values = serverFields;
+                    console.log('[PDF Popup] Values from server definitions', values);
+                }
+            } catch (error) {
+                console.warn('[PDF Popup] Server field definitions failed', error);
+            }
         }
 
         // Try DOM-based field collection as ultimate fallback
@@ -1023,7 +1051,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                         fileName: 'Template ' + localTemplateId,
                     },
                 }, {
-                    embedMode: 'SIZED_CONTAINER',
+                    embedMode: 'FULL_WINDOW',
                     enableFormFilling: true,
                     showAnnotationTools: false,
                     showDownloadPDF: false,
