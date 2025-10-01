@@ -912,31 +912,43 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                     # Check if should be checked
                                     is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X', '/1', '/Yes', '/On']
                                     
-                                    # Get available appearance states for this checkbox
-                                    # This tells us what values the checkbox accepts (e.g., 'Yes', 'X', '1', etc.)
+                                    # Get the original checkbox state from the PDF to preserve appearance
+                                    # PyMuPDF stores the current appearance state in field_value
+                                    original_value = widget.field_value
+                                    print(f"Original value: '{original_value}'")
+                                    
+                                    # Get button states - this contains the list of valid appearance states
                                     on_state = None
-                                    if hasattr(widget, 'field_states') and widget.field_states:
-                                        print(f"Available states: {widget.field_states}")
-                                        # field_states is typically a list like ['Off', 'Yes'] or ['Off', 'X']
-                                        # Find the "on" state (anything other than 'Off')
-                                        for state in widget.field_states:
-                                            if state not in ['Off', 'off', '']:
-                                                on_state = state
-                                                break
+                                    try:
+                                        # For PyMuPDF, we need to check the button_states() method
+                                        if hasattr(widget, 'button_states'):
+                                            states = widget.button_states()
+                                            print(f"Button states: {states}")
+                                            if states:
+                                                # states is a dict like {0: 'Off', 1: 'Yes'}
+                                                for value, state in states.items():
+                                                    if state not in ['Off', 'off', '']:
+                                                        on_state = state
+                                                        break
+                                        
+                                        # Alternative: check field_display for appearance info
+                                        if not on_state and hasattr(widget, 'field_display'):
+                                            print(f"Field display: {widget.field_display}")
+                                    except Exception as e:
+                                        print(f"Error getting button states: {e}")
+                                    
+                                    # If we still don't have on_state, try common ACORD values
+                                    if not on_state:
+                                        # ACORD forms typically use 'Yes' for checkboxes
+                                        on_state = 'Yes'
+                                        print(f"Using default ACORD state: '{on_state}'")
                                     
                                     # Set checkbox value using the correct appearance state
                                     try:
                                         if is_checked:
-                                            if on_state:
-                                                # Use the native appearance state (e.g., 'Yes', 'X', '1')
-                                                widget.field_value = on_state
-                                                print(f"✓ Checked using native state: '{on_state}'")
-                                            else:
-                                                # Fallback to True if we can't determine the state
-                                                widget.field_value = True
-                                                print(f"✓ Checked using fallback: True")
+                                            widget.field_value = on_state
+                                            print(f"✓ Checked using state: '{on_state}'")
                                         else:
-                                            # For unchecked, use 'Off' or empty string
                                             widget.field_value = 'Off'
                                             print(f"✓ Unchecked: 'Off'")
                                         
