@@ -914,7 +914,7 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                         print(f"Valid states: {widget.field_states}")
                                     
                                     # Try to set it and see what happens
-                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X', '/1']
+                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X', '/1', '/Yes', '/On']
                                     print(f"Should be checked: {is_checked}")
                                     
                                     # Try setting as boolean
@@ -1745,10 +1745,23 @@ def save_pdf_fields():
         existing_field_values = {}
         if existing_data and existing_data.get('field_values'):
             try:
-                existing_field_values = json.loads(existing_data['field_values'])
+                field_values_raw = existing_data['field_values']
+                print(f"Existing data type: {type(field_values_raw)}")
+                print(f"Existing data preview: {str(field_values_raw)[:500]}")
+                
+                # Handle different data types
+                if isinstance(field_values_raw, dict):
+                    existing_field_values = field_values_raw
+                elif isinstance(field_values_raw, str):
+                    existing_field_values = json.loads(field_values_raw)
+                else:
+                    print(f"Unexpected field_values type: {type(field_values_raw)}")
+                    existing_field_values = {}
+                
                 print(f"Found existing field values: {len(existing_field_values)} fields")
-            except (json.JSONDecodeError, TypeError):
-                print("Failed to parse existing field values, starting fresh")
+            except (json.JSONDecodeError, TypeError) as e:
+                print(f"Failed to parse existing field values: {e}")
+                print(f"Raw data sample: {str(existing_data.get('field_values', ''))[:200]}")
                 existing_field_values = {}
 
         # Merge logic: For checkboxes, preserve checked state
@@ -1759,6 +1772,17 @@ def save_pdf_fields():
             if is_checkbox:
                 print(f"Field '{field_name}' identified as checkbox")
             return is_checkbox
+        
+        def is_checkbox_checked(value):
+            """Determine if a checkbox value represents 'checked'"""
+            checked_values = ['/1', '/Yes', '/On', 'Yes', '1', 'On', 'true', 'True', True]
+            return str(value).strip() in checked_values if value else False
+        
+        def normalize_checkbox_value(value):
+            """Convert various checkbox formats to standard '/Yes' or '/Off'"""
+            if is_checkbox_checked(value):
+                return '/Yes'
+            return '/Off'
 
         print(f"\n=== MERGE LOGIC DEBUG ===")
         print(f"Current fields: {len(final_field_values)}")
@@ -1783,19 +1807,24 @@ def save_pdf_fields():
                 print(f"  Current value: '{current_value}' (type: {type(current_value)})")
                 print(f"  Existing value: '{existing_value}' (type: {type(existing_value)})")
                 
-                if current_value in ['/1', '/Yes', '/On', '1', 'Yes', 'On', True, 'true', 'True']:
+                current_checked = is_checkbox_checked(current_value)
+                existing_checked = is_checkbox_checked(existing_value)
+                
+                print(f"  Current checked: {current_checked}, Existing checked: {existing_checked}")
+                
+                if current_checked:
                     # Currently checked - save as checked
-                    merged_field_values[field_name] = current_value
-                    print(f"  → Currently checked, saving as checked")
-                elif existing_value in ['/1', '/Yes', '/On', '1', 'Yes', 'On', True, 'true', 'True']:
+                    merged_field_values[field_name] = normalize_checkbox_value(current_value)
+                    print(f"  → Currently checked, saving as /Yes")
+                elif existing_checked:
                     # Preserve previously checked state
-                    merged_field_values[field_name] = existing_value
+                    merged_field_values[field_name] = normalize_checkbox_value(existing_value)
                     preserved_count += 1
-                    print(f"  → Preserving previously checked state")
+                    print(f"  → Preserving previously checked state (/Yes)")
                 else:
-                    # Both unchecked - save current value
-                    merged_field_values[field_name] = current_value
-                    print(f"  → Both unchecked, saving current value")
+                    # Both unchecked - save as unchecked
+                    merged_field_values[field_name] = '/Off'
+                    print(f"  → Both unchecked, saving as /Off")
             else:
                 # For text fields, always use current value
                 merged_field_values[field_name] = current_value
