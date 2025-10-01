@@ -210,9 +210,11 @@ function initializePDFEditorPopup(popupWindow, context) {
 
     popupWindow.PDF_DEBUG = popupWindow.PDF_DEBUG || {};
     popupWindow.PDF_DEBUG.context = { templateId, accountId, appOrigin };
+    popupWindow.PDF_DEBUG.state = popupWindow.PDF_DEBUG.state || {};
 
     let currentPDFViewer = null;
     let currentPDFAPIs = null;
+    popupWindow.PDF_DEBUG.state.viewerReady = false;
 
     const saveBtn = doc.getElementById('saveBtn');
     const downloadBtn = doc.getElementById('downloadBtn');
@@ -605,9 +607,8 @@ function initializePDFEditorPopup(popupWindow, context) {
             }
         }
 
-        if (popupWindow.PDF_DEBUG) {
-            popupWindow.PDF_DEBUG.lastCollected = { definitions, values };
-        }
+        popupWindow.PDF_DEBUG = popupWindow.PDF_DEBUG || {};
+        popupWindow.PDF_DEBUG.lastCollected = { definitions, values };
         return { definitions, values };
     }
 
@@ -722,6 +723,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                     currentPDFViewer = adobeViewerController;
                     popupWindow.PDF_DEBUG = popupWindow.PDF_DEBUG || {};
                     popupWindow.PDF_DEBUG.viewer = currentPDFViewer;
+                    popupWindow.PDF_DEBUG.state.viewerReady = true;
                     setSaveStatus('info', 'PDF loaded. Retrieving saved field values...');
 
                     currentPDFViewer.getAPIs().then(apis => {
