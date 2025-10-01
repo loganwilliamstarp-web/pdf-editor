@@ -1310,15 +1310,27 @@ def debug_pymupdf_test(template_id, account_id):
         cur = conn.cursor()
         
         # Get template and field values
-        cur.execute('''
-            SELECT
-                mt.template_name, mt.template_type, mt.storage_path, mt.file_size, mt.pdf_blob, mt.form_fields,
-                td.field_values
-            FROM master_templates mt
-            LEFT JOIN template_data td
-                ON td.template_id = mt.id AND td.account_id = %s
-            WHERE mt.id = %s
-        ''', (account_id, template_id))
+        try:
+            cur.execute('''
+                SELECT
+                    mt.template_name, mt.template_type, mt.storage_path, mt.file_size, mt.pdf_blob, mt.form_fields,
+                    td.field_values
+                FROM master_templates mt
+                LEFT JOIN template_data td
+                    ON td.template_id = mt.id AND td.account_id = %s
+                WHERE mt.id = %s
+            ''', (account_id, template_id))
+        except psycopg2.errors.UndefinedColumn:
+            conn.rollback()
+            cur.execute('''
+                SELECT
+                    mt.template_name, mt.template_type, mt.storage_path, mt.file_size, NULL::BYTEA AS pdf_blob, mt.form_fields,
+                    td.field_values
+                FROM master_templates mt
+                LEFT JOIN template_data td
+                    ON td.template_id = mt.id AND td.account_id = %s
+                WHERE mt.id = %s
+            ''', (account_id, template_id))
         
         result = cur.fetchone()
         if not result:
