@@ -1755,29 +1755,56 @@ def save_pdf_fields():
         def is_checkbox_field(field_name):
             """Check if a field is likely a checkbox based on name patterns"""
             checkbox_indicators = ['indicator', 'checkbox', 'check', 'box']
-            return any(indicator in field_name.lower() for indicator in checkbox_indicators)
+            is_checkbox = any(indicator in field_name.lower() for indicator in checkbox_indicators)
+            if is_checkbox:
+                print(f"Field '{field_name}' identified as checkbox")
+            return is_checkbox
 
+        print(f"\n=== MERGE LOGIC DEBUG ===")
+        print(f"Current fields: {len(final_field_values)}")
+        print(f"Existing fields: {len(existing_field_values)}")
+        
+        # Show sample of existing values
+        if existing_field_values:
+            sample_existing = list(existing_field_values.items())[:3]
+            print(f"Sample existing values: {sample_existing}")
+        
         merged_field_values = {}
+        checkbox_count = 0
+        preserved_count = 0
+        
         for field_name, current_value in final_field_values.items():
             if is_checkbox_field(field_name):
+                checkbox_count += 1
                 # Checkbox merge logic
                 existing_value = existing_field_values.get(field_name, '')
+                
+                print(f"\n--- CHECKBOX MERGE: {field_name} ---")
+                print(f"  Current value: '{current_value}' (type: {type(current_value)})")
+                print(f"  Existing value: '{existing_value}' (type: {type(existing_value)})")
                 
                 if current_value in ['/1', '/Yes', '/On', '1', 'Yes', 'On', True, 'true', 'True']:
                     # Currently checked - save as checked
                     merged_field_values[field_name] = current_value
-                    print(f"Checkbox '{field_name}': Currently checked, saving as checked")
+                    print(f"  → Currently checked, saving as checked")
                 elif existing_value in ['/1', '/Yes', '/On', '1', 'Yes', 'On', True, 'true', 'True']:
                     # Preserve previously checked state
                     merged_field_values[field_name] = existing_value
-                    print(f"Checkbox '{field_name}': Preserving previously checked state")
+                    preserved_count += 1
+                    print(f"  → Preserving previously checked state")
                 else:
                     # Both unchecked - save current value
                     merged_field_values[field_name] = current_value
-                    print(f"Checkbox '{field_name}': Both unchecked, saving current value")
+                    print(f"  → Both unchecked, saving current value")
             else:
                 # For text fields, always use current value
                 merged_field_values[field_name] = current_value
+        
+        print(f"\n=== MERGE SUMMARY ===")
+        print(f"Total checkboxes processed: {checkbox_count}")
+        print(f"Checkboxes preserved: {preserved_count}")
+        print(f"Final merged fields: {len(merged_field_values)}")
+        print(f"=== END MERGE DEBUG ===\n")
 
         print("Saving field values for template {0}, account {1}: {2} fields (merged from {3} current + {4} existing)".format(
             template_id, account_id, len(merged_field_values), len(final_field_values), len(existing_field_values)))
