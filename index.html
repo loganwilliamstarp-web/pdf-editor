@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Certificate Management System</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>PDF</text></svg>">
-    <link rel="stylesheet" id="tailwind-main-styles" href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.4/tailwind.min.css">
+    <script src="https://cdn.tailwindcss.com" defer></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 </head>
 <body>
@@ -197,19 +197,25 @@
         const templateName = 'PDF Template';
         
         function ensureTailwindStyles() {
-            const existing = document.getElementById('tailwind-popup-styles');
-            if (existing) {
+            if (window.tailwind) {
                 return Promise.resolve();
             }
 
+            const existing = document.getElementById('tailwind-popup-script');
+            if (existing) {
+                return new Promise(function(resolve, reject) {
+                    existing.addEventListener('load', function() { resolve(); });
+                    existing.addEventListener('error', function() { reject(new Error('Tailwind CDN failed to load')); });
+                });
+            }
+
             return new Promise(function(resolve, reject) {
-                const link = document.createElement('link');
-                link.id = 'tailwind-popup-styles';
-                link.rel = 'stylesheet';
-                link.href = 'https://cdn.jsdelivr.net/npm/tailwindcss@3.4.4/tailwind.min.css';
-                link.onload = function() { resolve(); };
-                link.onerror = function() { reject(new Error('Tailwind stylesheet failed to load')); };
-                document.head.appendChild(link);
+                const script = document.createElement('script');
+                script.id = 'tailwind-popup-script';
+                script.src = 'https://cdn.tailwindcss.com';
+                script.onload = function() { resolve(); };
+                script.onerror = function() { reject(new Error('Tailwind CDN failed to load')); };
+                document.head.appendChild(script);
             });
         }
 
