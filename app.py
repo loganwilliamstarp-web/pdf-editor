@@ -1835,19 +1835,25 @@ def save_pdf_fields():
                 
                 print(f"  Current checked: {current_checked}, Existing checked: {existing_checked}")
                 
-                if current_checked:
-                    # Currently checked - save as checked
+                # Check if current value is explicitly set (either /Yes or /Off)
+                current_is_explicit = str(current_value).strip() in ['/Yes', '/Off', '/On', '/1', 'Yes', 'No', 'On', 'Off', '1', '0', 'true', 'false', 'True', 'False']
+                
+                if current_is_explicit:
+                    # Current value is explicitly set (user made a choice) - always use it
                     merged_field_values[field_name] = normalize_checkbox_value(current_value)
-                    print(f"  → Currently checked, saving as /Yes")
+                    if current_checked:
+                        print(f"  → Explicitly checked, saving as /Yes")
+                    else:
+                        print(f"  → Explicitly unchecked, saving as /Off")
                 elif existing_checked:
-                    # Preserve previously checked state
+                    # Current value is empty/missing, preserve previously checked state
                     merged_field_values[field_name] = normalize_checkbox_value(existing_value)
                     preserved_count += 1
-                    print(f"  → Preserving previously checked state (/Yes)")
+                    print(f"  → Current empty, preserving previously checked state (/Yes)")
                 else:
-                    # Both unchecked - save as unchecked
+                    # Both empty/unchecked - save as unchecked
                     merged_field_values[field_name] = '/Off'
-                    print(f"  → Both unchecked, saving as /Off")
+                    print(f"  → Both empty/unchecked, saving as /Off")
             else:
                 # For text fields, always use current value
                 merged_field_values[field_name] = current_value
