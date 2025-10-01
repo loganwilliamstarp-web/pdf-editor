@@ -808,11 +808,16 @@ function initializePDFEditorPopup(popupWindow, context) {
         // Fallback: Poll for changes every 3 seconds with proper change detection
         setInterval(() => {
             if (currentPDFViewer && !isSaving) {
+                console.log('[PDF Popup] Polling for field changes...');
                 collectPdfFieldData().then(data => {
+                    console.log('[PDF Popup] collectPdfFieldData result:', data);
                     const currentValues = data.values || {};
+                    console.log('[PDF Popup] Extracted current values:', currentValues);
+                    console.log('[PDF Popup] Current values keys:', Object.keys(currentValues));
                     
                     // Compare current values with last known values
                     const hasChanges = JSON.stringify(currentValues) !== JSON.stringify(lastKnownFieldValues);
+                    console.log('[PDF Popup] Has changes:', hasChanges);
                     
                     if (hasChanges && Object.keys(currentValues).length > 0) {
                         pendingChanges = true;
@@ -826,10 +831,14 @@ function initializePDFEditorPopup(popupWindow, context) {
                         console.log('[PDF Popup] Field values present but no changes detected');
                         console.log('[PDF Popup] Current values:', currentValues);
                         console.log('[PDF Popup] Last known values:', lastKnownFieldValues);
+                    } else {
+                        console.log('[PDF Popup] No field values collected');
                     }
                 }).catch(error => {
                     console.warn('[PDF Popup] Change detection polling failed:', error);
                 });
+            } else {
+                console.log('[PDF Popup] Polling skipped - viewer:', !!currentPDFViewer, 'saving:', isSaving);
             }
         }, 3000);
     }
