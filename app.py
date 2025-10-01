@@ -1302,6 +1302,155 @@ def get_pdf_field_values(template_id, account_id):
             cur.close()
             conn.close()
 
+@app.route('/api/debug/pymupdf-test/<template_id>/<account_id>')
+def debug_pymupdf_test(template_id, account_id):
+    """Debug endpoint to test PyMuPDF pre-filling directly"""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        
+        # Get template and field values
+        cur.execute('''
+            SELECT
+                mt.template_name, mt.template_type, mt.storage_path, mt.file_size, mt.pdf_blob, mt.form_fields,
+                td.field_values
+            FROM master_templates mt
+            LEFT JOIN template_data td
+                ON td.template_id = mt.id AND td.account_id = %s
+            WHERE mt.id = %s
+        ''', (account_id, template_id))
+        
+        result = cur.fetchone()
+        if not result:
+            return jsonify({'error': 'Template not found'}), 404
+        
+        field_values_raw = result.get('field_values') or {}
+        
+        # Parse field_values if it's a JSON string
+        if isinstance(field_values_raw, str):
+            try:
+                field_values = json.loads(field_values_raw)
+            except json.JSONDecodeError:
+                field_values = {}
+        else:
+            field_values = field_values_raw or {}
+        
+        # Get PDF content
+        pdf_content = None
+        pdf_blob = result.get('pdf_blob')
+        if pdf_blob:
+            try:
+                pdf_content = bytes(pdf_blob)
+            except (TypeError, ValueError):
+                pdf_content = pdf_blob
+        
+        if not pdf_content:
+            local_file = resolve_local_template_file(result.get('template_type', '').lower(), result.get('storage_path', ''))
+            if local_file:
+                pdf_content = local_file.read_bytes()
+        
+        if not pdf_content:
+            return jsonify({'error': 'No PDF content available'}), 404
+        
+        # Test PyMuPDF pre-filling
+        debug_info = {
+            'template_id': template_id,
+            'account_id': account_id,
+            'template_name': result.get('template_name'),
+            'field_values_count': len(field_values),
+            'non_empty_count': len({k: v for k, v in field_values.items() if v and str(v).strip()}),
+            'pymupdf_available': PYMUPDF_AVAILABLE,
+            'pdf_size': len(pdf_content),
+            'test_results': {}
+        }
+        
+        if PYMUPDF_AVAILABLE:
+            try:
+                # Load PDF with PyMuPDF
+                pdf_doc = fitz.open(stream=pdf_content, filetype="pdf")
+                
+                # Get all form fields
+                form_fields = pdf_doc[0].widgets()  # Get widgets from first page
+                debug_info['test_results']['form_fields_found'] = len(form_fields)
+                debug_info['test_results']['form_field_names'] = [widget.field_name for widget in form_fields[:10]]  # First 10
+                
+                filled_count = 0
+                failed_fields = []
+                
+                # Test filling a few fields
+                test_fields = list(field_values.items())[:5]  # Test first 5 fields
+                for field_name, saved_value in test_fields:
+                    if not saved_value or str(saved_value).strip() == '':
+                        continue
+                        
+                    field_found = False
+                    for widget in form_fields:
+                        if widget.field_name == field_name:
+                            field_found = True
+                            field_type = widget.field_type_string
+                            
+                            try:
+                                if field_type == 'text':
+                                    widget.field_value = str(saved_value)
+                                    widget.update()
+                                    filled_count += 1
+                                elif field_type == 'checkbox':
+                                    widget.field_value = True if saved_value in [True, 'true', '1', 'Yes'] else False
+                                    widget.update()
+                                    filled_count += 1
+                                elif field_type == 'radiobutton':
+                                    widget.field_value = str(saved_value)
+                                    widget.update()
+                                    filled_count += 1
+                                    
+                                debug_info['test_results'][f'field_{field_name}'] = {
+                                    'type': field_type,
+                                    'value': saved_value,
+                                    'status': 'filled'
+                                }
+                            except Exception as e:
+                                debug_info['test_results'][f'field_{field_name}'] = {
+                                    'type': field_type,
+                                    'value': saved_value,
+                                    'status': 'error',
+                                    'error': str(e)
+                                }
+                                failed_fields.append(field_name)
+                            break
+                    
+                    if not field_found:
+                        debug_info['test_results'][f'field_{field_name}'] = {
+                            'value': saved_value,
+                            'status': 'not_found'
+                        }
+                        failed_fields.append(field_name)
+                
+                debug_info['test_results']['filled_count'] = filled_count
+                debug_info['test_results']['failed_fields'] = failed_fields
+                
+                # Save the filled PDF
+                filled_pdf_content = pdf_doc.write()
+                pdf_doc.close()
+                
+                debug_info['test_results']['filled_pdf_size'] = len(filled_pdf_content)
+                debug_info['test_results']['success'] = True
+                
+            except Exception as e:
+                debug_info['test_results']['error'] = str(e)
+                debug_info['test_results']['success'] = False
+        else:
+            debug_info['test_results']['error'] = 'PyMuPDF not available'
+            debug_info['test_results']['success'] = False
+        
+        return jsonify(debug_info)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            cur.close()
+            conn.close()
+
 @app.route('/api/debug/pdf-prefill/<template_id>/<account_id>')
 def debug_pdf_prefill(template_id, account_id):
     """Debug endpoint to test PDF pre-filling logic"""
