@@ -933,10 +933,10 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                     widget.update()
                                     filled_count += 1
                                     print(f"✓ Filled generic field '{field_name}': '{saved_value}'")
-                        
-                    except Exception as field_error:
-                        failed_fields.append((field_name, str(field_error)))
-                        print(f"✗ Failed to fill '{field_name}': {field_error}")
+                            
+                            except Exception as field_error:
+                                failed_fields.append((field_name, str(field_error)))
+                                print(f"✗ Failed to fill '{field_name}': {field_error}")
                 
                 print(f"=== PRE-FILL COMPLETE ===")
                 print(f"Successfully filled: {filled_count} fields")
