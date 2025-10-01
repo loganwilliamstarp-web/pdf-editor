@@ -1255,16 +1255,20 @@ def save_pdf_fields():
             print("WARNING: No field values to save!")
 
         if existing_data:
+            print(f"Updating existing template_data record for account {account_id}, template {template_id}")
             cur.execute('''
                 UPDATE template_data 
                 SET field_values = %s, updated_at = NOW(), version = version + 1
                 WHERE account_id = %s AND template_id = %s
             ''', (json.dumps(final_field_values), account_id, template_id))
+            print(f"UPDATE query executed, affected rows: {cur.rowcount}")
         else:
+            print(f"Inserting new template_data record for account {account_id}, template {template_id}")
             cur.execute('''
                 INSERT INTO template_data (account_id, template_id, field_values)
                 VALUES (%s, %s, %s)
             ''', (account_id, template_id, json.dumps(final_field_values)))
+            print(f"INSERT query executed, affected rows: {cur.rowcount}")
 
         template_fields_updated = False
         if form_fields_payload is not None:
@@ -1279,6 +1283,24 @@ def save_pdf_fields():
                 template_fields_updated = True
 
         conn.commit()
+        print(f"Database commit successful for account {account_id}, template {template_id}")
+
+        # Verify the data was actually saved by querying it back
+        cur.execute('''
+            SELECT field_values FROM template_data 
+            WHERE account_id = %s AND template_id = %s
+        ''', (account_id, template_id))
+        verification_result = cur.fetchone()
+        if verification_result:
+            saved_field_values = verification_result.get('field_values') or {}
+            print(f"Verification: {len(saved_field_values)} field values saved to database")
+            if saved_field_values:
+                non_empty_saved = {k: v for k, v in saved_field_values.items() if v and str(v).strip()}
+                print(f"Verification: {len(non_empty_saved)} non-empty field values in database")
+                if non_empty_saved:
+                    print(f"Verification sample: {list(non_empty_saved.items())[:3]}")
+        else:
+            print("WARNING: Verification query returned no results - data may not have been saved!")
 
         return jsonify({
             'success': True,
@@ -1391,11 +1413,16 @@ def get_pdf_fields(template_id, account_id):
             field_values_payload = field_values_raw
         
         print(f"Retrieved field_values_raw: {type(field_values_raw)}, length: {len(field_values_payload) if isinstance(field_values_payload, dict) else 'N/A'}")
+        print(f"Raw field_values content: {str(field_values_raw)[:200]}...")
         if field_values_payload and isinstance(field_values_payload, dict):
             non_empty_loaded = {k: v for k, v in field_values_payload.items() if v and str(v).strip()}
             print(f"Non-empty fields loaded: {len(non_empty_loaded)}")
             if non_empty_loaded:
                 print("Non-empty field sample:", list(non_empty_loaded.items())[:3])
+            else:
+                print("All loaded field values are empty strings")
+        else:
+            print("No field values payload or not a dictionary")
 
         form_fields_payload = coerce_form_fields_payload(form_fields_raw)
 
