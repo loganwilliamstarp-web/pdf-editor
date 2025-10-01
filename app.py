@@ -193,6 +193,63 @@ def create_database_schema():
         return False
 
 # Form field helpers
+
+
+def extract_form_fields_from_pdf_bytes(pdf_bytes):
+    """Extract AcroForm field metadata from PDF bytes."""
+    if not PYPDF_AVAILABLE or not pdf_bytes:
+        return []
+
+    try:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        field_map = reader.get_fields() or {}
+        fields = []
+
+        for name, data in field_map.items():
+            if not name:
+                continue
+
+            field_type = str(data.get('/FT', '')).strip('/') or 'text'
+            flags = int(data.get('/Ff', 0))
+            options = []
+            if '/Opt' in data:
+                opt_values = data.get('/Opt') or []
+                if isinstance(opt_values, (list, tuple)):
+                    for entry in opt_values:
+                        options.append(str(entry))
+                else:
+                    options.append(str(opt_values))
+
+            if '/V' in data and data.get('/V') is not None:
+                default_value = str(data.get('/V'))
+            else:
+                default_value = None
+
+            rect = None
+            raw_rect = data.get('/Rect')
+            if isinstance(raw_rect, (list, tuple)) and len(raw_rect) == 4:
+                try:
+                    rect = [float(coord) for coord in raw_rect]
+                except (TypeError, ValueError):
+                    rect = None
+
+            fields.append({
+                'name': str(name),
+                'type': field_type or 'text',
+                'label': str(data.get('/TU') or data.get('/T') or name),
+                'required': bool(flags & 2),
+                'default_value': default_value,
+                'flags': flags,
+                'options': options,
+                'rect': rect,
+            })
+
+        return fields
+    except Exception as exc:
+        print(f"Warning: unable to extract form fields automatically ({exc})")
+        return []
+
+
 def coerce_form_fields_payload(raw):
     """Normalize stored form field data into a dictionary with a fields list."""
     if raw in (None, ''):
@@ -627,7 +684,23 @@ def serve_pdf_template(template_id):
         if not pdf_content:
             # Fallback to generated PDF if no stored asset is available
             pdf_content = create_pdf_with_form_fields(template_name, form_fields_payload)
-        
+
+        # Attempt to extract and persist form field metadata if missing
+        if not form_fields_payload.get('fields') and pdf_content:
+            extracted_fields = extract_form_fields_from_pdf_bytes(pdf_content)
+            if extracted_fields:
+                try:
+                    form_fields_payload = enrich_form_fields_payload({'fields': extracted_fields}, method='pypdf-auto')
+                    cur.execute(
+                        'UPDATE master_templates SET form_fields = %s, updated_at = NOW() WHERE id = %s',
+                        (Json(form_fields_payload), template_id)
+                    )
+                    conn.commit()
+                    print(f"Extracted and stored {len(extracted_fields)} form fields for template {template_id}")
+                except Exception as extraction_store_error:
+                    print(f"Warning: unable to store extracted form fields ({extraction_store_error})")
+                    conn.rollback()
+
         from flask import Response
         return Response(
             pdf_content,
