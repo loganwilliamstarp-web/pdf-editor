@@ -1200,6 +1200,16 @@ def save_pdf_fields():
                     
                     print(f"Final extracted {len(extracted_fields)} fields from PDF content")
                     
+                    # Debug: Show sample of extracted fields
+                    if extracted_fields:
+                        sample_fields = list(extracted_fields.items())[:5]
+                        print(f"Sample extracted fields: {sample_fields}")
+                        non_empty_fields = {k: v for k, v in extracted_fields.items() if v and str(v).strip()}
+                        print(f"Non-empty fields count: {len(non_empty_fields)}")
+                        if non_empty_fields:
+                            sample_non_empty = list(non_empty_fields.items())[:3]
+                            print(f"Sample non-empty fields: {sample_non_empty}")
+                    
                     # Use extracted fields if they have values, otherwise use provided field_values
                     if extracted_fields:
                         # Merge extracted fields with provided field_values (extracted takes precedence)
@@ -1227,6 +1237,12 @@ def save_pdf_fields():
         print("Saving field values for template {0}, account {1}: {2} fields".format(template_id, account_id, len(final_field_values)))
         if final_field_values:
             print("Field sample:", list(final_field_values.items())[:5])
+            non_empty_saved = {k: v for k, v in final_field_values.items() if v and str(v).strip()}
+            print(f"Non-empty fields being saved: {len(non_empty_saved)}")
+            if non_empty_saved:
+                print("Non-empty field sample:", list(non_empty_saved.items())[:3])
+        else:
+            print("WARNING: No field values to save!")
 
         if existing_data:
             cur.execute('''
@@ -1363,6 +1379,13 @@ def get_pdf_fields(template_id, account_id):
             field_values_payload = {}
         else:
             field_values_payload = field_values_raw
+        
+        print(f"Retrieved field_values_raw: {type(field_values_raw)}, length: {len(field_values_payload) if isinstance(field_values_payload, dict) else 'N/A'}")
+        if field_values_payload and isinstance(field_values_payload, dict):
+            non_empty_loaded = {k: v for k, v in field_values_payload.items() if v and str(v).strip()}
+            print(f"Non-empty fields loaded: {len(non_empty_loaded)}")
+            if non_empty_loaded:
+                print("Non-empty field sample:", list(non_empty_loaded.items())[:3])
 
         form_fields_payload = coerce_form_fields_payload(form_fields_raw)
 
