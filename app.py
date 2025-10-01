@@ -1224,7 +1224,8 @@ def debug_database():
                 'field_count': len(field_values),
                 'non_empty_count': len(non_empty),
                 'updated_at': str(row.get('updated_at')),
-                'sample_fields': list(field_values.items())[:3] if field_values else []
+                'sample_fields': list(field_values.items())[:3] if field_values else [],
+                'non_empty_fields': list(non_empty.items()) if non_empty else []
             })
         
         return jsonify(debug_info)
