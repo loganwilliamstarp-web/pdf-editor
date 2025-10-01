@@ -154,8 +154,7 @@
             <div class="px-6 py-4 flex justify-between items-center">
                 <h1 class="text-xl font-semibold text-gray-900">PDF Editor</h1>
                 <div class="flex space-x-3">
-                    <button id="showFormBtn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700">Show Form Editor</button>
-                    <button id="saveBtn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700">Save Fields</button>
+                    <button id="saveBtn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700">Save PDF</button>
                     <button id="downloadBtn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download PDF</button>
                     <button id="closeBtn" class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50">Close</button>
                 </div>
@@ -165,8 +164,8 @@
         <!-- Info Bar -->
         <div class="bg-blue-50 border-b px-6 py-3">
             <p class="text-sm text-blue-800">
-                <strong>Form Editor:</strong> Use the form fields below to edit values, then click "Save Fields" to save to the database.
-                The PDF viewer is for display only - all editing is done through the form below.
+                <strong>PDF Editor:</strong> Click on any field in the PDF to edit it directly.
+                Press Ctrl+S or click the Save button to save your changes to the database.
             </p>
         </div>
 
@@ -174,20 +173,7 @@
         <div class="flex-1 p-6">
             <div id="pdfEditorContainer" class="h-full border border-gray-300 rounded-lg bg-white">
                 <!-- PDF Viewer -->
-                <div id="adobe-dc-view" style="width: 100%; height: 50%;"></div>
-                
-                <!-- Custom Form Editor -->
-                <div id="formEditor" class="bg-gray-50 border-t border-gray-300 p-4" style="height: 50%;">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-semibold text-gray-800">Form Field Editor</h3>
-                        <button id="toggleFormBtn" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm transition-colors">
-                            Hide Form
-                        </button>
-                    </div>
-                    <div id="formFieldsContainer" class="space-y-2 max-h-full overflow-y-auto">
-                        <!-- Form fields will be dynamically generated here -->
-                    </div>
-                </div>
+                <div id="adobe-dc-view" style="width: 100%; height: 100%;"></div>
             </div>
         </div>
 
@@ -195,7 +181,7 @@
         <div class="bg-white border-t px-6 py-3">
             <div class="flex justify-between items-center">
             <div id="saveStatus" class="text-sm text-blue-600">Preparing Adobe PDF viewer...</div>
-                <div class="text-xs text-gray-500">Use form fields below to edit, then click Save Fields</div>
+                <div class="text-xs text-gray-500">Edit fields directly in PDF, then press Ctrl+S to save</div>
             </div>
         </div>
     </div>
@@ -241,12 +227,8 @@ function initializePDFEditorPopup(popupWindow, context) {
     const saveBtn = doc.getElementById('saveBtn');
     const downloadBtn = doc.getElementById('downloadBtn');
     const closeBtn = doc.getElementById('closeBtn');
-    const showFormBtn = doc.getElementById('showFormBtn');
-    const toggleFormBtn = doc.getElementById('toggleFormBtn');
     const saveStatusEl = doc.getElementById('saveStatus');
     const adobeContainer = doc.getElementById('adobe-dc-view');
-    const formEditor = doc.getElementById('formEditor');
-    const formFieldsContainer = doc.getElementById('formFieldsContainer');
 
     function setSaveStatus(status, message) {
         if (!saveStatusEl) {
@@ -282,27 +264,32 @@ function initializePDFEditorPopup(popupWindow, context) {
 
     if (saveBtn) {
         saveBtn.addEventListener('click', () => {
-            // Manual save button - use custom form UI data since Adobe save API is not available
+            // Manual save button - trigger Adobe's save callback
             console.log('[PDF Popup] Save button clicked');
-            setSaveStatus('info', 'Saving field values from form...');
+            setSaveStatus('info', 'Triggering save...');
             
-            // Get field values from custom form UI
-            const fieldValuesPayload = {};
-            const formContainer = popupWindow.document.getElementById('formFieldsContainer');
-            if (formContainer) {
-                const inputs = formContainer.querySelectorAll('input[type="text"]');
-                inputs.forEach(input => {
-                    const fieldName = input.getAttribute('data-field-name');
-                    if (fieldName) {
-                        fieldValuesPayload[fieldName] = input.value;
-                    }
+            // Try to trigger save via keyboard event (Ctrl+S)
+            try {
+                const saveEvent = new KeyboardEvent('keydown', {
+                    key: 's',
+                    code: 'KeyS',
+                    ctrlKey: true,
+                    bubbles: true,
+                    cancelable: true
                 });
+                
+                // Dispatch to the PDF viewer container
+                const pdfContainer = popupWindow.document.getElementById('adobe-dc-view');
+                if (pdfContainer) {
+                    pdfContainer.dispatchEvent(saveEvent);
+                    setSaveStatus('info', 'Save triggered. Processing...');
+                } else {
+                    setSaveStatus('error', 'PDF container not found');
+                }
+            } catch (error) {
+                console.error('[PDF Popup] Error triggering save:', error);
+                setSaveStatus('error', 'Failed to trigger save. Use Ctrl+S in the PDF viewer.');
             }
-            
-            console.log('[PDF Popup] Saving', Object.keys(fieldValuesPayload).length, 'field values');
-            
-            // Save the field values directly
-            savePDFFields(true, fieldValuesPayload);
         });
     }
 
@@ -820,210 +807,11 @@ function initializePDFEditorPopup(popupWindow, context) {
     // Adobe PDF Embed API doesn't provide a way to get current PDF blob programmatically
     // Field extraction will only happen on manual save via save callback
 
-    function createCustomFormUI(fieldValues = {}) {
-        try {
-            console.log('[PDF Popup] Creating custom form UI with', Object.keys(fieldValues).length, 'fields');
-            console.log('[PDF Popup] Sample field values:', Object.entries(fieldValues).slice(0, 5));
-            
-            const formContainer = popupWindow.document.getElementById('formFieldsContainer');
-            if (!formContainer) {
-                console.warn('[PDF Popup] Form container not found');
-            return;
-        }
-
-            // Clear existing form fields
-            formContainer.innerHTML = '';
-            
-            // Group fields by category for better organization
-            const fieldGroups = {
-                'Form Information': [],
-                'Producer Information': [],
-                'Named Insured': [],
-                'Insurer Information': [],
-                'General Liability': [],
-                'Vehicle/Auto': [],
-                'Excess/Umbrella': [],
-                'Workers Compensation': [],
-                'Certificate Holder': [],
-                'Other': []
-            };
-            
-            // Categorize fields
-            Object.entries(fieldValues).forEach(([fieldName, fieldValue]) => {
-                let category = 'Other';
-                
-                if (fieldName.includes('Form_') || fieldName.includes('CertificateOfInsurance_')) {
-                    category = 'Form Information';
-                } else if (fieldName.includes('Producer_')) {
-                    category = 'Producer Information';
-                } else if (fieldName.includes('NamedInsured_')) {
-                    category = 'Named Insured';
-                } else if (fieldName.includes('Insurer_')) {
-                    category = 'Insurer Information';
-                } else if (fieldName.includes('GeneralLiability_') || fieldName.includes('Policy_GeneralLiability_')) {
-                    category = 'General Liability';
-                } else if (fieldName.includes('Vehicle_') || fieldName.includes('Policy_AutomobileLiability_')) {
-                    category = 'Vehicle/Auto';
-                } else if (fieldName.includes('ExcessUmbrella_') || fieldName.includes('Policy_ExcessLiability_')) {
-                    category = 'Excess/Umbrella';
-                } else if (fieldName.includes('WorkersCompensation') || fieldName.includes('Policy_WorkersCompensation')) {
-                    category = 'Workers Compensation';
-                } else if (fieldName.includes('CertificateHolder_')) {
-                    category = 'Certificate Holder';
-                }
-                
-                fieldGroups[category].push({ name: fieldName, value: fieldValue });
-            });
-            
-            // Create form sections
-            Object.entries(fieldGroups).forEach(([category, fields]) => {
-                if (fields.length === 0) return;
-                
-                const sectionDiv = popupWindow.document.createElement('div');
-                sectionDiv.className = 'mb-6 p-4 bg-gray-50 rounded-lg';
-                
-                const sectionTitle = popupWindow.document.createElement('h3');
-                sectionTitle.className = 'text-lg font-semibold mb-3 text-gray-800';
-                sectionTitle.textContent = `${category} (${fields.length} fields)`;
-                sectionDiv.appendChild(sectionTitle);
-                
-                const fieldsGrid = popupWindow.document.createElement('div');
-                fieldsGrid.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
-                
-                fields.forEach(({ name, value }) => {
-                    const fieldDiv = popupWindow.document.createElement('div');
-                    fieldDiv.className = 'space-y-1';
-                    
-                    const label = popupWindow.document.createElement('label');
-                    label.className = 'block text-sm font-medium text-gray-700';
-                    label.textContent = name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                    fieldDiv.appendChild(label);
-                    
-                    const input = popupWindow.document.createElement('input');
-                    input.type = 'text';
-                    input.className = 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent';
-                    input.value = value || '';
-                    input.placeholder = `Enter ${name.replace(/_/g, ' ').toLowerCase()}`;
-                    
-                    // Store the field name as a data attribute for easier retrieval
-                    input.setAttribute('data-field-name', name);
-                    
-                    // Add change event listener
-                    input.addEventListener('input', () => {
-                        fieldValues[name] = input.value;
-                    });
-                    
-                    fieldDiv.appendChild(input);
-                    fieldsGrid.appendChild(fieldDiv);
-                });
-                
-                sectionDiv.appendChild(fieldsGrid);
-                formContainer.appendChild(sectionDiv);
-            });
-            
-            // Add save button
-            const saveButton = popupWindow.document.createElement('button');
-            saveButton.className = 'mt-4 px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500';
-            saveButton.textContent = 'Save All Fields';
-            saveButton.onclick = () => savePDFFields(true);
-            formContainer.appendChild(saveButton);
-            
-            console.log('[PDF Popup] Custom form UI created successfully');
-            console.log('[PDF Popup] Form container has', formContainer.children.length, 'sections');
-            setSaveStatus('success', 'Custom form UI ready for editing. Fields are organized by category.');
-            
-        } catch (error) {
-            console.error('[PDF Popup] Error creating custom form UI:', error);
-            setSaveStatus('error', 'Failed to create form UI: ' + error.message);
-        }
-    }
+    // No custom form UI - PDF editing only
 
     // Manual save only - no field extraction function needed
 
-    async function savePDFFields(showStatus = true, fieldValuesPayload = null) {
-        if (isSaving) {
-            console.log('[PDF Popup] Save already in progress, skipping...');
-            return false;
-        }
-
-        isSaving = true;
-        
-        if (showStatus && saveBtn && saveStatusEl) {
-        saveBtn.disabled = true;
-        saveBtn.textContent = 'Saving...';
-        setSaveStatus('info', 'Saving field values...');
-        }
-
-        try {
-            // Get field values from custom form UI if not provided
-            if (!fieldValuesPayload) {
-                fieldValuesPayload = {};
-                const formContainer = popupWindow.document.getElementById('formFieldsContainer');
-                if (formContainer) {
-                    const inputs = formContainer.querySelectorAll('input[type="text"]');
-                    inputs.forEach(input => {
-                        const fieldName = input.getAttribute('data-field-name');
-                        if (fieldName) {
-                            fieldValuesPayload[fieldName] = input.value;
-                        }
-                    });
-                }
-            }
-            
-            // Check if there are actual changes to save
-            if (Object.keys(fieldValuesPayload).length === 0) {
-                if (showStatus) {
-                    setSaveStatus('info', 'No changes to save.');
-                }
-                return true;
-            }
-
-            const body = {
-                template_id: templateId,
-                account_id: accountId,
-                field_values: fieldValuesPayload,
-            };
-
-            console.log('[PDF Popup] Saving field values', body);
-            console.log('[PDF Popup] Save URL:', appOrigin + '/api/pdf/save-fields');
-
-            const response = await fetch(appOrigin + '/api/pdf/save-fields', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(body),
-            });
-
-            console.log('[PDF Popup] Save response status:', response.status);
-            const result = await response.json();
-            console.log('[PDF Popup] Save response', result);
-
-            if (result.success) {
-                if (showStatus) {
-                    setSaveStatus('success', `Field values saved successfully. ${result.field_count} fields saved.`);
-                }
-                return true;
-            } else {
-                if (showStatus) {
-                setSaveStatus('error', 'Save failed: ' + result.error);
-                }
-                return false;
-            }
-        } catch (error) {
-            console.error('[PDF Popup] Save error:', error);
-            if (showStatus) {
-            setSaveStatus('error', 'Save error: ' + error.message);
-            }
-            return false;
-        } finally {
-            isSaving = false;
-            if (showStatus && saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.textContent = 'Save Fields';
-            }
-        }
-    }
+    // Save function is now handled by the save callback
 
     // Manual save only - no auto-save functionality
 
@@ -1194,21 +982,15 @@ function initializePDFEditorPopup(popupWindow, context) {
                         currentPDFAPIs = apis;
                         popupWindow.PDF_DEBUG.apis = currentPDFAPIs;
                         
-                        // Adobe form APIs are not available, so we'll use custom form UI
-                        console.log('[PDF Popup] Adobe form APIs not available, using custom form UI');
-                        
-                        // Create custom form UI for field editing
-                        createCustomFormUI(savedFieldValues);
-                        
-                        console.log('[PDF Popup] Custom form UI initialized - manual save only');
+                        console.log('[PDF Popup] Adobe APIs loaded, PDF ready for editing');
+                        setSaveStatus('success', 'PDF loaded. Click on fields to edit, then press Ctrl+S to save.');
                     }).catch(async apiError => {
                         console.warn('[PDF Popup] Unable to access Adobe viewer APIs', apiError);
                         currentPDFAPIs = null;
                         popupWindow.PDF_DEBUG.apis = null;
 
-                        // Create custom form UI for field editing
-                        console.log('[PDF Popup] Creating custom form UI (no Adobe APIs)');
-                        createCustomFormUI(savedFieldValues);
+                        console.log('[PDF Popup] PDF loaded without Adobe APIs');
+                        setSaveStatus('info', 'PDF loaded. Use Ctrl+S to save changes.');
                     });
                 }).catch(error => {
                     console.error('[PDF Popup] Error loading PDF', error);
