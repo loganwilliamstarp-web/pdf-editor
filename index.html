@@ -406,14 +406,14 @@ function initializePDFEditorPopup(popupWindow, context) {
                 console.log('[PDF Popup] Stored server field definitions:', Object.keys(serverFields).length);
             }
 
-            if (data.success && data.field_values && Object.keys(data.field_values).length > 0) {
+            if (data.success && data.field_values) {
                 console.log('[PDF Popup] Loading existing field values', data.field_values);
+                console.log('[PDF Popup] Field values keys:', Object.keys(data.field_values || {}));
                 savedFieldValues = data.field_values; // Store for later application
                 return data.field_values;
             } else {
                 console.log('[PDF Popup] No existing field values found');
                 console.log('[PDF Popup] Field values object:', data.field_values);
-                console.log('[PDF Popup] Field values keys:', Object.keys(data.field_values || {}));
                 savedFieldValues = null;
                 return null;
             }
@@ -426,6 +426,17 @@ function initializePDFEditorPopup(popupWindow, context) {
 
     async function applySavedFieldValues(fieldValues) {
         if (!fieldValues || Object.keys(fieldValues).length === 0) {
+            console.log('[PDF Popup] No field values to apply');
+            setSaveStatus('info', 'PDF ready for editing. Save to store your changes.');
+            return;
+        }
+        
+        // Check if any fields have non-empty values
+        const nonEmptyFields = Object.entries(fieldValues).filter(([key, value]) => value && String(value).trim() !== '');
+        console.log('[PDF Popup] Non-empty fields to apply:', nonEmptyFields.length);
+        
+        if (nonEmptyFields.length === 0) {
+            console.log('[PDF Popup] All field values are empty, skipping application');
             setSaveStatus('info', 'PDF ready for editing. Save to store your changes.');
             return;
         }
@@ -957,11 +968,16 @@ function initializePDFEditorPopup(popupWindow, context) {
                         setSaveStatus('success', 'PDF loaded. Click on fields to edit, then press Ctrl+S to save.');
                         
                         // Apply saved field values if they exist
+                        console.log('[PDF Popup] Checking savedFieldValues:', savedFieldValues);
+                        console.log('[PDF Popup] savedFieldValues type:', typeof savedFieldValues);
+                        console.log('[PDF Popup] savedFieldValues keys:', savedFieldValues ? Object.keys(savedFieldValues) : 'null');
+                        console.log('[PDF Popup] savedFieldValues length:', savedFieldValues ? Object.keys(savedFieldValues).length : 0);
+                        
                         if (savedFieldValues && Object.keys(savedFieldValues).length > 0) {
                             console.log('[PDF Popup] Applying saved field values after PDF load');
                             await applySavedFieldValues(savedFieldValues);
                         } else {
-                            console.log('[PDF Popup] No saved field values to apply');
+                            console.log('[PDF Popup] No saved field values to apply - savedFieldValues:', savedFieldValues);
                         }
                     }).catch(async apiError => {
                         console.warn('[PDF Popup] Unable to access Adobe viewer APIs', apiError);
@@ -972,9 +988,12 @@ function initializePDFEditorPopup(popupWindow, context) {
                         setSaveStatus('info', 'PDF loaded. Use Ctrl+S to save changes.');
                         
                         // Try to apply saved field values even without APIs
+                        console.log('[PDF Popup] Checking savedFieldValues (no APIs):', savedFieldValues);
                         if (savedFieldValues && Object.keys(savedFieldValues).length > 0) {
                             console.log('[PDF Popup] Attempting to apply saved field values without APIs');
                             await applySavedFieldValues(savedFieldValues);
+                        } else {
+                            console.log('[PDF Popup] No saved field values to apply (no APIs) - savedFieldValues:', savedFieldValues);
                         }
                     });
                 }).catch(error => {
