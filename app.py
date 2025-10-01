@@ -1735,16 +1735,56 @@ def save_pdf_fields():
 
         # Check if template data already exists for this account
         cur.execute('''
-            SELECT id FROM template_data 
+            SELECT id, field_values FROM template_data 
             WHERE account_id = %s AND template_id = %s
         ''', (account_id, template_id))
 
         existing_data = cur.fetchone()
 
-        print("Saving field values for template {0}, account {1}: {2} fields".format(template_id, account_id, len(final_field_values)))
-        if final_field_values:
-            print("Field sample:", list(final_field_values.items())[:5])
-            non_empty_saved = {k: v for k, v in final_field_values.items() if v and str(v).strip()}
+        # Get existing field values for merging
+        existing_field_values = {}
+        if existing_data and existing_data.get('field_values'):
+            try:
+                existing_field_values = json.loads(existing_data['field_values'])
+                print(f"Found existing field values: {len(existing_field_values)} fields")
+            except (json.JSONDecodeError, TypeError):
+                print("Failed to parse existing field values, starting fresh")
+                existing_field_values = {}
+
+        # Merge logic: For checkboxes, preserve checked state
+        def is_checkbox_field(field_name):
+            """Check if a field is likely a checkbox based on name patterns"""
+            checkbox_indicators = ['indicator', 'checkbox', 'check', 'box']
+            return any(indicator in field_name.lower() for indicator in checkbox_indicators)
+
+        merged_field_values = {}
+        for field_name, current_value in final_field_values.items():
+            if is_checkbox_field(field_name):
+                # Checkbox merge logic
+                existing_value = existing_field_values.get(field_name, '')
+                
+                if current_value in ['/1', '/Yes', '/On', '1', 'Yes', 'On', True, 'true', 'True']:
+                    # Currently checked - save as checked
+                    merged_field_values[field_name] = current_value
+                    print(f"Checkbox '{field_name}': Currently checked, saving as checked")
+                elif existing_value in ['/1', '/Yes', '/On', '1', 'Yes', 'On', True, 'true', 'True']:
+                    # Preserve previously checked state
+                    merged_field_values[field_name] = existing_value
+                    print(f"Checkbox '{field_name}': Preserving previously checked state")
+                else:
+                    # Both unchecked - save current value
+                    merged_field_values[field_name] = current_value
+                    print(f"Checkbox '{field_name}': Both unchecked, saving current value")
+            else:
+                # For text fields, always use current value
+                merged_field_values[field_name] = current_value
+
+        print("Saving field values for template {0}, account {1}: {2} fields (merged from {3} current + {4} existing)".format(
+            template_id, account_id, len(merged_field_values), len(final_field_values), len(existing_field_values)))
+        
+        if merged_field_values:
+            print("Merged field sample:", list(merged_field_values.items())[:5])
+            non_empty_saved = {k: v for k, v in merged_field_values.items() if v and str(v).strip()}
             print(f"Non-empty fields being saved: {len(non_empty_saved)}")
             if non_empty_saved:
                 print("Non-empty field sample:", list(non_empty_saved.items())[:3])
@@ -1757,14 +1797,14 @@ def save_pdf_fields():
                 UPDATE template_data 
                 SET field_values = %s, updated_at = NOW(), version = version + 1
                 WHERE account_id = %s AND template_id = %s
-            ''', (json.dumps(final_field_values), account_id, template_id))
+            ''', (json.dumps(merged_field_values), account_id, template_id))
             print(f"UPDATE query executed, affected rows: {cur.rowcount}")
         else:
             print(f"Inserting new template_data record for account {account_id}, template {template_id}")
             cur.execute('''
                 INSERT INTO template_data (account_id, template_id, field_values)
                 VALUES (%s, %s, %s)
-            ''', (account_id, template_id, json.dumps(final_field_values)))
+            ''', (account_id, template_id, json.dumps(merged_field_values)))
             print(f"INSERT query executed, affected rows: {cur.rowcount}")
 
         template_fields_updated = False
@@ -1804,7 +1844,7 @@ def save_pdf_fields():
             'message': 'Field values saved successfully',
             'template_id': template_id,
             'account_id': account_id,
-            'field_count': len(final_field_values),
+            'field_count': len(merged_field_values),
             'extracted_fields_count': len(extracted_fields),
             'form_fields_updated': template_fields_updated,
             'form_fields': form_fields_payload['fields'] if form_fields_payload else None
