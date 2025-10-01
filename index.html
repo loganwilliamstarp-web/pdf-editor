@@ -194,7 +194,7 @@
         <!-- Status Bar -->
         <div class="bg-white border-t px-6 py-3">
             <div class="flex justify-between items-center">
-                <div id="saveStatus" class="text-sm text-blue-600">Preparing Adobe PDF viewer...</div>
+            <div id="saveStatus" class="text-sm text-blue-600">Preparing Adobe PDF viewer...</div>
                 <div class="text-xs text-gray-500">Manual save only - Press Ctrl+S to save</div>
             </div>
         </div>
@@ -287,10 +287,14 @@ function initializePDFEditorPopup(popupWindow, context) {
                 currentPDFViewer.getAPIs().then(apis => {
                     if (apis && apis.save) {
                         apis.save();
+                        setSaveStatus('info', 'Save triggered. Processing...');
                     } else {
                         console.warn('[PDF Popup] Save API not available');
                         setSaveStatus('error', 'Save not available. Use Ctrl+S in the PDF viewer.');
                     }
+                }).catch(error => {
+                    console.warn('[PDF Popup] Error accessing save API:', error);
+                    setSaveStatus('error', 'Save not available. Use Ctrl+S in the PDF viewer.');
                 });
             } else {
                 setSaveStatus('error', 'PDF viewer not ready. Use Ctrl+S in the PDF viewer.');
@@ -1097,72 +1101,93 @@ function initializePDFEditorPopup(popupWindow, context) {
                     setSaveStatus('info', 'PDF loaded. Applying saved field values...');
 
                     // Register save callback to extract field values from the actual saved PDF
-                    if (typeof AdobeDC !== 'undefined') {
-                        try {
-                            await adobeDCView.registerCallback(
-                                AdobeDC.View.Enum.CallbackType.SAVE_API,
-                                async (metaData, content, options) => {
-                                    console.log('[PDF Popup] Save callback triggered', { metaData, content: content?.length, options });
-                                    
-                                    try {
-                                        // Convert PDF content to blob
-                                        const blob = new Blob([new Uint8Array(content)], { type: 'application/pdf' });
+                    // Wait for AdobeDC to be fully loaded
+                    const registerSaveCallback = () => {
+                        if (typeof popupWindow.AdobeDC !== 'undefined' && popupWindow.AdobeDC.View) {
+                            try {
+                                adobeDCView.registerCallback(
+                                    popupWindow.AdobeDC.View.Enum.CallbackType.SAVE_API,
+                                    async (metaData, content, options) => {
+                                        console.log('[PDF Popup] Save callback triggered', { metaData, content: content?.length, options });
                                         
-                                        // Convert blob to base64 for server processing
-                                        const reader = new FileReader();
-                                        reader.onload = async () => {
-                                            const base64Content = reader.result;
+                                        try {
+                                            // Convert PDF content to blob
+                                            const blob = new Blob([new Uint8Array(content)], { type: 'application/pdf' });
                                             
-                                            // Send PDF content to server for extraction and saving
-                                            const response = await fetch(appOrigin + '/api/pdf/save-fields', {
-                                                method: 'POST',
-                                                headers: {
-                                                    'Content-Type': 'application/json',
-                                                },
-                                                body: JSON.stringify({
-                                                    template_id: templateId,
-                                                    account_id: accountId,
-                                                    pdf_content: base64Content,
-                                                    field_values: {} // Will be extracted from PDF
-                                                })
-                                            });
+                                            // Convert blob to base64 for server processing
+                                            const reader = new FileReader();
+                                            reader.onload = async () => {
+                                                const base64Content = reader.result;
+                                                
+                                                // Send PDF content to server for extraction and saving
+                                                const response = await fetch(appOrigin + '/api/pdf/save-fields', {
+                                                    method: 'POST',
+                                                    headers: {
+                                                        'Content-Type': 'application/json',
+                                                    },
+                                                    body: JSON.stringify({
+                                                        template_id: templateId,
+                                                        account_id: accountId,
+                                                        pdf_content: base64Content,
+                                                        field_values: {} // Will be extracted from PDF
+                                                    })
+                                                });
+                                                
+                                                const result = await response.json();
+                                                console.log('[PDF Popup] Save result:', result);
+                                                
+                                                if (result.success) {
+                                                    setSaveStatus('success', `Saved ${result.field_count} field values from PDF`);
+                                                    console.log('[PDF Popup] Successfully saved extracted field values');
+                                                } else {
+                                                    setSaveStatus('error', 'Save failed: ' + result.error);
+                                                    console.error('[PDF Popup] Save failed:', result.error);
+                                                }
+                                            };
+                                            reader.readAsDataURL(blob);
                                             
-                                            const result = await response.json();
-                                            console.log('[PDF Popup] Save result:', result);
-                                            
-                                            if (result.success) {
-                                                setSaveStatus('success', `Saved ${result.field_count} field values from PDF`);
-                                                console.log('[PDF Popup] Successfully saved extracted field values');
-                                            } else {
-                                                setSaveStatus('error', 'Save failed: ' + result.error);
-                                                console.error('[PDF Popup] Save failed:', result.error);
+                                        } catch (error) {
+                                            console.error('[PDF Popup] Error processing saved PDF:', error);
+                                            setSaveStatus('error', 'Error processing save: ' + error.message);
+                                        }
+                                        
+                                        return {
+                                            code: popupWindow.AdobeDC.View.Enum.ApiResponseCode.SUCCESS,
+                                            data: {
+                                                metaData: Object.assign(metaData, { updatedAt: new Date().toISOString() })
                                             }
                                         };
-                                        reader.readAsDataURL(blob);
-                                        
-                                    } catch (error) {
-                                        console.error('[PDF Popup] Error processing saved PDF:', error);
-                                        setSaveStatus('error', 'Error processing save: ' + error.message);
+                                    },
+                                    {
+                                        enableFocusPolling: false,
+                                        enableAutoSave: false
                                     }
-                                    
-                                    return {
-                                        code: AdobeDC.View.Enum.ApiResponseCode.SUCCESS,
-                                        data: {
-                                            metaData: Object.assign(metaData, { updatedAt: new Date().toISOString() })
-                                        }
-                                    };
-                                },
-                                {
-                                    enableFocusPolling: false,
-                                    enableAutoSave: false
-                                }
-                            );
-                            console.log('[PDF Popup] Save callback registered successfully');
-                        } catch (callbackError) {
-                            console.warn('[PDF Popup] Failed to register save callback:', callbackError);
+                                );
+                                console.log('[PDF Popup] Save callback registered successfully');
+                            } catch (callbackError) {
+                                console.warn('[PDF Popup] Failed to register save callback:', callbackError);
+                            }
+                        } else {
+                            console.warn('[PDF Popup] AdobeDC not available for save callback registration');
                         }
+                    };
+                    
+                    // Try to register immediately, or wait for AdobeDC to load
+                    if (typeof popupWindow.AdobeDC !== 'undefined') {
+                        registerSaveCallback();
                     } else {
-                        console.warn('[PDF Popup] AdobeDC not available for save callback registration');
+                        // Wait for AdobeDC to be available
+                        const checkAdobeDC = setInterval(() => {
+                            if (typeof popupWindow.AdobeDC !== 'undefined') {
+                                clearInterval(checkAdobeDC);
+                                registerSaveCallback();
+                            }
+                        }, 100);
+                        
+                        // Stop checking after 10 seconds
+                        setTimeout(() => {
+                            clearInterval(checkAdobeDC);
+                        }, 10000);
                     }
 
                     currentPDFViewer.getAPIs().then(async apis => {
@@ -1180,7 +1205,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                         console.warn('[PDF Popup] Unable to access Adobe viewer APIs', apiError);
                         currentPDFAPIs = null;
                         popupWindow.PDF_DEBUG.apis = null;
-                        
+
                         // Create custom form UI for field editing
                         console.log('[PDF Popup] Creating custom form UI (no Adobe APIs)');
                         createCustomFormUI(savedFieldValues);
@@ -1195,17 +1220,34 @@ function initializePDFEditorPopup(popupWindow, context) {
             }
         };
 
+        // Wait for Adobe SDK to be fully loaded
+        const waitForAdobeSDK = () => {
         if (popupWindow.AdobeDC && popupWindow.AdobeDC.View) {
             initializeViewer();
         } else {
-            popupWindow.document.addEventListener('adobe_dc_view_sdk.ready', initializeViewer, { once: true });
-        }
-
-        popupWindow.setTimeout(() => {
+                // Check every 100ms for AdobeDC to be available
+                const checkInterval = setInterval(() => {
+                    if (popupWindow.AdobeDC && popupWindow.AdobeDC.View) {
+                        clearInterval(checkInterval);
+                        initializeViewer();
+                    }
+                }, 100);
+                
+                // Stop checking after 10 seconds
+                setTimeout(() => {
+                    clearInterval(checkInterval);
             if (!popupWindow.AdobeDC || !popupWindow.AdobeDC.View) {
                 showAdobeSDKError(localTemplateId);
             }
-        }, 6000);
+                }, 10000);
+            }
+        };
+        
+        // Also listen for the SDK ready event as a fallback
+        popupWindow.document.addEventListener('adobe_dc_view_sdk.ready', initializeViewer, { once: true });
+        
+        // Start checking for AdobeDC
+        waitForAdobeSDK();
     }
 
     const startViewer = () => {
