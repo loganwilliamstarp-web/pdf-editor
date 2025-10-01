@@ -154,7 +154,7 @@
             <div class="px-6 py-4 flex justify-between items-center">
                 <h1 class="text-xl font-semibold text-gray-900">PDF Editor</h1>
                 <div class="flex space-x-3">
-                    <button id="saveBtn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700">Save PDF</button>
+                    <button id="saveBtn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-gray-400 hover:bg-gray-500" disabled>Save PDF (Use Ctrl+S)</button>
                     <button id="downloadBtn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download PDF</button>
                     <button id="closeBtn" class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50">Close</button>
                 </div>
@@ -165,7 +165,7 @@
         <div class="bg-blue-50 border-b px-6 py-3">
             <p class="text-sm text-blue-800">
                 <strong>PDF Editor:</strong> Click on any field in the PDF to edit it directly.
-                Press Ctrl+S or click the Save button to save your changes to the database.
+                <strong>Press Ctrl+S directly in the PDF viewer</strong> to save your changes to the database.
             </p>
         </div>
 
@@ -180,8 +180,8 @@
         <!-- Status Bar -->
         <div class="bg-white border-t px-6 py-3">
             <div class="flex justify-between items-center">
-            <div id="saveStatus" class="text-sm text-blue-600">Preparing Adobe PDF viewer...</div>
-                <div class="text-xs text-gray-500">Edit fields directly in PDF, then press Ctrl+S to save</div>
+                <div id="saveStatus" class="text-sm text-blue-600">Preparing Adobe PDF viewer...</div>
+                <div class="text-xs text-gray-500">Press Ctrl+S directly in the PDF viewer to save</div>
             </div>
         </div>
     </div>
@@ -263,51 +263,9 @@ function initializePDFEditorPopup(popupWindow, context) {
     }
 
     if (saveBtn) {
-        saveBtn.addEventListener('click', async () => {
-            // Manual save button - try multiple approaches to trigger save
-            console.log('[PDF Popup] Save button clicked');
-            setSaveStatus('info', 'Triggering save...');
-            
-            // Method 1: Try Adobe's save API directly
-            if (currentPDFViewer && currentPDFViewer.getAPIs) {
-                try {
-                    const apis = await currentPDFViewer.getAPIs();
-                    console.log('[PDF Popup] Available APIs:', Object.keys(apis || {}));
-                    
-                    if (apis && apis.save) {
-                        console.log('[PDF Popup] Using Adobe save API');
-                        apis.save();
-                        setSaveStatus('info', 'Save triggered via API. Processing...');
-                        return;
-                    }
-                } catch (apiError) {
-                    console.warn('[PDF Popup] Adobe save API failed:', apiError);
-                }
-            }
-            
-            // Method 2: Try to trigger save via keyboard event (Ctrl+S)
-            try {
-                console.log('[PDF Popup] Trying keyboard event approach');
-                const saveEvent = new KeyboardEvent('keydown', {
-                    key: 's',
-                    code: 'KeyS',
-                    ctrlKey: true,
-                    bubbles: true,
-                    cancelable: true
-                });
-                
-                // Dispatch to the PDF viewer container
-                const pdfContainer = popupWindow.document.getElementById('adobe-dc-view');
-                if (pdfContainer) {
-                    pdfContainer.dispatchEvent(saveEvent);
-                    setSaveStatus('info', 'Save triggered via keyboard event. Processing...');
-                } else {
-                    setSaveStatus('error', 'PDF container not found');
-                }
-            } catch (error) {
-                console.error('[PDF Popup] Error triggering save:', error);
-                setSaveStatus('error', 'Failed to trigger save. Use Ctrl+S in the PDF viewer.');
-            }
+        saveBtn.addEventListener('click', () => {
+            // Save button is disabled - show instruction
+            setSaveStatus('info', 'Please press Ctrl+S directly in the PDF viewer to save your changes.');
         });
     }
 
