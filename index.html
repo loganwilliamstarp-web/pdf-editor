@@ -193,6 +193,7 @@
     <script>
         // Global variables for popup window
         let currentPDFViewer = null;
+        let currentPDFAPIs = null;
         const accountId = '${accountId}';
         const templateId = '${templateId}';
         const templateName = 'PDF Template';
@@ -234,12 +235,19 @@
                         showSavePDF: false,
                         showLeftHandPanel: false,
                         showDisabledSaveButton: false
-                    }).then(adobeViewerController => {
+                    }).then(async adobeViewerController => {
                         currentPDFViewer = adobeViewerController;
                         console.log('PDF loaded successfully');
 
-                        // Load any existing field values
-                        loadExistingFieldValues(templateId);
+                        try {
+                            currentPDFAPIs = await adobeViewerController.getAPIs();
+                            console.log('Adobe viewer APIs ready');
+                        } catch (apiError) {
+                            console.warn('Unable to access Adobe viewer APIs', apiError);
+                            currentPDFAPIs = null;
+                        }
+
+                        await loadExistingFieldValues(templateId);
                     }).catch(error => {
                         console.error('Error loading PDF:', error);
                         showPDFError(templateId, error.message);
@@ -330,6 +338,14 @@
                     console.log('Loading existing field values:', data.field_values);
 
                     // Set field values in the PDF if Adobe viewer is available
+                    if (currentPDFAPIs && currentPDFAPIs.setFormFieldValues) {
+                        try {
+                            await currentPDFAPIs.setFormFieldValues({ formFieldValues: data.field_values });
+                        } catch (apiError) {
+                            console.warn('Adobe API setFormFieldValues failed, falling back', apiError);
+                        }
+                    }
+
                     if (currentPDFViewer && currentPDFViewer.setFormFields) {
                         await currentPDFViewer.setFormFields(data.field_values);
                     }
@@ -337,6 +353,162 @@
             } catch (error) {
                 console.error('Error loading existing field values:', error);
             }
+        }
+
+        function normalizeAdobeFieldDefinitions(raw) {
+            const source = Array.isArray(raw) ? raw
+                : (raw && Array.isArray(raw.formFieldList) ? raw.formFieldList
+                    : (raw && Array.isArray(raw.data) ? raw.data : []));
+
+            return source.map(item => {
+                if (!item) {
+                    return { name: '', type: 'text', label: '', required: false };
+                }
+
+                const name = item.name || item.fieldName || item.id || '';
+                const label = item.displayLabel || item.label || name;
+                const type = item.type || item.fieldType || 'text';
+                const required = Boolean(item.required || item.mandatory);
+                const readOnly = Boolean(item.readOnly || item.readonly);
+                const defaultValue = item.defaultValue !== undefined ? item.defaultValue : (item.value !== undefined ? item.value : null);
+
+                const normalized = {
+                    name,
+                    type,
+                    label,
+                    required,
+                    read_only: readOnly,
+                    default_value: defaultValue
+                };
+
+                if (Array.isArray(item.options) && item.options.length > 0) {
+                    normalized.options = item.options.map(option => {
+                        if (typeof option === 'string') {
+                            return option;
+                        }
+                        if (option && typeof option === 'object') {
+                            if (option.value !== undefined) {
+                                return String(option.value);
+                            }
+                            if (option.displayValue !== undefined) {
+                                return String(option.displayValue);
+                            }
+                        }
+                        return String(option ?? '');
+                    });
+                }
+
+                if (Array.isArray(item.locations) && item.locations.length > 0) {
+                    normalized.locations = item.locations.map(loc => ({
+                        page: loc && (loc.pageNumber ?? loc.page ?? null),
+                        x: loc && (loc.x ?? loc.left ?? null),
+                        y: loc && (loc.y ?? loc.top ?? null)
+                    }));
+                }
+
+                if (item.maxLength !== undefined) {
+                    normalized.max_length = item.maxLength;
+                }
+
+                return normalized;
+            });
+        }
+
+        function normalizeAdobeFieldValues(raw) {
+            if (!raw) {
+                return {};
+            }
+
+            if (Array.isArray(raw)) {
+                return raw.reduce((acc, entry) => {
+                    if (!entry) {
+                        return acc;
+                    }
+                    const key = entry.fieldName || entry.name || entry.id;
+                    if (!key) {
+                        return acc;
+                    }
+                    const value = entry.value !== undefined ? entry.value
+                        : (entry.fieldValue !== undefined ? entry.fieldValue : (entry.defaultValue !== undefined ? entry.defaultValue : ''));
+                    acc[key] = value;
+                    return acc;
+                }, {});
+            }
+
+            if (typeof raw === 'object') {
+                if (Array.isArray(raw.formFieldValues)) {
+                    return normalizeAdobeFieldValues(raw.formFieldValues);
+                }
+                if (raw.formFieldValues && typeof raw.formFieldValues === 'object') {
+                    return normalizeAdobeFieldValues(raw.formFieldValues);
+                }
+
+                return Object.keys(raw).reduce((acc, key) => {
+                    const entry = raw[key];
+                    acc[key] = (entry && typeof entry === 'object' && entry.value !== undefined) ? entry.value : entry;
+                    return acc;
+                }, {});
+            }
+
+            return {};
+        }
+
+        async function collectPdfFieldData() {
+            let apis = currentPDFAPIs;
+            if ((!apis || typeof apis.getFormFieldList !== 'function') && currentPDFViewer && typeof currentPDFViewer.getAPIs === 'function') {
+                try {
+                    apis = await currentPDFViewer.getAPIs();
+                    currentPDFAPIs = apis;
+                } catch (error) {
+                    console.warn('Unable to resolve Adobe APIs on demand', error);
+                    apis = null;
+                }
+            }
+
+            let definitions = [];
+            let values = {};
+
+            if (apis && typeof apis.getFormFieldList === 'function') {
+                try {
+                    const rawDefinitions = await apis.getFormFieldList({ includeFieldDefinition: true });
+                    definitions = normalizeAdobeFieldDefinitions(rawDefinitions);
+                } catch (error) {
+                    console.warn('Error fetching Adobe form field definitions', error);
+                }
+            }
+
+            if (apis && typeof apis.getFormFieldValues === 'function') {
+                try {
+                    const rawValues = await apis.getFormFieldValues();
+                    values = normalizeAdobeFieldValues(rawValues);
+                } catch (error) {
+                    console.warn('Error fetching Adobe form field values', error);
+                }
+            }
+
+            if ((!definitions.length || Object.keys(values).length === 0) && currentPDFViewer && typeof currentPDFViewer.getFormFields === 'function') {
+                try {
+                    const fallback = await currentPDFViewer.getFormFields();
+                    if (fallback && typeof fallback === 'object') {
+                        if (Object.keys(values).length === 0) {
+                            values = fallback;
+                        }
+                        if (!definitions.length) {
+                            definitions = Object.keys(fallback).map(name => ({
+                                name,
+                                type: 'text',
+                                label: name,
+                                required: false,
+                                default_value: fallback[name] ?? null
+                            }));
+                        }
+                    }
+                } catch (error) {
+                    console.warn('Fallback getFormFields failed', error);
+                }
+            }
+
+            return { definitions, values };
         }
 
         // Save PDF field values to database
@@ -350,31 +522,37 @@
             saveStatus.innerHTML = '<span class="text-blue-600">Saving field values...</span>';
 
             try {
-                // Get field values from Adobe PDF Embed API
-                if (currentPDFViewer) {
-                    const formFields = await currentPDFViewer.getFormFields();
-                    
-                    const response = await fetch('/api/pdf/save-fields', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            template_id: templateId,
-                            account_id: accountId,
-                            field_values: formFields
-                        })
-                    });
-
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        saveStatus.innerHTML = '<span class="text-green-600">Field values saved successfully.</span>';
-                    } else {
-                        saveStatus.innerHTML = '<span class="text-red-600">Save failed: ' + result.error + '</span>';
-                    }
-                } else {
+                if (!currentPDFViewer) {
                     saveStatus.innerHTML = '<span class="text-red-600">PDF viewer not available</span>';
+                    return;
+                }
+
+                const { definitions, values } = await collectPdfFieldData();
+                const fieldValuesPayload = (values && typeof values === 'object') ? values : {};
+                const requestBody = {
+                    template_id: templateId,
+                    account_id: accountId,
+                    field_values: fieldValuesPayload
+                };
+
+                if (Array.isArray(definitions) && definitions.length > 0) {
+                    requestBody.form_fields = definitions;
+                }
+
+                const response = await fetch('/api/pdf/save-fields', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    saveStatus.innerHTML = '<span class="text-green-600">Field values saved successfully.</span>';
+                } else {
+                    saveStatus.innerHTML = '<span class="text-red-600">Save failed: ' + result.error + '</span>';
                 }
             } catch (error) {
                 saveStatus.innerHTML = '<span class="text-red-600">Save error: ' + error.message + '</span>';

@@ -192,6 +192,57 @@ def create_database_schema():
         print(f"Database schema creation error: {e}")
         return False
 
+# Form field helpers
+def coerce_form_fields_payload(raw):
+    """Normalize stored form field data into a dictionary with a fields list."""
+    if raw in (None, ''):
+        payload = {}
+    elif isinstance(raw, dict):
+        payload = dict(raw)
+    elif isinstance(raw, list):
+        payload = {'fields': raw}
+    else:
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError):
+            parsed = {}
+        if isinstance(parsed, dict):
+            payload = parsed
+        elif isinstance(parsed, list):
+            payload = {'fields': parsed}
+        else:
+            payload = {}
+
+    fields = payload.get('fields')
+    if isinstance(fields, list):
+        payload['fields'] = [field for field in fields if isinstance(field, dict)]
+    else:
+        payload['fields'] = []
+
+    extraction = payload.get('extraction')
+    if isinstance(extraction, dict):
+        payload['extraction'] = dict(extraction)
+    elif 'extraction' in payload:
+        payload.pop('extraction', None)
+
+    return payload
+
+
+def enrich_form_fields_payload(payload, method=None):
+    """Attach extraction metadata to a normalized form field payload."""
+    normalized = coerce_form_fields_payload(payload)
+    extraction = normalized.get('extraction')
+    if not isinstance(extraction, dict):
+        extraction = {}
+
+    extraction['field_count'] = len(normalized['fields'])
+    extraction['updated_at'] = datetime.utcnow().replace(microsecond=0).isoformat() + 'Z'
+    if method:
+        extraction['method'] = method
+
+    normalized['extraction'] = extraction
+    return normalized
+
 @app.route("/")
 def serve_app():
     try:
@@ -320,11 +371,17 @@ def get_account_templates(account_id):
         templates = cur.fetchall()
         cur.close()
         conn.close()
-        
+
+        template_payloads = []
+        for row in templates:
+            template_data = dict(row)
+            template_data['form_fields'] = coerce_form_fields_payload(template_data.get('form_fields'))
+            template_payloads.append(template_data)
+
         return jsonify({
             'success': True,
             'account_id': account_id,
-            'templates': [dict(row) for row in templates]
+            'templates': template_payloads
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -547,17 +604,7 @@ def serve_pdf_template(template_id):
         template_type = (template.get('template_type') or '').lower()
         storage_path = template.get('storage_path') or ''
         pdf_blob = template.get('pdf_blob')
-        form_fields_raw = template.get('form_fields')
-
-        form_fields_data = {}
-        if form_fields_raw:
-            if isinstance(form_fields_raw, dict):
-                form_fields_data = form_fields_raw
-            else:
-                try:
-                    form_fields_data = json.loads(form_fields_raw) if form_fields_raw else {}
-                except (TypeError, ValueError):
-                    form_fields_data = {}
+        form_fields_payload = coerce_form_fields_payload(template.get('form_fields'))
 
         print(f"Serving PDF template: {template_name} (ID: {template_id})")
 
@@ -575,7 +622,7 @@ def serve_pdf_template(template_id):
 
         if not pdf_content:
             # Fallback to generated PDF if no stored asset is available
-            pdf_content = create_pdf_with_form_fields(template_name, form_fields_data)
+            pdf_content = create_pdf_with_form_fields(template_name, form_fields_payload)
         
         from flask import Response
         return Response(
@@ -596,7 +643,7 @@ def serve_pdf_template(template_id):
             cur.close()
             conn.close()
 
-def create_pdf_with_form_fields(template_name, form_fields_data):
+def create_pdf_with_form_fields(template_name, form_fields_payload):
     """Create a PDF with form fields based on template type"""
     
     # Define common ACORD form fields based on template name
@@ -808,51 +855,70 @@ def render_pdf(template_id):
 
 @app.route('/api/pdf/save-fields', methods=['POST'])
 def save_pdf_fields():
-    """Save PDF field values to database"""
+    """Save PDF field values to database and optionally update template metadata."""
     try:
         data = request.get_json()
+        if not isinstance(data, dict):
+            return jsonify({'success': False, 'error': 'Invalid JSON payload'}), 400
+
         template_id = data.get('template_id')
         account_id = data.get('account_id')
         field_values = data.get('field_values', {})
-        
+        form_fields_payload = None
+
+        if 'form_fields' in data:
+            form_fields_payload = enrich_form_fields_payload(data.get('form_fields'), method='adobe_embed_api')
+
         if not template_id or not account_id:
             return jsonify({'success': False, 'error': 'Missing template_id or account_id'}), 400
-        
+
         conn = get_db()
         cur = conn.cursor()
-        
+
         # Check if template data already exists for this account
         cur.execute('''
             SELECT id FROM template_data 
             WHERE account_id = %s AND template_id = %s
         ''', (account_id, template_id))
-        
+
         existing_data = cur.fetchone()
-        
+
         if existing_data:
-            # Update existing data
             cur.execute('''
                 UPDATE template_data 
                 SET field_values = %s, updated_at = NOW(), version = version + 1
                 WHERE account_id = %s AND template_id = %s
             ''', (json.dumps(field_values), account_id, template_id))
         else:
-            # Insert new data
             cur.execute('''
                 INSERT INTO template_data (account_id, template_id, field_values)
                 VALUES (%s, %s, %s)
             ''', (account_id, template_id, json.dumps(field_values)))
-        
+
+        template_fields_updated = False
+        if form_fields_payload is not None:
+            cur.execute('SELECT form_fields FROM master_templates WHERE id = %s', (template_id,))
+            template_row = cur.fetchone()
+            existing_fields = coerce_form_fields_payload(template_row.get('form_fields')) if template_row else {'fields': []}
+            if existing_fields != form_fields_payload:
+                cur.execute(
+                    'UPDATE master_templates SET form_fields = %s, updated_at = NOW() WHERE id = %s',
+                    (Json(form_fields_payload), template_id)
+                )
+                template_fields_updated = True
+
         conn.commit()
-        
+
         return jsonify({
             'success': True,
             'message': 'Field values saved successfully',
             'template_id': template_id,
             'account_id': account_id,
-            'field_count': len(field_values)
+            'field_count': len(field_values),
+            'form_fields_updated': template_fields_updated,
+            'form_fields': form_fields_payload['fields'] if form_fields_payload else None
         })
-        
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
@@ -860,37 +926,66 @@ def save_pdf_fields():
             cur.close()
             conn.close()
 
+
 @app.route('/api/pdf/get-fields/<template_id>/<account_id>')
 def get_pdf_fields(template_id, account_id):
     """Get saved PDF field values for a template and account"""
     try:
         conn = get_db()
         cur = conn.cursor()
-        
+
         cur.execute('''
-            SELECT field_values FROM template_data 
-            WHERE account_id = %s AND template_id = %s
+            SELECT
+                td.field_values,
+                mt.form_fields
+            FROM master_templates mt
+            LEFT JOIN template_data td
+                ON td.template_id = mt.id AND td.account_id = %s
+            WHERE mt.id = %s
         ''', (account_id, template_id))
-        
+
         data = cur.fetchone()
-        
-        if data:
-            return jsonify({
-                'success': True,
-                'field_values': json.loads(data[0]) if data[0] else {}
-            })
+
+        if not data:
+            return jsonify({'success': False, 'error': 'Template not found'}), 404
+
+        if isinstance(data, dict):
+            field_values_raw = data.get('field_values')
+            form_fields_raw = data.get('form_fields')
         else:
-            return jsonify({
-                'success': True,
-                'field_values': {}
-            })
-        
+            field_values_raw = data[0] if len(data) > 0 else None
+            form_fields_raw = data[1] if len(data) > 1 else None
+
+        if isinstance(field_values_raw, str):
+            try:
+                field_values_payload = json.loads(field_values_raw) if field_values_raw else {}
+            except (TypeError, ValueError):
+                field_values_payload = {}
+        elif field_values_raw is None:
+            field_values_payload = {}
+        else:
+            field_values_payload = field_values_raw
+
+        form_fields_payload = coerce_form_fields_payload(form_fields_raw)
+
+        return jsonify({
+            'success': True,
+            'template_id': template_id,
+            'account_id': account_id,
+            'field_values': field_values_payload,
+            'form_fields': form_fields_payload['fields'],
+            'form_field_metadata': form_fields_payload
+        })
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         if 'conn' in locals():
             cur.close()
             conn.close()
+
+
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
