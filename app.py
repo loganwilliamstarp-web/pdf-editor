@@ -1661,10 +1661,12 @@ def save_pdf_fields():
                             print(f"Found {len(fields_dict)} fields using get_fields()")
                             for field_name, field_obj in fields_dict.items():
                                 field_value = ''
-                                if hasattr(field_obj, 'get') and field_obj.get('/V'):
-                                    field_value = str(field_obj.get('/V'))
-                                elif hasattr(field_obj, 'get') and field_obj.get('/AS'):
+                                # For checkboxes, prioritize /AS (appearance state) over /V (value)
+                                # because /AS contains /Off, /Yes, /1, etc.
+                                if hasattr(field_obj, 'get') and field_obj.get('/AS'):
                                     field_value = str(field_obj.get('/AS'))
+                                elif hasattr(field_obj, 'get') and field_obj.get('/V'):
+                                    field_value = str(field_obj.get('/V'))
                                 extracted_fields[field_name] = field_value
                         else:
                             print("No fields found using get_fields()")
@@ -1691,10 +1693,11 @@ def save_pdf_fields():
                                             if '/T' in field_obj:  # Field name
                                                 field_name = str(field_obj['/T'])
                                                 field_value = ''
-                                                if '/V' in field_obj:  # Field value
-                                                    field_value = str(field_obj['/V'])
-                                                elif '/AS' in field_obj:  # Appearance state (for checkboxes)
+                                                # For checkboxes, prioritize /AS (appearance state) over /V (value)
+                                                if '/AS' in field_obj:  # Appearance state (for checkboxes)
                                                     field_value = str(field_obj['/AS'])
+                                                elif '/V' in field_obj:  # Field value
+                                                    field_value = str(field_obj['/V'])
                                                 extracted_fields[field_name] = field_value
                                                 print(f"Field {i+1}: {field_name} = '{field_value}'")
                                         except Exception as field_error:
