@@ -1209,6 +1209,72 @@ def debug_test():
         'version': 'latest'
     })
 
+@app.route('/api/debug/pdf-prefill/<template_id>/<account_id>')
+def debug_pdf_prefill(template_id, account_id):
+    """Debug endpoint to test PDF pre-filling logic"""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        
+        # Get template and account-specific data (same query as PDF template function)
+        try:
+            cur.execute('''
+                SELECT
+                    mt.template_name, mt.template_type, mt.storage_path, mt.file_size, mt.pdf_blob, mt.form_fields,
+                    td.field_values
+                FROM master_templates mt
+                LEFT JOIN template_data td
+                    ON td.template_id = mt.id AND td.account_id = %s
+                WHERE mt.id = %s
+            ''', (account_id, template_id))
+        except psycopg2.errors.UndefinedColumn:
+            conn.rollback()
+            cur.execute('''
+                SELECT
+                    mt.template_name, mt.template_type, mt.storage_path, mt.file_size, NULL::BYTEA AS pdf_blob, mt.form_fields,
+                    td.field_values
+                FROM master_templates mt
+                LEFT JOIN template_data td
+                    ON td.template_id = mt.id AND td.account_id = %s
+                WHERE mt.id = %s
+            ''', (account_id, template_id))
+        
+        result = cur.fetchone()
+        if not result:
+            return jsonify({'error': 'Template not found'}), 404
+        
+        field_values_raw = result.get('field_values') or {}
+        
+        # Parse field_values if it's a JSON string
+        if isinstance(field_values_raw, str):
+            try:
+                field_values = json.loads(field_values_raw)
+            except json.JSONDecodeError:
+                field_values = {}
+        else:
+            field_values = field_values_raw or {}
+        
+        non_empty_fields = {k: v for k, v in field_values.items() if v and str(v).strip()}
+        
+        return jsonify({
+            'template_id': template_id,
+            'account_id': account_id,
+            'template_name': result.get('template_name'),
+            'field_values_type': type(field_values_raw).__name__,
+            'field_values_raw_preview': str(field_values_raw)[:200] + '...' if len(str(field_values_raw)) > 200 else str(field_values_raw),
+            'parsed_field_count': len(field_values),
+            'non_empty_count': len(non_empty_fields),
+            'non_empty_fields': list(non_empty_fields.items())[:5],
+            'success': True
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            cur.close()
+            conn.close()
+
 @app.route('/api/debug/database', methods=['GET'])
 def debug_database():
     """Debug endpoint to check database contents"""
