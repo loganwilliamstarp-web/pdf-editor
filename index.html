@@ -165,8 +165,8 @@
         <!-- Info Bar -->
         <div class="bg-blue-50 border-b px-6 py-3">
             <p class="text-sm text-blue-800">
-                <strong>Manual Save Only:</strong> Click on any field in the PDF to edit it.
-                Press Ctrl+S or click the Save button to save your changes to the database.
+                <strong>Form Editor:</strong> Use the form fields below to edit values, then click "Save Fields" to save to the database.
+                The PDF viewer is for display only - all editing is done through the form below.
             </p>
         </div>
 
@@ -174,10 +174,10 @@
         <div class="flex-1 p-6">
             <div id="pdfEditorContainer" class="h-full border border-gray-300 rounded-lg bg-white">
                 <!-- PDF Viewer -->
-                <div id="adobe-dc-view" style="width: 100%; height: 60%;"></div>
+                <div id="adobe-dc-view" style="width: 100%; height: 50%;"></div>
                 
                 <!-- Custom Form Editor -->
-                <div id="formEditor" class="hidden bg-gray-50 border-t border-gray-300 p-4" style="height: 40%;">
+                <div id="formEditor" class="bg-gray-50 border-t border-gray-300 p-4" style="height: 50%;">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-lg font-semibold text-gray-800">Form Field Editor</h3>
                         <button id="toggleFormBtn" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm transition-colors">
@@ -195,7 +195,7 @@
         <div class="bg-white border-t px-6 py-3">
             <div class="flex justify-between items-center">
             <div id="saveStatus" class="text-sm text-blue-600">Preparing Adobe PDF viewer...</div>
-                <div class="text-xs text-gray-500">Manual save only - Press Ctrl+S to save</div>
+                <div class="text-xs text-gray-500">Use form fields below to edit, then click Save Fields</div>
             </div>
         </div>
     </div>
@@ -282,45 +282,27 @@ function initializePDFEditorPopup(popupWindow, context) {
 
     if (saveBtn) {
         saveBtn.addEventListener('click', () => {
-            // Manual save button - try multiple approaches to trigger save
+            // Manual save button - use custom form UI data since Adobe save API is not available
             console.log('[PDF Popup] Save button clicked');
+            setSaveStatus('info', 'Saving field values from form...');
             
-            // Method 1: Try Adobe's save API
-            if (currentPDFViewer && currentPDFViewer.getAPIs) {
-                currentPDFViewer.getAPIs().then(apis => {
-                    console.log('[PDF Popup] Available APIs:', Object.keys(apis || {}));
-                    
-                    if (apis && apis.save) {
-                        apis.save();
-                        setSaveStatus('info', 'Save triggered via API. Processing...');
-                    } else if (apis && apis.download) {
-                        // Try download as alternative
-                        apis.download();
-                        setSaveStatus('info', 'Download triggered. Processing...');
-                    } else {
-                        console.warn('[PDF Popup] Save API not available, trying alternative methods');
-                        // Method 2: Try to trigger save via keyboard event
-                        try {
-                            const saveEvent = new KeyboardEvent('keydown', {
-                                key: 's',
-                                code: 'KeyS',
-                                ctrlKey: true,
-                                bubbles: true
-                            });
-                            popupWindow.document.dispatchEvent(saveEvent);
-                            setSaveStatus('info', 'Save triggered via keyboard event. Processing...');
-                        } catch (keyboardError) {
-                            console.warn('[PDF Popup] Keyboard event failed:', keyboardError);
-                            setSaveStatus('error', 'Save not available. Use Ctrl+S in the PDF viewer.');
-                        }
+            // Get field values from custom form UI
+            const fieldValuesPayload = {};
+            const formContainer = popupWindow.document.getElementById('formFieldsContainer');
+            if (formContainer) {
+                const inputs = formContainer.querySelectorAll('input[type="text"]');
+                inputs.forEach(input => {
+                    const fieldName = input.getAttribute('data-field-name');
+                    if (fieldName) {
+                        fieldValuesPayload[fieldName] = input.value;
                     }
-                }).catch(error => {
-                    console.warn('[PDF Popup] Error accessing save API:', error);
-                    setSaveStatus('error', 'Save not available. Use Ctrl+S in the PDF viewer.');
                 });
-            } else {
-                setSaveStatus('error', 'PDF viewer not ready. Use Ctrl+S in the PDF viewer.');
             }
+            
+            console.log('[PDF Popup] Saving', Object.keys(fieldValuesPayload).length, 'field values');
+            
+            // Save the field values directly
+            savePDFFields(true, fieldValuesPayload);
         });
     }
 
@@ -958,7 +940,7 @@ function initializePDFEditorPopup(popupWindow, context) {
 
     // Manual save only - no field extraction function needed
 
-    async function savePDFFields(showStatus = true) {
+    async function savePDFFields(showStatus = true, fieldValuesPayload = null) {
         if (isSaving) {
             console.log('[PDF Popup] Save already in progress, skipping...');
             return false;
@@ -973,25 +955,19 @@ function initializePDFEditorPopup(popupWindow, context) {
         }
 
         try {
-            if (!currentPDFViewer) {
-                if (showStatus) {
-                setSaveStatus('error', 'PDF viewer not available.');
+            // Get field values from custom form UI if not provided
+            if (!fieldValuesPayload) {
+                fieldValuesPayload = {};
+                const formContainer = popupWindow.document.getElementById('formFieldsContainer');
+                if (formContainer) {
+                    const inputs = formContainer.querySelectorAll('input[type="text"]');
+                    inputs.forEach(input => {
+                        const fieldName = input.getAttribute('data-field-name');
+                        if (fieldName) {
+                            fieldValuesPayload[fieldName] = input.value;
+                        }
+                    });
                 }
-                return false;
-            }
-
-            // Get field values from custom form UI
-            const fieldValuesPayload = {};
-            const formContainer = popupWindow.document.getElementById('formFieldsContainer');
-            if (formContainer) {
-                const inputs = formContainer.querySelectorAll('input[type="text"]');
-                inputs.forEach(input => {
-                    // Get field name from data attribute
-                    const fieldName = input.getAttribute('data-field-name');
-                    if (fieldName) {
-                        fieldValuesPayload[fieldName] = input.value;
-                    }
-                });
             }
             
             // Check if there are actual changes to save
@@ -1007,8 +983,6 @@ function initializePDFEditorPopup(popupWindow, context) {
                 account_id: accountId,
                 field_values: fieldValuesPayload,
             };
-
-            // No need for form_fields since we're using custom form UI
 
             console.log('[PDF Popup] Saving field values', body);
             console.log('[PDF Popup] Save URL:', appOrigin + '/api/pdf/save-fields');
@@ -1027,7 +1001,7 @@ function initializePDFEditorPopup(popupWindow, context) {
 
             if (result.success) {
                 if (showStatus) {
-                setSaveStatus('success', 'Field values saved successfully.');
+                    setSaveStatus('success', `Field values saved successfully. ${result.field_count} fields saved.`);
                 }
                 return true;
             } else {
@@ -1248,10 +1222,10 @@ function initializePDFEditorPopup(popupWindow, context) {
 
         // Wait for Adobe SDK to be fully loaded with better error handling
         const waitForAdobeSDK = () => {
-            if (popupWindow.AdobeDC && popupWindow.AdobeDC.View) {
+        if (popupWindow.AdobeDC && popupWindow.AdobeDC.View) {
                 console.log('[PDF Popup] AdobeDC is available, initializing viewer');
-                initializeViewer();
-            } else {
+            initializeViewer();
+        } else {
                 console.log('[PDF Popup] AdobeDC not yet available, waiting...');
                 // Check every 200ms for AdobeDC to be available (less frequent to reduce load)
                 const checkInterval = setInterval(() => {
@@ -1265,10 +1239,10 @@ function initializePDFEditorPopup(popupWindow, context) {
                 // Stop checking after 15 seconds
                 setTimeout(() => {
                     clearInterval(checkInterval);
-                    if (!popupWindow.AdobeDC || !popupWindow.AdobeDC.View) {
+            if (!popupWindow.AdobeDC || !popupWindow.AdobeDC.View) {
                         console.warn('[PDF Popup] AdobeDC not available after 15 seconds, showing error');
-                        showAdobeSDKError(localTemplateId);
-                    }
+                showAdobeSDKError(localTemplateId);
+            }
                 }, 15000);
             }
         };
