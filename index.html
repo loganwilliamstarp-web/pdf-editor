@@ -282,15 +282,37 @@ function initializePDFEditorPopup(popupWindow, context) {
 
     if (saveBtn) {
         saveBtn.addEventListener('click', () => {
-            // Manual save button - this will trigger Adobe's save callback
+            // Manual save button - try multiple approaches to trigger save
+            console.log('[PDF Popup] Save button clicked');
+            
+            // Method 1: Try Adobe's save API
             if (currentPDFViewer && currentPDFViewer.getAPIs) {
                 currentPDFViewer.getAPIs().then(apis => {
+                    console.log('[PDF Popup] Available APIs:', Object.keys(apis || {}));
+                    
                     if (apis && apis.save) {
                         apis.save();
-                        setSaveStatus('info', 'Save triggered. Processing...');
+                        setSaveStatus('info', 'Save triggered via API. Processing...');
+                    } else if (apis && apis.download) {
+                        // Try download as alternative
+                        apis.download();
+                        setSaveStatus('info', 'Download triggered. Processing...');
                     } else {
-                        console.warn('[PDF Popup] Save API not available');
-                        setSaveStatus('error', 'Save not available. Use Ctrl+S in the PDF viewer.');
+                        console.warn('[PDF Popup] Save API not available, trying alternative methods');
+                        // Method 2: Try to trigger save via keyboard event
+                        try {
+                            const saveEvent = new KeyboardEvent('keydown', {
+                                key: 's',
+                                code: 'KeyS',
+                                ctrlKey: true,
+                                bubbles: true
+                            });
+                            popupWindow.document.dispatchEvent(saveEvent);
+                            setSaveStatus('info', 'Save triggered via keyboard event. Processing...');
+                        } catch (keyboardError) {
+                            console.warn('[PDF Popup] Keyboard event failed:', keyboardError);
+                            setSaveStatus('error', 'Save not available. Use Ctrl+S in the PDF viewer.');
+                        }
                     }
                 }).catch(error => {
                     console.warn('[PDF Popup] Error accessing save API:', error);
@@ -1070,6 +1092,14 @@ function initializePDFEditorPopup(popupWindow, context) {
 
         const initializeViewer = () => {
             try {
+                // Ensure the container exists and is a proper DOM element
+                const container = popupWindow.document.getElementById('adobe-dc-view');
+                if (!container) {
+                    throw new Error('Adobe PDF container not found');
+                }
+                
+                console.log('[PDF Popup] Initializing Adobe PDF viewer with container:', container);
+                
                 const adobeDCView = new popupWindow.AdobeDC.View({
                     clientId: 'f19373e4703e4d9c98f6d9db1db9a1cb',
                     divId: 'adobe-dc-view',
@@ -1172,23 +1202,19 @@ function initializePDFEditorPopup(popupWindow, context) {
                         }
                     };
                     
-                    // Try to register immediately, or wait for AdobeDC to load
-                    if (typeof popupWindow.AdobeDC !== 'undefined') {
-                        registerSaveCallback();
-                    } else {
-                        // Wait for AdobeDC to be available
-                        const checkAdobeDC = setInterval(() => {
-                            if (typeof popupWindow.AdobeDC !== 'undefined') {
-                                clearInterval(checkAdobeDC);
-                                registerSaveCallback();
-                            }
-                        }, 100);
-                        
-                        // Stop checking after 10 seconds
+                    // Register save callback with better timing
+                    const registerSaveCallbackWithDelay = () => {
+                        // Add a small delay to ensure the viewer is fully initialized
                         setTimeout(() => {
-                            clearInterval(checkAdobeDC);
-                        }, 10000);
-                    }
+                            if (typeof popupWindow.AdobeDC !== 'undefined' && popupWindow.AdobeDC.View) {
+                                registerSaveCallback();
+                            } else {
+                                console.warn('[PDF Popup] AdobeDC not available for save callback registration');
+                            }
+                        }, 1000);
+                    };
+                    
+                    registerSaveCallbackWithDelay();
 
                     currentPDFViewer.getAPIs().then(async apis => {
                         currentPDFAPIs = apis;
@@ -1220,34 +1246,41 @@ function initializePDFEditorPopup(popupWindow, context) {
             }
         };
 
-        // Wait for Adobe SDK to be fully loaded
+        // Wait for Adobe SDK to be fully loaded with better error handling
         const waitForAdobeSDK = () => {
-        if (popupWindow.AdobeDC && popupWindow.AdobeDC.View) {
-            initializeViewer();
-        } else {
-                // Check every 100ms for AdobeDC to be available
+            if (popupWindow.AdobeDC && popupWindow.AdobeDC.View) {
+                console.log('[PDF Popup] AdobeDC is available, initializing viewer');
+                initializeViewer();
+            } else {
+                console.log('[PDF Popup] AdobeDC not yet available, waiting...');
+                // Check every 200ms for AdobeDC to be available (less frequent to reduce load)
                 const checkInterval = setInterval(() => {
                     if (popupWindow.AdobeDC && popupWindow.AdobeDC.View) {
                         clearInterval(checkInterval);
+                        console.log('[PDF Popup] AdobeDC became available, initializing viewer');
                         initializeViewer();
                     }
-                }, 100);
+                }, 200);
                 
-                // Stop checking after 10 seconds
+                // Stop checking after 15 seconds
                 setTimeout(() => {
                     clearInterval(checkInterval);
-            if (!popupWindow.AdobeDC || !popupWindow.AdobeDC.View) {
-                showAdobeSDKError(localTemplateId);
-            }
-                }, 10000);
+                    if (!popupWindow.AdobeDC || !popupWindow.AdobeDC.View) {
+                        console.warn('[PDF Popup] AdobeDC not available after 15 seconds, showing error');
+                        showAdobeSDKError(localTemplateId);
+                    }
+                }, 15000);
             }
         };
         
-        // Also listen for the SDK ready event as a fallback
-        popupWindow.document.addEventListener('adobe_dc_view_sdk.ready', initializeViewer, { once: true });
+        // Listen for the SDK ready event as a fallback
+        popupWindow.document.addEventListener('adobe_dc_view_sdk.ready', () => {
+            console.log('[PDF Popup] Adobe SDK ready event received');
+            initializeViewer();
+        }, { once: true });
         
-        // Start checking for AdobeDC
-        waitForAdobeSDK();
+        // Start checking for AdobeDC after a short delay to let scripts load
+        setTimeout(waitForAdobeSDK, 500);
     }
 
     const startViewer = () => {
