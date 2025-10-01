@@ -914,7 +914,7 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                         print(f"Valid states: {widget.field_states}")
                                     
                                     # Try to set it and see what happens
-                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X']
+                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X', '/1']
                                     print(f"Should be checked: {is_checked}")
                                     
                                     # Try setting as boolean
