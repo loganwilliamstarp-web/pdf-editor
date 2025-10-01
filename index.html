@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Certificate Management System</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>PDF</text></svg>">
-    <link rel="stylesheet" id="tailwind-main-styles" href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.4/dist/tailwind.min.css">
+    <link rel="stylesheet" id="tailwind-main-styles" href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.4/tailwind.min.css">
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 </head>
 <body>
@@ -206,7 +206,7 @@
                 const link = document.createElement('link');
                 link.id = 'tailwind-popup-styles';
                 link.rel = 'stylesheet';
-                link.href = 'https://cdn.jsdelivr.net/npm/tailwindcss@3.4.4/dist/tailwind.min.css';
+                link.href = 'https://cdn.jsdelivr.net/npm/tailwindcss@3.4.4/tailwind.min.css';
                 link.onload = function() { resolve(); };
                 link.onerror = function() { reject(new Error('Tailwind stylesheet failed to load')); };
                 document.head.appendChild(link);
