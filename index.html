@@ -395,8 +395,14 @@ function initializePDFEditorPopup(popupWindow, context) {
 
     async function loadExistingFieldValues(localTemplateId) {
         try {
-            const response = await fetch(appOrigin + '/api/pdf/get-fields/' + localTemplateId + '/' + accountId);
+            const url = appOrigin + '/api/pdf/get-fields/' + localTemplateId + '/' + accountId;
+            console.log('[PDF Popup] Loading field values from:', url);
+            
+            const response = await fetch(url);
+            console.log('[PDF Popup] Load response status:', response.status);
+            
             const data = await response.json();
+            console.log('[PDF Popup] Load response data:', data);
 
             if (data.success && data.field_values && Object.keys(data.field_values).length > 0) {
                 console.log('[PDF Popup] Loading existing field values', data.field_values);
@@ -706,6 +712,7 @@ function initializePDFEditorPopup(popupWindow, context) {
             }
 
             console.log('[PDF Popup] Saving field values', body);
+            console.log('[PDF Popup] Save URL:', appOrigin + '/api/pdf/save-fields');
 
             const response = await fetch(appOrigin + '/api/pdf/save-fields', {
                 method: 'POST',
@@ -715,6 +722,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                 body: JSON.stringify(body),
             });
 
+            console.log('[PDF Popup] Save response status:', response.status);
             const result = await response.json();
             console.log('[PDF Popup] Save response', result);
 
@@ -809,6 +817,8 @@ function initializePDFEditorPopup(popupWindow, context) {
                         lastKnownFieldValues = { ...currentValues };
                         setAutoSaveStatus('Auto-save: Changes detected');
                         console.log('[PDF Popup] Field values changed, marking for save');
+                        console.log('[PDF Popup] Current values:', currentValues);
+                        console.log('[PDF Popup] Last known values:', lastKnownFieldValues);
                     }
                 }).catch(error => {
                     console.warn('[PDF Popup] Change detection polling failed:', error);
