@@ -730,15 +730,28 @@ def serve_pdf_template_with_fields(template_id, account_id):
         cur = conn.cursor()
         
         # Get template and account-specific data
-        cur.execute('''
-            SELECT
-                mt.template_name, mt.template_type, mt.storage_path, mt.file_size, mt.pdf_blob, mt.form_fields,
-                td.field_values
-            FROM master_templates mt
-            LEFT JOIN template_data td
-                ON td.template_id = mt.id AND td.account_id = %s
-            WHERE mt.id = %s
-        ''', (account_id, template_id))
+        try:
+            cur.execute('''
+                SELECT
+                    mt.template_name, mt.template_type, mt.storage_path, mt.file_size, mt.pdf_blob, mt.form_fields,
+                    td.field_values
+                FROM master_templates mt
+                LEFT JOIN template_data td
+                    ON td.template_id = mt.id AND td.account_id = %s
+                WHERE mt.id = %s
+            ''', (account_id, template_id))
+        except psycopg2.errors.UndefinedColumn:
+            # Fallback if pdf_blob column doesn't exist
+            conn.rollback()
+            cur.execute('''
+                SELECT
+                    mt.template_name, mt.template_type, mt.storage_path, mt.file_size, NULL::BYTEA AS pdf_blob, mt.form_fields,
+                    td.field_values
+                FROM master_templates mt
+                LEFT JOIN template_data td
+                    ON td.template_id = mt.id AND td.account_id = %s
+                WHERE mt.id = %s
+            ''', (account_id, template_id))
         
         result = cur.fetchone()
         if not result:
@@ -770,9 +783,24 @@ def serve_pdf_template_with_fields(template_id, account_id):
             # Fallback to generated PDF if no stored asset is available
             pdf_content = create_pdf_with_form_fields(template_name, form_fields_payload)
 
-        # If no field values saved, return original template
+        # If no field values saved, create initial template data for this account
         if not field_values:
-            print("No field values found, returning original template")
+            print("No field values found, creating initial template data for account")
+            
+            # Create initial template_data record with empty field values
+            try:
+                cur.execute('''
+                    INSERT INTO template_data (account_id, template_id, field_values)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (account_id, template_id) DO NOTHING
+                ''', (account_id, template_id, json.dumps({})))
+                conn.commit()
+                print(f"Created initial template data for account {account_id}")
+            except Exception as init_error:
+                print(f"Warning: Could not create initial template data: {init_error}")
+                conn.rollback()
+            
+            # Return original template
             from flask import Response
             return Response(
                 pdf_content,
