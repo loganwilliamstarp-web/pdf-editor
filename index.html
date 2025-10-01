@@ -835,7 +835,8 @@ function initializePDFEditorPopup(popupWindow, context) {
 
     async function downloadPDF() {
         try {
-            const response = await fetch(appOrigin + '/api/pdf/template/' + templateId);
+            // Download the pre-filled PDF with account-specific data
+            const response = await fetch(appOrigin + '/api/pdf/template/' + templateId + '/' + accountId);
             if (!response.ok) {
                 throw new Error('Failed to download PDF');
             }
@@ -844,7 +845,7 @@ function initializePDFEditorPopup(popupWindow, context) {
             const url = popupWindow.URL.createObjectURL(blob);
             const link = doc.createElement('a');
             link.href = url;
-            link.download = 'template_' + templateId + '.pdf';
+            link.download = 'filled_template_' + templateId + '.pdf';
             doc.body.appendChild(link);
             link.click();
             link.remove();
