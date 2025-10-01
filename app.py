@@ -907,33 +907,44 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                     print(f"✓ Filled text field '{field_name}': '{saved_value}'")
                                 
                                 elif field_type in ['CheckBox', 'Button', 'Btn']:
-                                    print(f"\n=== CHECKBOX DIAGNOSTIC: {field_name} ===")
-                                    print(f"Saved value: '{saved_value}' (type: {type(saved_value)})")
-                                    print(f"Current widget value: '{widget.field_value}'")
-                                    print(f"Field flags: {widget.field_flags}")
-                                    
-                                    # Check what states this checkbox accepts
-                                    if hasattr(widget, 'field_states'):
-                                        print(f"Valid states: {widget.field_states}")
+                                    print(f"\n=== CHECKBOX: {field_name} ===")
                                     
                                     # Check if should be checked
                                     is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X', '/1', '/Yes', '/On']
-                                    print(f"Should be checked: {is_checked}")
                                     
-                                    # Set checkbox value - use empty string for unchecked, True for checked
+                                    # Get available appearance states for this checkbox
+                                    # This tells us what values the checkbox accepts (e.g., 'Yes', 'X', '1', etc.)
+                                    on_state = None
+                                    if hasattr(widget, 'field_states') and widget.field_states:
+                                        print(f"Available states: {widget.field_states}")
+                                        # field_states is typically a list like ['Off', 'Yes'] or ['Off', 'X']
+                                        # Find the "on" state (anything other than 'Off')
+                                        for state in widget.field_states:
+                                            if state not in ['Off', 'off', '']:
+                                                on_state = state
+                                                break
+                                    
+                                    # Set checkbox value using the correct appearance state
                                     try:
                                         if is_checked:
-                                            widget.field_value = True
+                                            if on_state:
+                                                # Use the native appearance state (e.g., 'Yes', 'X', '1')
+                                                widget.field_value = on_state
+                                                print(f"✓ Checked using native state: '{on_state}'")
+                                            else:
+                                                # Fallback to True if we can't determine the state
+                                                widget.field_value = True
+                                                print(f"✓ Checked using fallback: True")
                                         else:
-                                            # For unchecked, set to empty string or Off state
-                                            widget.field_value = ''
+                                            # For unchecked, use 'Off' or empty string
+                                            widget.field_value = 'Off'
+                                            print(f"✓ Unchecked: 'Off'")
+                                        
                                         widget.update()
-                                        print(f"After set: '{widget.field_value}' (checked={is_checked})")
                                     except Exception as e:
-                                        print(f"Checkbox set failed: {e}")
+                                        print(f"✗ Checkbox set failed: {e}")
                                     
                                     filled_count += 1
-                                    print(f"=== END DIAGNOSTIC ===\n")
                                 
                                 elif field_type == 'RadioButton':
                                     # Try different values for radio buttons
