@@ -734,6 +734,9 @@ def serve_pdf_template(template_id):
 @app.route('/api/pdf/template/<template_id>/<account_id>')
 def serve_pdf_template_with_fields(template_id, account_id):
     """Serve PDF template with account-specific field values filled in"""
+    print(f"=== PDF TEMPLATE REQUESTED ===")
+    print(f"Template ID: {template_id}")
+    print(f"Account ID: {account_id}")
     try:
         conn = get_db()
         cur = conn.cursor()
