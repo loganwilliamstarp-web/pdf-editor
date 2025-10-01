@@ -188,13 +188,13 @@
     popupWindow.document.write(popupHTML);
     popupWindow.document.close();
 
-    initializePDFEditorPopup(popupWindow, { templateId, accountId });
+    initializePDFEditorPopup(popupWindow, { templateId, accountId, appOrigin: window.location.origin });
 
     popupWindow.focus();
 }
 
 function initializePDFEditorPopup(popupWindow, context) {
-    const { templateId, accountId } = context;
+    const { templateId, accountId, appOrigin: forcedOrigin } = context;
     const doc = popupWindow.document;
 
     if (!doc) {
@@ -202,7 +202,8 @@ function initializePDFEditorPopup(popupWindow, context) {
         return;
     }
 
-    const appOrigin = (popupWindow.opener && popupWindow.opener.location && popupWindow.opener.location.origin)
+    const appOrigin = forcedOrigin
+        || (popupWindow.opener && popupWindow.opener.location && popupWindow.opener.location.origin)
         || (popupWindow.location && popupWindow.location.origin)
         || window.location.origin;
     console.log('[PDF Popup] using origin', appOrigin);
