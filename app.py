@@ -916,17 +916,21 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                     if hasattr(widget, 'field_states'):
                                         print(f"Valid states: {widget.field_states}")
                                     
-                                    # Try to set it and see what happens
+                                    # Check if should be checked
                                     is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X', '/1', '/Yes', '/On']
                                     print(f"Should be checked: {is_checked}")
                                     
-                                    # Try setting as boolean
+                                    # Set checkbox value - use empty string for unchecked, True for checked
                                     try:
-                                        widget.field_value = is_checked
+                                        if is_checked:
+                                            widget.field_value = True
+                                        else:
+                                            # For unchecked, set to empty string or Off state
+                                            widget.field_value = ''
                                         widget.update()
-                                        print(f"After boolean set: '{widget.field_value}'")
+                                        print(f"After set: '{widget.field_value}' (checked={is_checked})")
                                     except Exception as e:
-                                        print(f"Boolean set failed: {e}")
+                                        print(f"Checkbox set failed: {e}")
                                     
                                     filled_count += 1
                                     print(f"=== END DIAGNOSTIC ===\n")
