@@ -877,15 +877,19 @@ function initializePDFEditorPopup(popupWindow, context) {
                                     popupWindow.AdobeDC.View.Enum.CallbackType.SAVE_API,
                                     async (metaData, content, options) => {
                                         console.log('[PDF Popup] Save callback triggered', { metaData, content: content?.length, options });
+                                        console.log('[PDF Popup] Content type:', typeof content, 'Length:', content ? content.length : 'null');
                                         
                                         try {
                                             // Convert PDF content to blob
                                             const blob = new Blob([new Uint8Array(content)], { type: 'application/pdf' });
+                                            console.log('[PDF Popup] Blob created, size:', blob.size, 'type:', blob.type);
                                             
                                             // Convert blob to base64 for server processing
                                             const reader = new FileReader();
                                             reader.onload = async () => {
                                                 const base64Content = reader.result;
+                                                console.log('[PDF Popup] Base64 content length:', base64Content.length);
+                                                console.log('[PDF Popup] Base64 preview:', base64Content.substring(0, 100) + '...');
                                                 
                                                 console.log('[PDF Popup] Sending PDF to server for extraction...');
                                                 

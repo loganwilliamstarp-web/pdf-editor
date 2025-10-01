@@ -1145,24 +1145,60 @@ def save_pdf_fields():
                 # Extract fields using pypdf
                 if PYPDF_AVAILABLE:
                     pdf_reader = PdfReader(io.BytesIO(pdf_bytes))
+                    print(f"PDF reader created, pages: {len(pdf_reader.pages)}")
                     
-                    # Extract form fields
-                    if '/AcroForm' in pdf_reader.trailer['/Root']:
-                        acro_form = pdf_reader.trailer['/Root']['/AcroForm']
-                        if '/Fields' in acro_form:
-                            fields = acro_form['/Fields']
-                            for field in fields:
-                                field_obj = field.get_object()
-                                if '/T' in field_obj:  # Field name
-                                    field_name = field_obj['/T']
-                                    field_value = ''
-                                    if '/V' in field_obj:  # Field value
-                                        field_value = str(field_obj['/V'])
-                                    elif '/AS' in field_obj:  # Appearance state (for checkboxes)
-                                        field_value = str(field_obj['/AS'])
-                                    extracted_fields[field_name] = field_value
+                    # Try multiple extraction methods
+                    try:
+                        # Method 1: Use get_fields() method
+                        fields_dict = pdf_reader.get_fields()
+                        if fields_dict:
+                            print(f"Found {len(fields_dict)} fields using get_fields()")
+                            for field_name, field_obj in fields_dict.items():
+                                field_value = ''
+                                if hasattr(field_obj, 'get') and field_obj.get('/V'):
+                                    field_value = str(field_obj.get('/V'))
+                                elif hasattr(field_obj, 'get') and field_obj.get('/AS'):
+                                    field_value = str(field_obj.get('/AS'))
+                                extracted_fields[field_name] = field_value
+                        else:
+                            print("No fields found using get_fields()")
+                    except Exception as e:
+                        print(f"get_fields() failed: {e}")
                     
-                    print(f"Extracted {len(extracted_fields)} fields from PDF content")
+                    # Method 2: Manual AcroForm extraction
+                    if not extracted_fields:
+                        try:
+                            root = pdf_reader.trailer['/Root']
+                            print(f"PDF root keys: {list(root.keys()) if hasattr(root, 'keys') else 'No keys'}")
+                            
+                            if '/AcroForm' in root:
+                                acro_form = root['/AcroForm']
+                                print(f"AcroForm found, keys: {list(acro_form.keys()) if hasattr(acro_form, 'keys') else 'No keys'}")
+                                
+                                if '/Fields' in acro_form:
+                                    fields = acro_form['/Fields']
+                                    print(f"Found {len(fields)} field objects")
+                                    
+                                    for i, field in enumerate(fields):
+                                        try:
+                                            field_obj = field.get_object()
+                                            if '/T' in field_obj:  # Field name
+                                                field_name = str(field_obj['/T'])
+                                                field_value = ''
+                                                if '/V' in field_obj:  # Field value
+                                                    field_value = str(field_obj['/V'])
+                                                elif '/AS' in field_obj:  # Appearance state (for checkboxes)
+                                                    field_value = str(field_obj['/AS'])
+                                                extracted_fields[field_name] = field_value
+                                                print(f"Field {i+1}: {field_name} = '{field_value}'")
+                                        except Exception as field_error:
+                                            print(f"Error processing field {i}: {field_error}")
+                            else:
+                                print("No /AcroForm found in PDF root")
+                        except Exception as e:
+                            print(f"Manual AcroForm extraction failed: {e}")
+                    
+                    print(f"Final extracted {len(extracted_fields)} fields from PDF content")
                     
                     # Use extracted fields if they have values, otherwise use provided field_values
                     if extracted_fields:
