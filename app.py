@@ -987,8 +987,8 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                             widget.field_value = is_checked
                                             print(f"  Set checkbox to boolean: {is_checked}")
                                         
-                                        # Don't call update() to preserve original appearance
-                                        # widget.update()  # Commented out to preserve styling
+                                        # Call update() to ensure checkbox renders
+                                        widget.update()  # Required for rendering
                                         
                                         filled_count += 1
                                         print(f"Checkbox '{field_name}': SUCCESS (value: '{saved_value}')")
@@ -1030,8 +1030,8 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                             widget.field_value = 'X' if is_checked else 'Off'
                                             print(f"  Set button to fallback state: {'X' if is_checked else 'Off'}")
                                         
-                                        # Don't call update() to preserve original appearance
-                                        # widget.update()  # Commented out to preserve styling
+                                        # Call update() to ensure checkbox renders
+                                        widget.update()  # Required for rendering
                                         
                                         filled_count += 1
                                         print(f"Button '{field_name}': SUCCESS (value: '{saved_value}')")
