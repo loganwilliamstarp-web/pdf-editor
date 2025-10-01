@@ -955,6 +955,14 @@ function initializePDFEditorPopup(popupWindow, context) {
                         
                         console.log('[PDF Popup] Adobe APIs loaded, PDF ready for editing');
                         setSaveStatus('success', 'PDF loaded. Click on fields to edit, then press Ctrl+S to save.');
+                        
+                        // Apply saved field values if they exist
+                        if (savedFieldValues && Object.keys(savedFieldValues).length > 0) {
+                            console.log('[PDF Popup] Applying saved field values after PDF load');
+                            await applySavedFieldValues(savedFieldValues);
+                        } else {
+                            console.log('[PDF Popup] No saved field values to apply');
+                        }
                     }).catch(async apiError => {
                         console.warn('[PDF Popup] Unable to access Adobe viewer APIs', apiError);
                         currentPDFAPIs = null;
@@ -962,6 +970,12 @@ function initializePDFEditorPopup(popupWindow, context) {
 
                         console.log('[PDF Popup] PDF loaded without Adobe APIs');
                         setSaveStatus('info', 'PDF loaded. Use Ctrl+S to save changes.');
+                        
+                        // Try to apply saved field values even without APIs
+                        if (savedFieldValues && Object.keys(savedFieldValues).length > 0) {
+                            console.log('[PDF Popup] Attempting to apply saved field values without APIs');
+                            await applySavedFieldValues(savedFieldValues);
+                        }
                     });
                 }).catch(error => {
                     console.error('[PDF Popup] Error loading PDF', error);
