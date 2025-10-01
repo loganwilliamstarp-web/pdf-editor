@@ -774,7 +774,16 @@ def serve_pdf_template_with_fields(template_id, account_id):
         storage_path = result.get('storage_path') or ''
         pdf_blob = result.get('pdf_blob')
         form_fields_payload = coerce_form_fields_payload(result.get('form_fields'))
-        field_values = result.get('field_values') or {}
+        field_values_raw = result.get('field_values') or {}
+        
+        # Parse field_values if it's a JSON string
+        if isinstance(field_values_raw, str):
+            try:
+                field_values = json.loads(field_values_raw)
+            except json.JSONDecodeError:
+                field_values = {}
+        else:
+            field_values = field_values_raw or {}
 
         print(f"Serving PDF template with fields: {template_name} (ID: {template_id}, Account: {account_id})")
         print(f"Field values retrieved: {len(field_values)} fields")
