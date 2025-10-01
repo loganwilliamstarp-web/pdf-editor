@@ -859,72 +859,74 @@ def serve_pdf_template_with_fields(template_id, account_id):
         try:
             if PYMUPDF_AVAILABLE and field_values:
                 print(f"Filling PDF with {len(field_values)} field values using PyMuPDF")
-                print(f"Field values to fill: {list(field_values.items())[:5] if field_values else 'None'}")
                 
                 # Load PDF with PyMuPDF
                 pdf_doc = fitz.open(stream=pdf_content, filetype="pdf")
                 
+                # DEBUG: Check actual field types in your PDF
+                print("\n=== PDF FIELD TYPES DEBUG ===")
+                for page in pdf_doc:
+                    for widget in page.widgets():
+                        print(f"Field: {widget.field_name}")
+                        print(f"  Type: {widget.field_type}")
+                        print(f"  Type String: {widget.field_type_string}")
+                        print(f"  Current Value: {widget.field_value}")
+                print("=== END DEBUG ===\n")
+                
                 filled_count = 0
                 failed_fields = []
                 
-                # Get all form fields
-                form_fields = list(pdf_doc[0].widgets())  # Convert generator to list
-                print(f"Found {len(form_fields)} form fields in PDF")
-                
-                # Fill each field from saved values
-                for field_name, saved_value in field_values.items():
-                    try:
-                        if not saved_value or str(saved_value).strip() == '':
-                            continue
+                # Iterate through all pages (ACORD forms can have multiple pages)
+                for page_num in range(len(pdf_doc)):
+                    page = pdf_doc[page_num]
+                    
+                    # Get all widgets on this page
+                    for widget in page.widgets():
+                        field_name = widget.field_name
+                        
+                        # Check if we have a saved value for this field
+                        if field_name in field_values:
+                            saved_value = field_values[field_name]
                             
-                        # Find the field by name
-                        field_found = False
-                        for widget in form_fields:
-                            if widget.field_name == field_name:
-                                field_found = True
+                            # Handle empty values - PyMuPDF needs explicit empty strings
+                            if saved_value is None or saved_value == '':
+                                saved_value = ''
+                            
+                            try:
                                 field_type = widget.field_type_string
                                 
-                                print(f"PDF field: '{field_name}' (type: {field_type}) - Saved value: '{saved_value}'")
-                                
-                                if field_type == 'text':
-                                    # Text field
+                                if field_type == 'Text':
                                     widget.field_value = str(saved_value)
                                     widget.update()
                                     filled_count += 1
-                                    print(f"  -> FILLED text field with: '{saved_value}'")
-                                elif field_type == 'checkbox':
-                                    # Checkbox field
-                                    if saved_value in [True, 'true', 'True', '1', 'Yes', 'yes']:
-                                        widget.field_value = True
+                                    if saved_value:  # Only log non-empty
+                                        print(f"Filled text field '{field_name}': '{saved_value}'")
+                                
+                                elif field_type == 'CheckBox':
+                                    # Convert various truthy values to boolean
+                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On']
+                                    widget.field_value = is_checked
+                                    widget.update()
+                                    filled_count += 1
+                                    if is_checked:
+                                        print(f"Checked checkbox '{field_name}'")
+                                
+                                elif field_type == 'RadioButton':
+                                    if saved_value:
+                                        widget.field_value = str(saved_value)
                                         widget.update()
                                         filled_count += 1
-                                        print(f"  -> CHECKED checkbox")
-                                    else:
-                                        widget.field_value = False
-                                        widget.update()
-                                        print(f"  -> UNCHECKED checkbox")
-                                elif field_type == 'radiobutton':
-                                    # Radio button field
-                                    widget.field_value = str(saved_value)
-                                    widget.update()
-                                    filled_count += 1
-                                    print(f"  -> SELECTED radio option: '{saved_value}'")
-                                else:
-                                    print(f"  -> SKIPPED (unsupported field type: {field_type})")
-                                break
-                        
-                        if not field_found:
-                            print(f"  -> FIELD NOT FOUND: '{field_name}'")
-                            failed_fields.append(field_name)
-                            
-                    except Exception as field_error:
-                        print(f"  -> FAILED to fill field '{field_name}': {field_error}")
-                        failed_fields.append(field_name)
-                        continue
+                                        print(f"Selected radio '{field_name}': '{saved_value}'")
+                                
+                            except Exception as field_error:
+                                failed_fields.append((field_name, str(field_error)))
+                                print(f"Failed to fill '{field_name}': {field_error}")
                 
-                print(f"Successfully filled {filled_count} fields")
+                print(f"=== PRE-FILL COMPLETE ===")
+                print(f"Successfully filled: {filled_count} fields")
+                print(f"Failed fields: {len(failed_fields)}")
                 if failed_fields:
-                    print(f"Failed to fill {len(failed_fields)} fields: {failed_fields}")
+                    print(f"Failures: {failed_fields[:5]}")  # Show first 5
                 
                 # Save the filled PDF
                 filled_pdf_content = pdf_doc.write()
