@@ -911,6 +911,7 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                     
                                     # Check if should be checked
                                     is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X', '/1', '/Yes', '/On']
+                                    print(f"Saved value: '{saved_value}', Is checked: {is_checked}")
                                     
                                     # Try to get the correct "on" state from the widget's annotation
                                     on_state = None
@@ -939,7 +940,8 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                     if not on_state:
                                         print("Trying multiple checkbox states...")
                                         # Try common states in order of likelihood
-                                        test_states = ['Yes', '1', 'On', 'X', True]
+                                        # Note: Must use PDF name format (without leading /) for PyMuPDF
+                                        test_states = ['1', 'Yes', 'On', 'X', True]
                                         for test_state in test_states:
                                             try:
                                                 if is_checked:
