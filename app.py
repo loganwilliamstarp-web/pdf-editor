@@ -594,7 +594,11 @@ def serve_pdf_template(template_id):
         cur = conn.cursor()
         
         # Get template from database
-        cur.execute('SELECT template_name, template_type, storage_path, file_size, pdf_blob, form_fields FROM master_templates WHERE id = %s', (template_id,))
+        try:
+            cur.execute('SELECT template_name, template_type, storage_path, file_size, pdf_blob, form_fields FROM master_templates WHERE id = %s', (template_id,))
+        except psycopg2.errors.UndefinedColumn:
+            conn.rollback()
+            cur.execute('SELECT template_name, template_type, storage_path, file_size, NULL::BYTEA AS pdf_blob, form_fields FROM master_templates WHERE id = %s', (template_id,))
         template = cur.fetchone()
         
         if not template:
