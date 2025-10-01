@@ -843,6 +843,11 @@ def serve_pdf_template_with_fields(template_id, account_id):
             )
         
         # Fill PDF with saved field values
+        print(f"=== STARTING PDF PRE-FILLING ===")
+        print(f"PYPDF_AVAILABLE: {PYPDF_AVAILABLE}")
+        print(f"Field values count: {len(field_values)}")
+        print(f"Field values type: {type(field_values)}")
+        
         try:
             if PYPDF_AVAILABLE:
                 print(f"Filling PDF with {len(field_values)} field values")
