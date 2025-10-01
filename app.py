@@ -1013,16 +1013,20 @@ def save_pdf_fields():
 def extract_pdf_fields():
     """Extract field values from PDF blob using pypdf"""
     try:
-        data = request.get_json()
-        if not data or 'pdf_content' not in data:
+        # Handle both FormData (from save callback) and JSON (from polling)
+        if request.files and 'pdf' in request.files:
+            # FormData from save callback
+            pdf_file = request.files['pdf']
+            pdf_bytes = pdf_file.read()
+        elif request.get_json() and 'pdf_content' in request.get_json():
+            # JSON from polling (legacy)
+            data = request.get_json()
+            pdf_content = data['pdf_content']
+            if pdf_content.startswith('data:application/pdf;base64,'):
+                pdf_content = pdf_content.split(',')[1]
+            pdf_bytes = base64.b64decode(pdf_content)
+        else:
             return jsonify({'success': False, 'error': 'No PDF content provided'}), 400
-        
-        # Decode base64 PDF content
-        pdf_content = data['pdf_content']
-        if pdf_content.startswith('data:application/pdf;base64,'):
-            pdf_content = pdf_content.split(',')[1]
-        
-        pdf_bytes = base64.b64decode(pdf_content)
         
         if not PYPDF_AVAILABLE:
             return jsonify({'success': False, 'error': 'pypdf not available'}), 500

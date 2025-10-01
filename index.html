@@ -786,44 +786,19 @@ function initializePDFEditorPopup(popupWindow, context) {
             console.log('[PDF Popup] Available API methods:', Object.keys(apis || {}));
         }
 
-        // Fallback to server-side field extraction if Adobe APIs don't work
-        if (Object.keys(values).length === 0) {
-            try {
-                console.log('[PDF Popup] Attempting server-side field extraction...');
-                const pdfContent = await getCurrentPdfContent();
-                if (pdfContent) {
-                    const response = await fetch(appOrigin + '/api/extract-fields', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            pdf_content: pdfContent
-                        })
-                    });
-                    
-                    const result = await response.json();
-                    console.log('[PDF Popup] Server extraction result:', result);
-                    
-                    if (result.success && result.form_data) {
-                        console.log('[PDF Popup] Successfully extracted', result.field_count, 'fields from PDF');
-                        console.log('[PDF Popup] Sample extracted values:', Object.entries(result.form_data).slice(0, 5));
-                        values = result.form_data;
-                    }
-                }
-            } catch (error) {
-                console.warn('[PDF Popup] Server-side extraction failed:', error);
-            }
-        }
+        // NOTE: Server-side extraction removed - it was extracting from template, not current PDF state
+        // Adobe doesn't provide a way to get current PDF blob programmatically
+        // Field values will only be extracted on manual save via save callback
 
-        // Final fallback to server-side field definitions
+        // Final fallback to server-side field definitions (for field names only)
         if (Object.keys(values).length === 0) {
             try {
-                console.log('[PDF Popup] Using server-side field definitions...');
+                console.log('[PDF Popup] Using server-side field definitions for field names...');
                 const serverFields = popupWindow.PDF_DEBUG?.serverFields || {};
                 if (serverFields && Object.keys(serverFields).length > 0) {
-                    console.log('[PDF Popup] Values from server definitions', Object.keys(serverFields).length);
-                    values = serverFields;
+                    console.log('[PDF Popup] Field names from server definitions', Object.keys(serverFields).length);
+                    // Use server fields as template with empty values
+                    values = Object.fromEntries(Object.keys(serverFields).map(key => [key, '']));
                 }
             } catch (error) {
                 console.warn('[PDF Popup] Server field definitions failed', error);
@@ -834,26 +809,9 @@ function initializePDFEditorPopup(popupWindow, context) {
         return { definitions, values };
     }
 
-    async function getCurrentPdfContent() {
-        try {
-            // Get the current PDF content from the Adobe viewer
-            if (currentPDFViewer && typeof currentPDFViewer.getPDFStream === 'function') {
-                const pdfStream = await currentPDFViewer.getPDFStream();
-                return pdfStream;
-            }
-            
-            // Alternative: fetch the PDF from the server
-            const response = await fetch(appOrigin + '/api/pdf/template/' + templateId);
-            if (response.ok) {
-                const arrayBuffer = await response.arrayBuffer();
-                const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-                return 'data:application/pdf;base64,' + base64;
-            }
-        } catch (error) {
-            console.warn('[PDF Popup] Failed to get PDF content:', error);
-        }
-        return null;
-    }
+    // REMOVED: getCurrentPdfContent function
+    // Adobe PDF Embed API doesn't provide a way to get current PDF blob programmatically
+    // Field extraction will only happen on manual save via save callback
 
     async function savePDFFields(showStatus = true) {
         if (isSaving) {
@@ -1128,7 +1086,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                     showAnnotationTools: false,
                     showDownloadPDF: false,
                     showPrintPDF: false,
-                    showSavePDF: false,
+                    showSavePDF: true, // Enable save button for field extraction
                     showLeftHandPanel: false,
                     showDisabledSaveButton: false,
                 }).then(async adobeViewerController => {
@@ -1137,6 +1095,70 @@ function initializePDFEditorPopup(popupWindow, context) {
                     popupWindow.PDF_DEBUG.viewer = currentPDFViewer;
                     popupWindow.PDF_DEBUG.state.viewerReady = true;
                     setSaveStatus('info', 'PDF loaded. Applying saved field values...');
+
+                    // Register save callback to extract field values from the actual saved PDF
+                    try {
+                        await adobeDCView.registerCallback(
+                            AdobeDC.View.Enum.CallbackType.SAVE_API,
+                            async (metaData, content, options) => {
+                                console.log('[PDF Popup] Save callback triggered', { metaData, content: content?.length, options });
+                                
+                                // Extract field values from the saved PDF content (this has the actual filled values)
+                                try {
+                                    const blob = new Blob([new Uint8Array(content)], { type: 'application/pdf' });
+                                    const formData = new FormData();
+                                    formData.append('pdf', blob);
+                                    
+                                    const response = await fetch(appOrigin + '/api/extract-fields', {
+                                        method: 'POST',
+                                        body: formData
+                                    });
+                                    
+                                    const result = await response.json();
+                                    console.log('[PDF Popup] Field extraction from saved PDF:', result);
+                                    
+                                    if (result.success && result.form_data) {
+                                        console.log('[PDF Popup] Extracted field values with actual data:', Object.entries(result.form_data).slice(0, 5));
+                                        
+                                        // Save the extracted field values to database
+                                        const saveResponse = await fetch(appOrigin + '/api/pdf/save-fields', {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                            },
+                                            body: JSON.stringify({
+                                                template_id: templateId,
+                                                account_id: accountId,
+                                                field_values: result.form_data
+                                            })
+                                        });
+                                        
+                                        const saveResult = await saveResponse.json();
+                                        console.log('[PDF Popup] Saved extracted field values:', saveResult);
+                                        
+                                        // Update last known values for change detection
+                                        lastKnownFieldValues = { ...result.form_data };
+                                    }
+                                } catch (error) {
+                                    console.error('[PDF Popup] Error extracting fields from saved PDF:', error);
+                                }
+                                
+                                return {
+                                    code: AdobeDC.View.Enum.ApiResponseCode.SUCCESS,
+                                    data: {
+                                        metaData: Object.assign(metaData, { updatedAt: new Date().toISOString() })
+                                    }
+                                };
+                            },
+                            {
+                                enableFocusPolling: true,
+                                enableAutoSave: true
+                            }
+                        );
+                        console.log('[PDF Popup] Save callback registered successfully');
+                    } catch (callbackError) {
+                        console.warn('[PDF Popup] Failed to register save callback:', callbackError);
+                    }
 
                     currentPDFViewer.getAPIs().then(async apis => {
                         currentPDFAPIs = apis;
