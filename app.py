@@ -896,43 +896,43 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                     filled_count += 1
                                     print(f"✓ Filled text field '{field_name}': '{saved_value}'")
                                 
-                        elif field_type in ['CheckBox', 'Button', 'Btn']:
-                            is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X']
-                            
-                            # ACORD forms often use string values, not booleans
-                            if is_checked:
-                                # Try multiple checkbox states
-                                for state in [True, 'Yes', '1', 'On']:
-                                    try:
-                                        widget.field_value = state
+                                elif field_type in ['CheckBox', 'Button', 'Btn']:
+                                    is_checked = saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X']
+                                    
+                                    # ACORD forms often use string values, not booleans
+                                    if is_checked:
+                                        # Try multiple checkbox states
+                                        for state in [True, 'Yes', '1', 'On']:
+                                            try:
+                                                widget.field_value = state
+                                                widget.update()
+                                                filled_count += 1
+                                                print(f"✓ Checkbox '{field_name}' checked with state: {state}")
+                                                break
+                                            except:
+                                                continue
+                                    else:
+                                        widget.field_value = False
                                         widget.update()
                                         filled_count += 1
-                                        print(f"✓ Checkbox '{field_name}' checked with state: {state}")
-                                        break
-                                    except:
-                                        continue
-                            else:
-                                widget.field_value = False
-                                widget.update()
-                                filled_count += 1
-                                print(f"✓ Checkbox '{field_name}' unchecked")
-                        
-                        elif field_type == 'RadioButton':
-                            # Try different values for radio buttons
-                            if saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X']:
-                                widget.field_value = 'X'
-                            else:
-                                widget.field_value = 'Off'
-                            widget.update()
-                            filled_count += 1
-                            print(f"✓ Set radio button '{field_name}' to: {widget.field_value}")
-                        
-                        else:
-                            # Generic approach for other field types
-                            widget.field_value = str(saved_value)
-                            widget.update()
-                            filled_count += 1
-                            print(f"✓ Filled generic field '{field_name}': '{saved_value}'")
+                                        print(f"✓ Checkbox '{field_name}' unchecked")
+                                
+                                elif field_type == 'RadioButton':
+                                    # Try different values for radio buttons
+                                    if saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X']:
+                                        widget.field_value = 'X'
+                                    else:
+                                        widget.field_value = 'Off'
+                                    widget.update()
+                                    filled_count += 1
+                                    print(f"✓ Set radio button '{field_name}' to: {widget.field_value}")
+                                
+                                else:
+                                    # Generic approach for other field types
+                                    widget.field_value = str(saved_value)
+                                    widget.update()
+                                    filled_count += 1
+                                    print(f"✓ Filled generic field '{field_name}': '{saved_value}'")
                         
                     except Exception as field_error:
                         failed_fields.append((field_name, str(field_error)))
