@@ -1706,6 +1706,19 @@ def save_pdf_fields():
                     
                     print(f"Final extracted {len(extracted_fields)} fields from PDF content")
                     
+                    # Normalize checkbox values: empty strings should be /Off for checkbox fields
+                    def is_checkbox_field_name(field_name):
+                        """Check if a field is likely a checkbox based on name patterns"""
+                        checkbox_indicators = ['indicator', 'checkbox', 'check', 'box']
+                        return any(indicator in field_name.lower() for indicator in checkbox_indicators)
+                    
+                    for field_name, field_value in list(extracted_fields.items()):
+                        if is_checkbox_field_name(field_name):
+                            # If checkbox field has empty or whitespace-only value, set to /Off
+                            if not field_value or not str(field_value).strip():
+                                extracted_fields[field_name] = '/Off'
+                                print(f"Normalized empty checkbox '{field_name}' to '/Off'")
+                    
                     # Debug: Show sample of extracted fields
                     if extracted_fields:
                         sample_fields = list(extracted_fields.items())[:5]
