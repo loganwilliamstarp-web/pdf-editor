@@ -370,9 +370,12 @@ function initializePDFEditorPopup(popupWindow, context) {
             if (data.success && data.field_values && Object.keys(data.field_values).length > 0) {
                 console.log('[PDF Popup] Loading existing field values', data.field_values);
 
-                if (currentPDFAPIs && currentPDFAPIs.setFormFieldValues) {
+                const adobeValueEntries = mapObjectToAdobeFormFieldValues(data.field_values);
+                console.log('[PDF Popup] Prepared Adobe value entries', adobeValueEntries);
+
+                if (adobeValueEntries.length && currentPDFAPIs && currentPDFAPIs.setFormFieldValues) {
                     try {
-                        await currentPDFAPIs.setFormFieldValues({ formFieldValues: data.field_values });
+                        await currentPDFAPIs.setFormFieldValues({ formFieldValues: adobeValueEntries });
                     } catch (apiError) {
                         console.warn('[PDF Popup] Adobe API setFormFieldValues failed, falling back', apiError);
                     }
@@ -390,6 +393,13 @@ function initializePDFEditorPopup(popupWindow, context) {
             console.error('[PDF Popup] Error loading existing field values', error);
             setSaveStatus('error', 'Unable to load saved field values.');
         }
+    }
+
+    function mapObjectToAdobeFormFieldValues(obj) {
+        if (!obj || typeof obj !== 'object') {
+            return [];
+        }
+        return Object.keys(obj).map(name => ({ fieldName: name, value: obj[name] }));
     }
 
     function normalizeAdobeFieldDefinitions(raw) {
@@ -575,6 +585,8 @@ function initializePDFEditorPopup(popupWindow, context) {
                 body.form_fields = data.definitions;
             }
 
+            console.log('[PDF Popup] Saving field values', body);
+
             const response = await fetch(appOrigin + '/api/pdf/save-fields', {
                 method: 'POST',
                 headers: {
@@ -584,6 +596,7 @@ function initializePDFEditorPopup(popupWindow, context) {
             });
 
             const result = await response.json();
+            console.log('[PDF Popup] Save response', result);
 
             if (result.success) {
                 setSaveStatus('success', 'Field values saved successfully.');
