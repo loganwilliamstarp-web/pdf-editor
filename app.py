@@ -889,12 +889,15 @@ def serve_pdf_template_with_fields(template_id, account_id):
                         if field_name in field_values:
                             saved_value = field_values[field_name]
                             
-                            # Skip empty values
-                            if not saved_value or saved_value == '':
+                            # Skip empty values for text fields only
+                            # For checkboxes, we need to process /Off values too
+                            field_type = widget.field_type_string
+                            is_checkbox = field_type in ['CheckBox', 'Button', 'Btn', 'RadioButton']
+                            
+                            if not is_checkbox and (not saved_value or saved_value == ''):
                                 continue
                             
                             try:
-                                field_type = widget.field_type_string
                                 print(f"Processing field '{field_name}' (type: {field_type}, value: '{saved_value}')")
                                 
                                 if field_type == 'Text':
