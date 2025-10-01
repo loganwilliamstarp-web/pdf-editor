@@ -202,6 +202,11 @@ function initializePDFEditorPopup(popupWindow, context) {
         return;
     }
 
+    const appOrigin = (popupWindow.opener && popupWindow.opener.location && popupWindow.opener.location.origin)
+        || (popupWindow.location && popupWindow.location.origin)
+        || window.location.origin;
+    console.log('[PDF Popup] using origin', appOrigin);
+
     let currentPDFViewer = null;
     let currentPDFAPIs = null;
 
@@ -358,7 +363,7 @@ function initializePDFEditorPopup(popupWindow, context) {
 
     async function loadExistingFieldValues(localTemplateId) {
         try {
-            const response = await fetch('/api/pdf/get-fields/' + localTemplateId + '/' + accountId);
+            const response = await fetch(appOrigin + '/api/pdf/get-fields/' + localTemplateId + '/' + accountId);
             const data = await response.json();
 
             if (data.success && data.field_values && Object.keys(data.field_values).length > 0) {
@@ -569,7 +574,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                 body.form_fields = data.definitions;
             }
 
-            const response = await fetch('/api/pdf/save-fields', {
+            const response = await fetch(appOrigin + '/api/pdf/save-fields', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -594,7 +599,7 @@ function initializePDFEditorPopup(popupWindow, context) {
 
     async function downloadPDF() {
         try {
-            const response = await fetch('/api/pdf/template/' + templateId);
+            const response = await fetch(appOrigin + '/api/pdf/template/' + templateId);
             if (!response.ok) {
                 throw new Error('Failed to download PDF');
             }
@@ -631,7 +636,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                 adobeDCView.previewFile({
                     content: {
                         location: {
-                            url: '/api/pdf/template/' + localTemplateId,
+                            url: appOrigin + '/api/pdf/template/' + localTemplateId,
                         },
                     },
                     metaData: {
