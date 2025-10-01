@@ -860,10 +860,32 @@ function initializePDFEditorPopup(popupWindow, context) {
             return;
         }
 
-        adobeContainer.innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div><p class="text-gray-600">Loading PDF...</p></div>';
+        adobeContainer.innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div><p class="text-gray-600">Loading saved data...</p></div>';
 
-        // PDF will be loaded with pre-filled values from server endpoint
-        setSaveStatus('info', 'Loading PDF with saved field values...');
+        // First, fetch saved field values to ensure they're available
+        setSaveStatus('info', 'Loading saved field values...');
+        
+        try {
+            console.log('[PDF Popup] Fetching saved field values first...');
+            const loadResponse = await fetch(appOrigin + '/api/pdf/get-fields/' + localTemplateId + '/' + accountId);
+            const loadData = await loadResponse.json();
+            
+            if (loadData.success && loadData.field_values) {
+                const nonEmptyFields = Object.entries(loadData.field_values).filter(([key, value]) => value && value.trim() !== '');
+                console.log('[PDF Popup] Found', nonEmptyFields.length, 'saved field values');
+                console.log('[PDF Popup] Sample saved values:', nonEmptyFields.slice(0, 3));
+            } else {
+                console.log('[PDF Popup] No saved field values found');
+            }
+            
+            // Now update status and load PDF
+            setSaveStatus('info', 'Loading PDF with saved field values...');
+            adobeContainer.innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div><p class="text-gray-600">Loading PDF...</p></div>';
+            
+        } catch (error) {
+            console.error('[PDF Popup] Failed to load saved field values:', error);
+            setSaveStatus('warning', 'Could not load saved values, loading PDF anyway...');
+        }
 
         const initializeViewer = () => {
             try {
