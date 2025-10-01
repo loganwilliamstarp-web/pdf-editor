@@ -410,6 +410,8 @@ function initializePDFEditorPopup(popupWindow, context) {
                 return data.field_values;
             } else {
                 console.log('[PDF Popup] No existing field values found');
+                console.log('[PDF Popup] Field values object:', data.field_values);
+                console.log('[PDF Popup] Field values keys:', Object.keys(data.field_values || {}));
                 savedFieldValues = null;
                 return null;
             }
@@ -817,6 +819,11 @@ function initializePDFEditorPopup(popupWindow, context) {
                         lastKnownFieldValues = { ...currentValues };
                         setAutoSaveStatus('Auto-save: Changes detected');
                         console.log('[PDF Popup] Field values changed, marking for save');
+                        console.log('[PDF Popup] Current values:', currentValues);
+                        console.log('[PDF Popup] Last known values:', lastKnownFieldValues);
+                    } else if (Object.keys(currentValues).length > 0) {
+                        // Log when we have values but no changes detected
+                        console.log('[PDF Popup] Field values present but no changes detected');
                         console.log('[PDF Popup] Current values:', currentValues);
                         console.log('[PDF Popup] Last known values:', lastKnownFieldValues);
                     }
