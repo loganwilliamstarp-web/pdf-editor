@@ -605,6 +605,56 @@ function initializePDFEditorPopup(popupWindow, context) {
         return {};
     }
 
+    function collectFieldsFromDOM() {
+        try {
+            console.log('[PDF Popup] Collecting fields from DOM...');
+            const fields = {};
+            
+            // Look for Adobe PDF form fields in the DOM
+            const adobeContainer = popupWindow.document.getElementById('adobe-dc-view');
+            if (adobeContainer) {
+                // Try to find form fields within the Adobe container
+                const inputs = adobeContainer.querySelectorAll('input, textarea, select');
+                console.log('[PDF Popup] Found DOM inputs:', inputs.length);
+                
+                inputs.forEach((input, index) => {
+                    if (input.name || input.id) {
+                        const fieldName = input.name || input.id || `field_${index}`;
+                        fields[fieldName] = input.value || '';
+                    }
+                });
+            }
+            
+            // Also try to find fields in iframes (Adobe PDF viewer might be in an iframe)
+            const iframes = popupWindow.document.querySelectorAll('iframe');
+            iframes.forEach(iframe => {
+                try {
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                    if (iframeDoc) {
+                        const inputs = iframeDoc.querySelectorAll('input, textarea, select');
+                        console.log('[PDF Popup] Found iframe inputs:', inputs.length);
+                        
+                        inputs.forEach((input, index) => {
+                            if (input.name || input.id) {
+                                const fieldName = input.name || input.id || `iframe_field_${index}`;
+                                fields[fieldName] = input.value || '';
+                            }
+                        });
+                    }
+                } catch (e) {
+                    // Cross-origin iframe, skip
+                    console.log('[PDF Popup] Cannot access iframe content (cross-origin)');
+                }
+            });
+            
+            console.log('[PDF Popup] DOM field collection result:', fields);
+            return fields;
+        } catch (error) {
+            console.warn('[PDF Popup] DOM field collection error:', error);
+            return {};
+        }
+    }
+
     async function collectPdfFieldData() {
         console.log('[PDF Popup] collectPdfFieldData called');
         console.log('[PDF Popup] currentPDFAPIs:', !!currentPDFAPIs);
@@ -654,6 +704,20 @@ function initializePDFEditorPopup(popupWindow, context) {
         } else {
             console.log('[PDF Popup] No Adobe APIs available for getFormFieldValues');
             console.log('[PDF Popup] Available API methods:', Object.keys(apis || {}));
+        }
+
+        // Try DOM-based field collection as ultimate fallback
+        if (Object.keys(values).length === 0) {
+            try {
+                console.log('[PDF Popup] Trying DOM-based field collection...');
+                const domFields = collectFieldsFromDOM();
+                if (domFields && Object.keys(domFields).length > 0) {
+                    values = domFields;
+                    console.log('[PDF Popup] Values from DOM collection', values);
+                }
+            } catch (error) {
+                console.warn('[PDF Popup] DOM field collection failed', error);
+            }
         }
 
         // Always try fallback if we don't have both definitions and values
@@ -959,7 +1023,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                         fileName: 'Template ' + localTemplateId,
                     },
                 }, {
-                    embedMode: 'FULL_WINDOW',
+                    embedMode: 'SIZED_CONTAINER',
                     enableFormFilling: true,
                     showAnnotationTools: false,
                     showDownloadPDF: false,
