@@ -40,11 +40,11 @@ except ImportError:
     PYPDF_AVAILABLE = False
 
 try:
-    import PyPDF2
-    PYPDF2_AVAILABLE = True
+    import fitz  # PyMuPDF
+    PYMUPDF_AVAILABLE = True
 except ImportError:
-    PYPDF2_AVAILABLE = False
-    print("Warning: PyPDF2 not available. PDF pre-filling will be limited.")
+    PYMUPDF_AVAILABLE = False
+    print("Warning: PyMuPDF not available. PDF pre-filling will be limited.")
 
 
 try:
@@ -850,62 +850,85 @@ def serve_pdf_template_with_fields(template_id, account_id):
                 }
             )
         
-        # Pre-fill PDF with saved field values using PyPDF2
+        # Pre-fill PDF with saved field values using PyMuPDF (fitz)
         print(f"=== STARTING PDF PRE-FILLING ===")
-        print(f"PYPDF2_AVAILABLE: {PYPDF2_AVAILABLE}")
+        print(f"PYMUPDF_AVAILABLE: {PYMUPDF_AVAILABLE}")
         print(f"Field values count: {len(field_values)}")
         print(f"Field values type: {type(field_values)}")
         
         try:
-            if PYPDF2_AVAILABLE and field_values:
-                print(f"Filling PDF with {len(field_values)} field values using PyPDF2")
+            if PYMUPDF_AVAILABLE and field_values:
+                print(f"Filling PDF with {len(field_values)} field values using PyMuPDF")
                 print(f"Field values to fill: {list(field_values.items())[:5] if field_values else 'None'}")
                 
-                # Load PDF with PyPDF2
-                pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_content))
-                pdf_writer = PyPDF2.PdfWriter()
+                # Load PDF with PyMuPDF
+                pdf_doc = fitz.open(stream=pdf_content, filetype="pdf")
                 
-                # Copy all pages
-                for page in pdf_reader.pages:
-                    pdf_writer.add_page(page)
-                
-                # Fill form fields if they exist
                 filled_count = 0
                 failed_fields = []
                 
-                if '/AcroForm' in pdf_reader.trailer['/Root']:
-                    acro_form = pdf_reader.trailer['/Root']['/AcroForm']
-                    if '/Fields' in acro_form:
-                        fields = acro_form['/Fields']
-                        for field in fields:
-                            try:
-                                field_obj = field.get_object()
-                                if '/T' in field_obj:  # Field name
-                                    field_name = field_obj['/T']
-                                    saved_value = field_values.get(field_name, '')
-                                    
-                                    print(f"PDF field: '{field_name}' - Saved value: '{saved_value}'")
-                                    
-                                    if saved_value and str(saved_value).strip():
-                                        # Set field value
-                                        field_obj[PyPDF2.generic.NameObject('/V')] = PyPDF2.generic.TextStringObject(str(saved_value))
+                # Get all form fields
+                form_fields = pdf_doc[0].widgets()  # Get widgets from first page
+                print(f"Found {len(form_fields)} form fields in PDF")
+                
+                # Fill each field from saved values
+                for field_name, saved_value in field_values.items():
+                    try:
+                        if not saved_value or str(saved_value).strip() == '':
+                            continue
+                            
+                        # Find the field by name
+                        field_found = False
+                        for widget in form_fields:
+                            if widget.field_name == field_name:
+                                field_found = True
+                                field_type = widget.field_type_string
+                                
+                                print(f"PDF field: '{field_name}' (type: {field_type}) - Saved value: '{saved_value}'")
+                                
+                                if field_type == 'text':
+                                    # Text field
+                                    widget.field_value = str(saved_value)
+                                    widget.update()
+                                    filled_count += 1
+                                    print(f"  -> FILLED text field with: '{saved_value}'")
+                                elif field_type == 'checkbox':
+                                    # Checkbox field
+                                    if saved_value in [True, 'true', 'True', '1', 'Yes', 'yes']:
+                                        widget.field_value = True
+                                        widget.update()
                                         filled_count += 1
-                                        print(f"  -> FILLED with: '{saved_value}'")
+                                        print(f"  -> CHECKED checkbox")
                                     else:
-                                        print(f"  -> SKIPPED (empty or not found)")
-                            except Exception as field_error:
-                                print(f"  -> FAILED to fill field: {field_error}")
-                                failed_fields.append(field_name if 'field_name' in locals() else 'unknown')
-                                continue
+                                        widget.field_value = False
+                                        widget.update()
+                                        print(f"  -> UNCHECKED checkbox")
+                                elif field_type == 'radiobutton':
+                                    # Radio button field
+                                    widget.field_value = str(saved_value)
+                                    widget.update()
+                                    filled_count += 1
+                                    print(f"  -> SELECTED radio option: '{saved_value}'")
+                                else:
+                                    print(f"  -> SKIPPED (unsupported field type: {field_type})")
+                                break
+                        
+                        if not field_found:
+                            print(f"  -> FIELD NOT FOUND: '{field_name}'")
+                            failed_fields.append(field_name)
+                            
+                    except Exception as field_error:
+                        print(f"  -> FAILED to fill field '{field_name}': {field_error}")
+                        failed_fields.append(field_name)
+                        continue
                 
                 print(f"Successfully filled {filled_count} fields")
                 if failed_fields:
                     print(f"Failed to fill {len(failed_fields)} fields: {failed_fields}")
                 
-                # Write filled PDF to bytes
-                output_buffer = io.BytesIO()
-                pdf_writer.write(output_buffer)
-                filled_pdf_content = output_buffer.getvalue()
+                # Save the filled PDF
+                filled_pdf_content = pdf_doc.write()
+                pdf_doc.close()
                 
                 from flask import Response
                 return Response(
@@ -918,8 +941,8 @@ def serve_pdf_template_with_fields(template_id, account_id):
                     }
                 )
             else:
-                if not PYPDF2_AVAILABLE:
-                    print("PyPDF2 not available, returning original template")
+                if not PYMUPDF_AVAILABLE:
+                    print("PyMuPDF not available, returning original template")
                 if not field_values:
                     print("No field values to fill, returning original template")
                 
