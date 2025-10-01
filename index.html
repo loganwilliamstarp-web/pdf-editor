@@ -208,6 +208,9 @@ function initializePDFEditorPopup(popupWindow, context) {
         || window.location.origin;
     console.log('[PDF Popup] init context', { templateId, accountId, appOrigin });
 
+    popupWindow.PDF_DEBUG = popupWindow.PDF_DEBUG || {};
+    popupWindow.PDF_DEBUG.context = { templateId, accountId, appOrigin };
+
     let currentPDFViewer = null;
     let currentPDFAPIs = null;
 
@@ -602,6 +605,9 @@ function initializePDFEditorPopup(popupWindow, context) {
             }
         }
 
+        if (popupWindow.PDF_DEBUG) {
+            popupWindow.PDF_DEBUG.lastCollected = { definitions, values };
+        }
         return { definitions, values };
     }
 
@@ -714,13 +720,17 @@ function initializePDFEditorPopup(popupWindow, context) {
                     showDisabledSaveButton: false,
                 }).then(adobeViewerController => {
                     currentPDFViewer = adobeViewerController;
+                    popupWindow.PDF_DEBUG = popupWindow.PDF_DEBUG || {};
+                    popupWindow.PDF_DEBUG.viewer = currentPDFViewer;
                     setSaveStatus('info', 'PDF loaded. Retrieving saved field values...');
 
                     currentPDFViewer.getAPIs().then(apis => {
                         currentPDFAPIs = apis;
+                        popupWindow.PDF_DEBUG.apis = currentPDFAPIs;
                     }).catch(apiError => {
                         console.warn('[PDF Popup] Unable to access Adobe viewer APIs', apiError);
                         currentPDFAPIs = null;
+                        popupWindow.PDF_DEBUG.apis = null;
                     });
 
                     loadExistingFieldValues(localTemplateId);
