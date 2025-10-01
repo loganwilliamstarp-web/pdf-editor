@@ -40,11 +40,12 @@ except ImportError:
     PYPDF_AVAILABLE = False
 
 try:
-    from pdf_lib import PDFDocument
-    PDF_LIB_AVAILABLE = True
+    import PyPDF2
+    PYPDF2_AVAILABLE = True
 except ImportError:
-    PDF_LIB_AVAILABLE = False
-    print("Warning: pdf-lib not available. PDF pre-filling will be limited.")
+    PYPDF2_AVAILABLE = False
+    print("Warning: PyPDF2 not available. PDF pre-filling will be limited.")
+
 
 try:
     import psycopg2
@@ -849,67 +850,62 @@ def serve_pdf_template_with_fields(template_id, account_id):
                 }
             )
         
-        # Fill PDF with saved field values
+        # Pre-fill PDF with saved field values using PyPDF2
         print(f"=== STARTING PDF PRE-FILLING ===")
-        print(f"PDF_LIB_AVAILABLE: {PDF_LIB_AVAILABLE}")
+        print(f"PYPDF2_AVAILABLE: {PYPDF2_AVAILABLE}")
         print(f"Field values count: {len(field_values)}")
         print(f"Field values type: {type(field_values)}")
         
         try:
-            if PDF_LIB_AVAILABLE and field_values:
-                print(f"Filling PDF with {len(field_values)} field values using pdf-lib")
+            if PYPDF2_AVAILABLE and field_values:
+                print(f"Filling PDF with {len(field_values)} field values using PyPDF2")
                 print(f"Field values to fill: {list(field_values.items())[:5] if field_values else 'None'}")
                 
-                # Load PDF with pdf-lib (synchronous)
-                pdf_doc = PDFDocument.load(pdf_content)
-                form = pdf_doc.getForm()
+                # Load PDF with PyPDF2
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_content))
+                pdf_writer = PyPDF2.PdfWriter()
                 
+                # Copy all pages
+                for page in pdf_reader.pages:
+                    pdf_writer.add_page(page)
+                
+                # Fill form fields if they exist
                 filled_count = 0
                 failed_fields = []
                 
-                # Fill each field from saved values
-                for field_name, value in field_values.items():
-                    try:
-                        if not value or str(value).strip() == '':
-                            continue
-                            
-                        field = form.getField(field_name)
-                        field_type = field.constructor.name
-                        
-                        print(f"PDF field: '{field_name}' (type: {field_type}) - Saved value: '{value}'")
-                        
-                        if field_type == 'PDFTextField':
-                            form.getTextField(field_name).setText(str(value))
-                            filled_count += 1
-                            print(f"  -> FILLED text field with: '{value}'")
-                        elif field_type == 'PDFCheckBox':
-                            if value in [True, 'true', 'True', '1', 'Yes', 'yes']:
-                                form.getCheckBox(field_name).check()
-                                filled_count += 1
-                                print(f"  -> CHECKED checkbox")
-                            else:
-                                form.getCheckBox(field_name).uncheck()
-                                print(f"  -> UNCHECKED checkbox")
-                        elif field_type == 'PDFRadioGroup':
-                            if value:
-                                form.getRadioGroup(field_name).select(str(value))
-                                filled_count += 1
-                                print(f"  -> SELECTED radio option: '{value}'")
-                        else:
-                            print(f"  -> SKIPPED (unsupported field type: {field_type})")
-                            
-                    except Exception as field_error:
-                        print(f"  -> FAILED to fill field '{field_name}': {field_error}")
-                        failed_fields.append(field_name)
-                        continue
+                if '/AcroForm' in pdf_reader.trailer['/Root']:
+                    acro_form = pdf_reader.trailer['/Root']['/AcroForm']
+                    if '/Fields' in acro_form:
+                        fields = acro_form['/Fields']
+                        for field in fields:
+                            try:
+                                field_obj = field.get_object()
+                                if '/T' in field_obj:  # Field name
+                                    field_name = field_obj['/T']
+                                    saved_value = field_values.get(field_name, '')
+                                    
+                                    print(f"PDF field: '{field_name}' - Saved value: '{saved_value}'")
+                                    
+                                    if saved_value and str(saved_value).strip():
+                                        # Set field value
+                                        field_obj[PyPDF2.generic.NameObject('/V')] = PyPDF2.generic.TextStringObject(str(saved_value))
+                                        filled_count += 1
+                                        print(f"  -> FILLED with: '{saved_value}'")
+                                    else:
+                                        print(f"  -> SKIPPED (empty or not found)")
+                            except Exception as field_error:
+                                print(f"  -> FAILED to fill field: {field_error}")
+                                failed_fields.append(field_name if 'field_name' in locals() else 'unknown')
+                                continue
                 
                 print(f"Successfully filled {filled_count} fields")
                 if failed_fields:
                     print(f"Failed to fill {len(failed_fields)} fields: {failed_fields}")
                 
-                # Save the filled PDF (synchronous)
-                filled_pdf_bytes = pdf_doc.save()
-                filled_pdf_content = bytes(filled_pdf_bytes)
+                # Write filled PDF to bytes
+                output_buffer = io.BytesIO()
+                pdf_writer.write(output_buffer)
+                filled_pdf_content = output_buffer.getvalue()
                 
                 from flask import Response
                 return Response(
@@ -922,10 +918,11 @@ def serve_pdf_template_with_fields(template_id, account_id):
                     }
                 )
             else:
-                if not PDF_LIB_AVAILABLE:
-                    print("pdf-lib not available, returning original template")
+                if not PYPDF2_AVAILABLE:
+                    print("PyPDF2 not available, returning original template")
                 if not field_values:
                     print("No field values to fill, returning original template")
+                
                 from flask import Response
                 return Response(
                     pdf_content,
@@ -1241,6 +1238,46 @@ def debug_test():
         'timestamp': '2024-01-01 16:01:00',
         'version': 'latest'
     })
+
+@app.route('/api/pdf/field-values/<template_id>/<account_id>')
+def get_pdf_field_values(template_id, account_id):
+    """Get saved field values for client-side PDF pre-filling"""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        
+        # Get saved field values from template_data table
+        cur.execute('''
+            SELECT field_values FROM template_data 
+            WHERE account_id = %s AND template_id = %s
+        ''', (account_id, template_id))
+        
+        result = cur.fetchone()
+        if result and result.get('field_values'):
+            field_values = result.get('field_values')
+            if isinstance(field_values, str):
+                try:
+                    field_values = json.loads(field_values)
+                except json.JSONDecodeError:
+                    field_values = {}
+        else:
+            field_values = {}
+        
+        return jsonify({
+            'success': True,
+            'template_id': template_id,
+            'account_id': account_id,
+            'field_values': field_values,
+            'field_count': len(field_values),
+            'non_empty_count': len({k: v for k, v in field_values.items() if v and str(v).strip()})
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            cur.close()
+            conn.close()
 
 @app.route('/api/debug/pdf-prefill/<template_id>/<account_id>')
 def debug_pdf_prefill(template_id, account_id):
