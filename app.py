@@ -1112,7 +1112,7 @@ def render_pdf(template_id):
 
 @app.route('/api/pdf/save-fields', methods=['POST'])
 def save_pdf_fields():
-    """Save PDF field values to database and optionally update template metadata."""
+    """Save PDF field values to database with automatic field extraction from PDF content."""
     try:
         data = request.get_json()
         if not isinstance(data, dict):
@@ -1121,6 +1121,7 @@ def save_pdf_fields():
         template_id = data.get('template_id')
         account_id = data.get('account_id')
         field_values = data.get('field_values', {})
+        pdf_content = data.get('pdf_content')  # Base64 encoded PDF content
         form_fields_payload = None
 
         if 'form_fields' in data:
@@ -1132,6 +1133,53 @@ def save_pdf_fields():
         conn = get_db()
         cur = conn.cursor()
 
+        # If PDF content is provided, extract fields from it
+        extracted_fields = {}
+        if pdf_content:
+            try:
+                # Decode base64 PDF content
+                if pdf_content.startswith('data:application/pdf;base64,'):
+                    pdf_content = pdf_content.split(',')[1]
+                pdf_bytes = base64.b64decode(pdf_content)
+                
+                # Extract fields using pypdf
+                if PYPDF_AVAILABLE:
+                    pdf_reader = PdfReader(io.BytesIO(pdf_bytes))
+                    
+                    # Extract form fields
+                    if '/AcroForm' in pdf_reader.trailer['/Root']:
+                        acro_form = pdf_reader.trailer['/Root']['/AcroForm']
+                        if '/Fields' in acro_form:
+                            fields = acro_form['/Fields']
+                            for field in fields:
+                                field_obj = field.get_object()
+                                if '/T' in field_obj:  # Field name
+                                    field_name = field_obj['/T']
+                                    field_value = ''
+                                    if '/V' in field_obj:  # Field value
+                                        field_value = str(field_obj['/V'])
+                                    elif '/AS' in field_obj:  # Appearance state (for checkboxes)
+                                        field_value = str(field_obj['/AS'])
+                                    extracted_fields[field_name] = field_value
+                    
+                    print(f"Extracted {len(extracted_fields)} fields from PDF content")
+                    
+                    # Use extracted fields if they have values, otherwise use provided field_values
+                    if extracted_fields:
+                        # Merge extracted fields with provided field_values (extracted takes precedence)
+                        final_field_values = {**field_values, **extracted_fields}
+                    else:
+                        final_field_values = field_values
+                else:
+                    print("pypdf not available, using provided field values")
+                    final_field_values = field_values
+                    
+            except Exception as extract_error:
+                print(f"Error extracting fields from PDF: {extract_error}")
+                final_field_values = field_values
+        else:
+            final_field_values = field_values
+
         # Check if template data already exists for this account
         cur.execute('''
             SELECT id FROM template_data 
@@ -1140,21 +1188,21 @@ def save_pdf_fields():
 
         existing_data = cur.fetchone()
 
-        print("Saving field values for template {0}, account {1}: {2} fields".format(template_id, account_id, len(field_values)))
-        if field_values:
-            print("Field sample:", list(field_values.items())[:5])
+        print("Saving field values for template {0}, account {1}: {2} fields".format(template_id, account_id, len(final_field_values)))
+        if final_field_values:
+            print("Field sample:", list(final_field_values.items())[:5])
 
         if existing_data:
             cur.execute('''
                 UPDATE template_data 
                 SET field_values = %s, updated_at = NOW(), version = version + 1
                 WHERE account_id = %s AND template_id = %s
-            ''', (json.dumps(field_values), account_id, template_id))
+            ''', (json.dumps(final_field_values), account_id, template_id))
         else:
             cur.execute('''
                 INSERT INTO template_data (account_id, template_id, field_values)
                 VALUES (%s, %s, %s)
-            ''', (account_id, template_id, json.dumps(field_values)))
+            ''', (account_id, template_id, json.dumps(final_field_values)))
 
         template_fields_updated = False
         if form_fields_payload is not None:
@@ -1175,7 +1223,8 @@ def save_pdf_fields():
             'message': 'Field values saved successfully',
             'template_id': template_id,
             'account_id': account_id,
-            'field_count': len(field_values),
+            'field_count': len(final_field_values),
+            'extracted_fields_count': len(extracted_fields),
             'form_fields_updated': template_fields_updated,
             'form_fields': form_fields_payload['fields'] if form_fields_payload else None
         })

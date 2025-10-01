@@ -165,8 +165,8 @@
         <!-- Info Bar -->
         <div class="bg-blue-50 border-b px-6 py-3">
             <p class="text-sm text-blue-800">
-                <strong>Reliable Auto-Save:</strong> Click on any field in the PDF to edit it.
-                Changes are automatically saved every 10 seconds, when you switch tabs, or when you close the window.
+                <strong>Manual Save Only:</strong> Click on any field in the PDF to edit it.
+                Press Ctrl+S or click the Save button to save your changes to the database.
             </p>
         </div>
 
@@ -194,8 +194,8 @@
         <!-- Status Bar -->
         <div class="bg-white border-t px-6 py-3">
             <div class="flex justify-between items-center">
-            <div id="saveStatus" class="text-sm text-blue-600">Preparing Adobe PDF viewer...</div>
-                <div id="autoSaveStatus" class="text-xs text-gray-500">Auto-save: Ready</div>
+                <div id="saveStatus" class="text-sm text-blue-600">Preparing Adobe PDF viewer...</div>
+                <div class="text-xs text-gray-500">Manual save only - Press Ctrl+S to save</div>
             </div>
         </div>
     </div>
@@ -234,13 +234,9 @@ function initializePDFEditorPopup(popupWindow, context) {
     let currentPDFAPIs = null;
     popupWindow.PDF_DEBUG.state.viewerReady = false;
     
-    // Auto-save and reliable save mechanisms
-    let autoSaveInterval = null;
-    let lastSaveTime = null;
-    let pendingChanges = false;
+    // Manual save only - no polling or auto-save
     let isSaving = false;
     let savedFieldValues = null; // Store field values to apply when PDF loads
-    let lastKnownFieldValues = {}; // Track last known values for change detection
 
     const saveBtn = doc.getElementById('saveBtn');
     const downloadBtn = doc.getElementById('downloadBtn');
@@ -248,7 +244,6 @@ function initializePDFEditorPopup(popupWindow, context) {
     const showFormBtn = doc.getElementById('showFormBtn');
     const toggleFormBtn = doc.getElementById('toggleFormBtn');
     const saveStatusEl = doc.getElementById('saveStatus');
-    const autoSaveStatusEl = doc.getElementById('autoSaveStatus');
     const adobeContainer = doc.getElementById('adobe-dc-view');
     const formEditor = doc.getElementById('formEditor');
     const formFieldsContainer = doc.getElementById('formFieldsContainer');
@@ -268,11 +263,7 @@ function initializePDFEditorPopup(popupWindow, context) {
         saveStatusEl.textContent = message;
     }
 
-    function setAutoSaveStatus(message) {
-        if (autoSaveStatusEl) {
-            autoSaveStatusEl.textContent = message;
-        }
-    }
+    // No auto-save status function needed
 
     popupWindow.addEventListener('error', function(event) {
         setSaveStatus('error', 'Runtime error: ' + event.message);
@@ -284,19 +275,27 @@ function initializePDFEditorPopup(popupWindow, context) {
     });
 
     if (closeBtn) {
-        closeBtn.addEventListener('click', async () => {
-            // Save any pending changes before closing
-            if (pendingChanges) {
-                console.log('[PDF Popup] Closing window, saving pending changes...');
-                await savePDFFields(false);
-            }
-            stopAutoSave();
+        closeBtn.addEventListener('click', () => {
             popupWindow.close();
         });
     }
 
     if (saveBtn) {
-        saveBtn.addEventListener('click', () => savePDFFields());
+        saveBtn.addEventListener('click', () => {
+            // Manual save button - this will trigger Adobe's save callback
+            if (currentPDFViewer && currentPDFViewer.getAPIs) {
+                currentPDFViewer.getAPIs().then(apis => {
+                    if (apis && apis.save) {
+                        apis.save();
+                    } else {
+                        console.warn('[PDF Popup] Save API not available');
+                        setSaveStatus('error', 'Save not available. Use Ctrl+S in the PDF viewer.');
+                    }
+                });
+            } else {
+                setSaveStatus('error', 'PDF viewer not ready. Use Ctrl+S in the PDF viewer.');
+            }
+        });
     }
 
     if (downloadBtn) {
@@ -904,8 +903,6 @@ function initializePDFEditorPopup(popupWindow, context) {
                     // Add change event listener
                     input.addEventListener('input', () => {
                         fieldValues[name] = input.value;
-                        // Mark as changed for auto-save
-                        pendingChanges = true;
                     });
                     
                     fieldDiv.appendChild(input);
@@ -923,13 +920,6 @@ function initializePDFEditorPopup(popupWindow, context) {
             saveButton.onclick = () => savePDFFields(true);
             formContainer.appendChild(saveButton);
             
-            // Add extract fields button
-            const extractButton = popupWindow.document.createElement('button');
-            extractButton.className = 'mt-2 ml-4 px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500';
-            extractButton.textContent = 'Extract Fields from PDF';
-            extractButton.onclick = () => extractFieldsFromPDF();
-            formContainer.appendChild(extractButton);
-            
             console.log('[PDF Popup] Custom form UI created successfully');
             console.log('[PDF Popup] Form container has', formContainer.children.length, 'sections');
             setSaveStatus('success', 'Custom form UI ready for editing. Fields are organized by category.');
@@ -940,57 +930,7 @@ function initializePDFEditorPopup(popupWindow, context) {
         }
     }
 
-    async function extractFieldsFromPDF() {
-        try {
-            console.log('[PDF Popup] Extracting fields from PDF...');
-            setSaveStatus('info', 'Extracting fields from PDF...');
-            
-            // Get the current PDF content from the account-specific endpoint
-            const response = await fetch(appOrigin + '/api/pdf/template/' + templateId + '/' + accountId);
-            if (!response.ok) {
-                throw new Error('Failed to fetch PDF content');
-            }
-            
-            const pdfBlob = await response.blob();
-            const formData = new FormData();
-            formData.append('pdf', pdfBlob);
-            
-            // Extract fields using server-side extraction
-            const extractResponse = await fetch(appOrigin + '/api/extract-fields', {
-                method: 'POST',
-                body: formData
-            });
-            
-            const result = await extractResponse.json();
-            console.log('[PDF Popup] Field extraction result:', result);
-            
-            if (result.success && result.form_data) {
-                console.log('[PDF Popup] Extracted', result.field_count, 'fields from PDF');
-                console.log('[PDF Popup] Sample extracted values:', Object.entries(result.form_data).slice(0, 5));
-                
-                // Update the form UI with extracted values
-                const formContainer = popupWindow.document.getElementById('formFieldsContainer');
-                if (formContainer) {
-                    const inputs = formContainer.querySelectorAll('input[type="text"]');
-                    inputs.forEach(input => {
-                        const fieldName = input.getAttribute('data-field-name');
-                        if (fieldName && result.form_data[fieldName] !== undefined) {
-                            input.value = result.form_data[fieldName] || '';
-                        }
-                    });
-                }
-                
-                // Save the extracted values
-                await savePDFFields(false);
-                setSaveStatus('success', `Extracted and saved ${result.field_count} field values from PDF`);
-            } else {
-                setSaveStatus('error', 'Failed to extract fields: ' + (result.error || 'Unknown error'));
-            }
-        } catch (error) {
-            console.error('[PDF Popup] Error extracting fields from PDF:', error);
-            setSaveStatus('error', 'Error extracting fields: ' + error.message);
-        }
-    }
+    // Manual save only - no field extraction function needed
 
     async function savePDFFields(showStatus = true) {
         if (isSaving) {
@@ -1060,9 +1000,6 @@ function initializePDFEditorPopup(popupWindow, context) {
             console.log('[PDF Popup] Save response', result);
 
             if (result.success) {
-                lastSaveTime = new Date();
-                pendingChanges = false;
-                lastKnownFieldValues = { ...fieldValuesPayload }; // Update last known values
                 if (showStatus) {
                 setSaveStatus('success', 'Field values saved successfully.');
                 }
@@ -1088,136 +1025,11 @@ function initializePDFEditorPopup(popupWindow, context) {
         }
     }
 
-    // Auto-save functionality
-    function startAutoSave() {
-        if (autoSaveInterval) {
-            clearInterval(autoSaveInterval);
-        }
-        
-        autoSaveInterval = setInterval(async () => {
-            if (pendingChanges && !isSaving) {
-                console.log('[PDF Popup] Auto-saving...');
-                setAutoSaveStatus('Auto-save: Saving...');
-                const success = await savePDFFields(false); // Silent save
-                if (success) {
-                    setAutoSaveStatus('Auto-save: Saved');
-                    setTimeout(() => setAutoSaveStatus('Auto-save: Ready'), 2000);
-                } else {
-                    setAutoSaveStatus('Auto-save: Failed');
-                    setTimeout(() => setAutoSaveStatus('Auto-save: Ready'), 3000);
-                }
-            }
-        }, 10000); // Auto-save every 10 seconds
-        
-        console.log('[PDF Popup] Auto-save started (every 10 seconds)');
-        setAutoSaveStatus('Auto-save: Active');
-    }
+    // Manual save only - no auto-save functionality
 
-    function stopAutoSave() {
-        if (autoSaveInterval) {
-            clearInterval(autoSaveInterval);
-            autoSaveInterval = null;
-            console.log('[PDF Popup] Auto-save stopped');
-            setAutoSaveStatus('Auto-save: Stopped');
-        }
-    }
+    // No field change tracking - manual save only
 
-    // Track form field changes
-    function trackFieldChanges() {
-        if (currentPDFAPIs && currentPDFAPIs.addEventListener) {
-            try {
-                currentPDFAPIs.addEventListener('formFieldValueChanged', () => {
-                    pendingChanges = true;
-                    setAutoSaveStatus('Auto-save: Changes detected');
-                    console.log('[PDF Popup] Form field changed, marking for save');
-                });
-            } catch (error) {
-                console.warn('[PDF Popup] Could not add form field change listener:', error);
-            }
-        }
-        
-        // Fallback: Poll for changes every 3 seconds with proper change detection
-        setInterval(() => {
-            if (currentPDFViewer && !isSaving) {
-                console.log('[PDF Popup] Polling for field changes...');
-                collectPdfFieldData().then(data => {
-                    console.log('[PDF Popup] collectPdfFieldData result:', data);
-                    const currentValues = data.values || {};
-                    console.log('[PDF Popup] Extracted current values:', currentValues);
-                    console.log('[PDF Popup] Current values keys:', Object.keys(currentValues));
-                    
-                    // Compare current values with last known values
-                    const hasChanges = JSON.stringify(currentValues) !== JSON.stringify(lastKnownFieldValues);
-                    console.log('[PDF Popup] Has changes:', hasChanges);
-                    
-                    if (hasChanges && Object.keys(currentValues).length > 0) {
-                        pendingChanges = true;
-                        lastKnownFieldValues = { ...currentValues };
-                        setAutoSaveStatus('Auto-save: Changes detected');
-                        console.log('[PDF Popup] Field values changed, marking for save');
-                        console.log('[PDF Popup] Current values:', currentValues);
-                        console.log('[PDF Popup] Last known values:', lastKnownFieldValues);
-                    } else if (Object.keys(currentValues).length > 0) {
-                        // Log when we have values but no changes detected
-                        console.log('[PDF Popup] Field values present but no changes detected');
-                        console.log('[PDF Popup] Current values:', currentValues);
-                        console.log('[PDF Popup] Last known values:', lastKnownFieldValues);
-                    } else {
-                        console.log('[PDF Popup] No field values collected');
-                    }
-                }).catch(error => {
-                    console.warn('[PDF Popup] Change detection polling failed:', error);
-                });
-            } else {
-                console.log('[PDF Popup] Polling skipped - viewer:', !!currentPDFViewer, 'saving:', isSaving);
-            }
-        }, 3000);
-    }
-
-    // Reliable save on visibility change
-    function setupVisibilitySave() {
-        popupWindow.addEventListener('visibilitychange', async () => {
-            if (popupWindow.document.visibilityState === 'hidden' && pendingChanges) {
-                console.log('[PDF Popup] Window hidden, saving changes...');
-                await savePDFFields(false);
-            }
-        });
-    }
-
-    // Reliable save on beforeunload using sendBeacon
-    function setupBeforeUnloadSave() {
-        popupWindow.addEventListener('beforeunload', (event) => {
-            if (pendingChanges && !isSaving) {
-                console.log('[PDF Popup] Page unloading, attempting to save...');
-                
-                // Use sendBeacon for reliable exit saves
-                try {
-                    // Use the last known field values for exit save
-                    const fieldValuesPayload = lastKnownFieldValues || {};
-                    
-                    if (Object.keys(fieldValuesPayload).length > 0) {
-                        const body = JSON.stringify({
-                            template_id: templateId,
-                            account_id: accountId,
-                            field_values: fieldValuesPayload,
-                        });
-                        
-                        // Use sendBeacon for reliable exit saves
-                        if (popupWindow.navigator.sendBeacon) {
-                            popupWindow.navigator.sendBeacon(
-                                appOrigin + '/api/pdf/save-fields',
-                                new Blob([body], { type: 'application/json' })
-                            );
-                            console.log('[PDF Popup] Exit save sent via sendBeacon');
-                            pendingChanges = false; // Mark as saved
-                        }
-                    }
-                } catch (error) {
-                    console.warn('[PDF Popup] Exit save failed:', error);
-                }
-            }
-        });
-    }
+    // No automatic saves - manual save only
 
     async function downloadPDF() {
         try {
@@ -1285,7 +1097,6 @@ function initializePDFEditorPopup(popupWindow, context) {
                     setSaveStatus('info', 'PDF loaded. Applying saved field values...');
 
                     // Register save callback to extract field values from the actual saved PDF
-                    // Wait for AdobeDC to be available
                     if (typeof AdobeDC !== 'undefined') {
                         try {
                             await adobeDCView.registerCallback(
@@ -1293,25 +1104,17 @@ function initializePDFEditorPopup(popupWindow, context) {
                                 async (metaData, content, options) => {
                                     console.log('[PDF Popup] Save callback triggered', { metaData, content: content?.length, options });
                                     
-                                    // Extract field values from the saved PDF content (this has the actual filled values)
                                     try {
+                                        // Convert PDF content to blob
                                         const blob = new Blob([new Uint8Array(content)], { type: 'application/pdf' });
-                                        const formData = new FormData();
-                                        formData.append('pdf', blob);
                                         
-                                        const response = await fetch(appOrigin + '/api/extract-fields', {
-                                            method: 'POST',
-                                            body: formData
-                                        });
-                                        
-                                        const result = await response.json();
-                                        console.log('[PDF Popup] Field extraction from saved PDF:', result);
-                                        
-                                        if (result.success && result.form_data) {
-                                            console.log('[PDF Popup] Extracted field values with actual data:', Object.entries(result.form_data).slice(0, 5));
+                                        // Convert blob to base64 for server processing
+                                        const reader = new FileReader();
+                                        reader.onload = async () => {
+                                            const base64Content = reader.result;
                                             
-                                            // Save the extracted field values to database
-                                            const saveResponse = await fetch(appOrigin + '/api/pdf/save-fields', {
+                                            // Send PDF content to server for extraction and saving
+                                            const response = await fetch(appOrigin + '/api/pdf/save-fields', {
                                                 method: 'POST',
                                                 headers: {
                                                     'Content-Type': 'application/json',
@@ -1319,18 +1122,27 @@ function initializePDFEditorPopup(popupWindow, context) {
                                                 body: JSON.stringify({
                                                     template_id: templateId,
                                                     account_id: accountId,
-                                                    field_values: result.form_data
+                                                    pdf_content: base64Content,
+                                                    field_values: {} // Will be extracted from PDF
                                                 })
                                             });
                                             
-                                            const saveResult = await saveResponse.json();
-                                            console.log('[PDF Popup] Saved extracted field values:', saveResult);
+                                            const result = await response.json();
+                                            console.log('[PDF Popup] Save result:', result);
                                             
-                                            // Update last known values for change detection
-                                            lastKnownFieldValues = { ...result.form_data };
-                                        }
+                                            if (result.success) {
+                                                setSaveStatus('success', `Saved ${result.field_count} field values from PDF`);
+                                                console.log('[PDF Popup] Successfully saved extracted field values');
+                                            } else {
+                                                setSaveStatus('error', 'Save failed: ' + result.error);
+                                                console.error('[PDF Popup] Save failed:', result.error);
+                                            }
+                                        };
+                                        reader.readAsDataURL(blob);
+                                        
                                     } catch (error) {
-                                        console.error('[PDF Popup] Error extracting fields from saved PDF:', error);
+                                        console.error('[PDF Popup] Error processing saved PDF:', error);
+                                        setSaveStatus('error', 'Error processing save: ' + error.message);
                                     }
                                     
                                     return {
@@ -1341,8 +1153,8 @@ function initializePDFEditorPopup(popupWindow, context) {
                                     };
                                 },
                                 {
-                                    enableFocusPolling: true,
-                                    enableAutoSave: true
+                                    enableFocusPolling: false,
+                                    enableAutoSave: false
                                 }
                             );
                             console.log('[PDF Popup] Save callback registered successfully');
@@ -1363,14 +1175,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                         // Create custom form UI for field editing
                         createCustomFormUI(savedFieldValues);
                         
-                        // Initialize last known values
-                        lastKnownFieldValues = { ...savedFieldValues };
-                        
-                        // Set up save mechanisms for custom form
-                        setupVisibilitySave();
-                        setupBeforeUnloadSave();
-                        
-                        console.log('[PDF Popup] Custom form UI and save mechanisms initialized');
+                        console.log('[PDF Popup] Custom form UI initialized - manual save only');
                     }).catch(async apiError => {
                         console.warn('[PDF Popup] Unable to access Adobe viewer APIs', apiError);
                         currentPDFAPIs = null;
@@ -1379,13 +1184,6 @@ function initializePDFEditorPopup(popupWindow, context) {
                         // Create custom form UI for field editing
                         console.log('[PDF Popup] Creating custom form UI (no Adobe APIs)');
                         createCustomFormUI(savedFieldValues);
-                        
-                        // Initialize last known values
-                        lastKnownFieldValues = { ...savedFieldValues };
-                        
-                        // Still set up basic save mechanisms even without Adobe APIs
-                        setupVisibilitySave();
-                        setupBeforeUnloadSave();
                     });
                 }).catch(error => {
                     console.error('[PDF Popup] Error loading PDF', error);
