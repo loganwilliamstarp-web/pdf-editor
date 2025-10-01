@@ -960,6 +960,10 @@ def save_pdf_fields():
 
         existing_data = cur.fetchone()
 
+        print("Saving field values for template {0}, account {1}: {2} fields".format(template_id, account_id, len(field_values)))
+        if field_values:
+            print("Field sample:", list(field_values.items())[:5])
+
         if existing_data:
             cur.execute('''
                 UPDATE template_data 
