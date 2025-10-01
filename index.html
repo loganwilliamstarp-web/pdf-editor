@@ -164,8 +164,8 @@
         <!-- Info Bar -->
         <div class="bg-blue-50 border-b px-6 py-3">
             <p class="text-sm text-blue-800">
-                <strong>Native PDF Field Editing:</strong> Click on any field in the PDF to edit it.
-                Values are automatically saved to the database when you click "Save".
+                <strong>Reliable Auto-Save:</strong> Click on any field in the PDF to edit it.
+                Changes are automatically saved every 10 seconds, when you switch tabs, or when you close the window.
             </p>
         </div>
 
@@ -178,7 +178,10 @@
 
         <!-- Status Bar -->
         <div class="bg-white border-t px-6 py-3">
-            <div id="saveStatus" class="text-sm text-blue-600">Preparing Adobe PDF viewer...</div>
+            <div class="flex justify-between items-center">
+                <div id="saveStatus" class="text-sm text-blue-600">Preparing Adobe PDF viewer...</div>
+                <div id="autoSaveStatus" class="text-xs text-gray-500">Auto-save: Ready</div>
+            </div>
         </div>
     </div>
 </body>
@@ -215,11 +218,19 @@ function initializePDFEditorPopup(popupWindow, context) {
     let currentPDFViewer = null;
     let currentPDFAPIs = null;
     popupWindow.PDF_DEBUG.state.viewerReady = false;
+    
+    // Auto-save and reliable save mechanisms
+    let autoSaveInterval = null;
+    let lastSaveTime = null;
+    let pendingChanges = false;
+    let isSaving = false;
+    let savedFieldValues = null; // Store field values to apply when PDF loads
 
     const saveBtn = doc.getElementById('saveBtn');
     const downloadBtn = doc.getElementById('downloadBtn');
     const closeBtn = doc.getElementById('closeBtn');
     const saveStatusEl = doc.getElementById('saveStatus');
+    const autoSaveStatusEl = doc.getElementById('autoSaveStatus');
     const adobeContainer = doc.getElementById('adobe-dc-view');
 
     function setSaveStatus(status, message) {
@@ -237,6 +248,12 @@ function initializePDFEditorPopup(popupWindow, context) {
         saveStatusEl.textContent = message;
     }
 
+    function setAutoSaveStatus(message) {
+        if (autoSaveStatusEl) {
+            autoSaveStatusEl.textContent = message;
+        }
+    }
+
     popupWindow.addEventListener('error', function(event) {
         setSaveStatus('error', 'Runtime error: ' + event.message);
         if (event && event.error) {
@@ -247,7 +264,15 @@ function initializePDFEditorPopup(popupWindow, context) {
     });
 
     if (closeBtn) {
-        closeBtn.addEventListener('click', () => popupWindow.close());
+        closeBtn.addEventListener('click', async () => {
+            // Save any pending changes before closing
+            if (pendingChanges) {
+                console.log('[PDF Popup] Closing window, saving pending changes...');
+                await savePDFFields(false);
+            }
+            stopAutoSave();
+            popupWindow.close();
+        });
     }
 
     if (saveBtn) {
@@ -374,44 +399,68 @@ function initializePDFEditorPopup(popupWindow, context) {
 
             if (data.success && data.field_values && Object.keys(data.field_values).length > 0) {
                 console.log('[PDF Popup] Loading existing field values', data.field_values);
-
-                const adobeValueEntries = mapObjectToAdobeFormFieldValues(data.field_values);
-                console.log('[PDF Popup] Prepared Adobe value entries', adobeValueEntries);
-
-                if (adobeValueEntries.length && currentPDFAPIs && currentPDFAPIs.setFormFieldValues) {
-                    try {
-                        await currentPDFAPIs.setFormFieldValues({ formFieldValues: adobeValueEntries });
-                    } catch (apiError) {
-                        console.warn('[PDF Popup] Adobe API setFormFieldValues failed, falling back', apiError);
-                    }
-                }
-
-                if (currentPDFViewer && currentPDFViewer.setFormFields) {
-                    try {
-                        await currentPDFViewer.setFormFields(data.field_values);
-                        console.log('[PDF Popup] Applied viewer field map');
-                    } catch (viewerError) {
-                        console.warn('[PDF Popup] Primary setFormFields failed, trying alternate format', viewerError);
-                        const viewerValueMap = mapObjectToViewerFieldValues(data.field_values);
-                        if (Object.keys(viewerValueMap).length) {
-                            try {
-                                await currentPDFViewer.setFormFields(viewerValueMap);
-                                console.log('[PDF Popup] Applied alternate viewer field map');
-                            } catch (alternateError) {
-                                console.warn('[PDF Popup] Alternate setFormFields failed', alternateError);
-                            }
-                        }
-                    }
-                }
-
-                setSaveStatus('success', 'Existing field values applied from the database.');
+                savedFieldValues = data.field_values; // Store for later application
+                return data.field_values;
             } else {
-                setSaveStatus('info', 'PDF ready for editing. Save to store your changes.');
+                console.log('[PDF Popup] No existing field values found');
+                savedFieldValues = null;
+                return null;
             }
         } catch (error) {
             console.error('[PDF Popup] Error loading existing field values', error);
-            setSaveStatus('error', 'Unable to load saved field values.');
+            savedFieldValues = null;
+            return null;
         }
+    }
+
+    async function applySavedFieldValues(fieldValues) {
+        if (!fieldValues || Object.keys(fieldValues).length === 0) {
+            setSaveStatus('info', 'PDF ready for editing. Save to store your changes.');
+            return;
+        }
+
+        console.log('[PDF Popup] Applying saved field values', fieldValues);
+
+        const adobeValueEntries = mapObjectToAdobeFormFieldValues(fieldValues);
+        console.log('[PDF Popup] Prepared Adobe value entries', adobeValueEntries);
+
+        // Try Adobe API first
+        if (adobeValueEntries.length && currentPDFAPIs && currentPDFAPIs.setFormFieldValues) {
+            try {
+                await currentPDFAPIs.setFormFieldValues({ formFieldValues: adobeValueEntries });
+                console.log('[PDF Popup] Applied field values via Adobe API');
+                setSaveStatus('success', 'Existing field values applied from the database.');
+                return;
+            } catch (apiError) {
+                console.warn('[PDF Popup] Adobe API setFormFieldValues failed, falling back', apiError);
+            }
+        }
+
+        // Fallback to viewer method
+        if (currentPDFViewer && currentPDFViewer.setFormFields) {
+            try {
+                await currentPDFViewer.setFormFields(fieldValues);
+                console.log('[PDF Popup] Applied viewer field map');
+                setSaveStatus('success', 'Existing field values applied from the database.');
+                return;
+            } catch (viewerError) {
+                console.warn('[PDF Popup] Primary setFormFields failed, trying alternate format', viewerError);
+                const viewerValueMap = mapObjectToViewerFieldValues(fieldValues);
+                if (Object.keys(viewerValueMap).length) {
+                    try {
+                        await currentPDFViewer.setFormFields(viewerValueMap);
+                        console.log('[PDF Popup] Applied alternate viewer field map');
+                        setSaveStatus('success', 'Existing field values applied from the database.');
+                        return;
+                    } catch (alternateError) {
+                        console.warn('[PDF Popup] Alternate setFormFields failed', alternateError);
+                    }
+                }
+            }
+        }
+
+        // If all methods fail, show error
+        setSaveStatus('error', 'Unable to apply saved field values.');
     }
 
     function mapObjectToAdobeFormFieldValues(obj) {
@@ -612,23 +661,39 @@ function initializePDFEditorPopup(popupWindow, context) {
         return { definitions, values };
     }
 
-    async function savePDFFields() {
-        if (!saveBtn || !saveStatusEl) {
-            return;
+    async function savePDFFields(showStatus = true) {
+        if (isSaving) {
+            console.log('[PDF Popup] Save already in progress, skipping...');
+            return false;
         }
 
-        saveBtn.disabled = true;
-        saveBtn.textContent = 'Saving...';
-        setSaveStatus('info', 'Saving field values...');
+        isSaving = true;
+        
+        if (showStatus && saveBtn && saveStatusEl) {
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+            setSaveStatus('info', 'Saving field values...');
+        }
 
         try {
             if (!currentPDFViewer) {
-                setSaveStatus('error', 'PDF viewer not available.');
-                return;
+                if (showStatus) {
+                    setSaveStatus('error', 'PDF viewer not available.');
+                }
+                return false;
             }
 
             const data = await collectPdfFieldData();
             const fieldValuesPayload = (data.values && typeof data.values === 'object') ? data.values : {};
+            
+            // Check if there are actual changes to save
+            if (Object.keys(fieldValuesPayload).length === 0) {
+                if (showStatus) {
+                    setSaveStatus('info', 'No changes to save.');
+                }
+                return true;
+            }
+
             const body = {
                 template_id: templateId,
                 account_id: accountId,
@@ -653,16 +718,139 @@ function initializePDFEditorPopup(popupWindow, context) {
             console.log('[PDF Popup] Save response', result);
 
             if (result.success) {
-                setSaveStatus('success', 'Field values saved successfully.');
+                lastSaveTime = new Date();
+                pendingChanges = false;
+                if (showStatus) {
+                    setSaveStatus('success', 'Field values saved successfully.');
+                }
+                return true;
             } else {
-                setSaveStatus('error', 'Save failed: ' + result.error);
+                if (showStatus) {
+                    setSaveStatus('error', 'Save failed: ' + result.error);
+                }
+                return false;
             }
         } catch (error) {
-            setSaveStatus('error', 'Save error: ' + error.message);
+            console.error('[PDF Popup] Save error:', error);
+            if (showStatus) {
+                setSaveStatus('error', 'Save error: ' + error.message);
+            }
+            return false;
         } finally {
-            saveBtn.disabled = false;
-            saveBtn.textContent = 'Save Fields';
+            isSaving = false;
+            if (showStatus && saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save Fields';
+            }
         }
+    }
+
+    // Auto-save functionality
+    function startAutoSave() {
+        if (autoSaveInterval) {
+            clearInterval(autoSaveInterval);
+        }
+        
+        autoSaveInterval = setInterval(async () => {
+            if (pendingChanges && !isSaving) {
+                console.log('[PDF Popup] Auto-saving...');
+                setAutoSaveStatus('Auto-save: Saving...');
+                const success = await savePDFFields(false); // Silent save
+                if (success) {
+                    setAutoSaveStatus('Auto-save: Saved');
+                    setTimeout(() => setAutoSaveStatus('Auto-save: Ready'), 2000);
+                } else {
+                    setAutoSaveStatus('Auto-save: Failed');
+                    setTimeout(() => setAutoSaveStatus('Auto-save: Ready'), 3000);
+                }
+            }
+        }, 10000); // Auto-save every 10 seconds
+        
+        console.log('[PDF Popup] Auto-save started (every 10 seconds)');
+        setAutoSaveStatus('Auto-save: Active');
+    }
+
+    function stopAutoSave() {
+        if (autoSaveInterval) {
+            clearInterval(autoSaveInterval);
+            autoSaveInterval = null;
+            console.log('[PDF Popup] Auto-save stopped');
+            setAutoSaveStatus('Auto-save: Stopped');
+        }
+    }
+
+    // Track form field changes
+    function trackFieldChanges() {
+        if (currentPDFAPIs && currentPDFAPIs.addEventListener) {
+            try {
+                currentPDFAPIs.addEventListener('formFieldValueChanged', () => {
+                    pendingChanges = true;
+                    setAutoSaveStatus('Auto-save: Changes detected');
+                    console.log('[PDF Popup] Form field changed, marking for save');
+                });
+            } catch (error) {
+                console.warn('[PDF Popup] Could not add form field change listener:', error);
+            }
+        }
+        
+        // Fallback: Poll for changes every 2 seconds if Adobe API events don't work
+        setInterval(() => {
+            if (currentPDFViewer && !isSaving) {
+                collectPdfFieldData().then(data => {
+                    if (data.values && Object.keys(data.values).length > 0) {
+                        // Simple change detection - if we have field values, assume changes
+                        pendingChanges = true;
+                        setAutoSaveStatus('Auto-save: Changes detected');
+                    }
+                }).catch(error => {
+                    console.warn('[PDF Popup] Change detection polling failed:', error);
+                });
+            }
+        }, 2000);
+    }
+
+    // Reliable save on visibility change
+    function setupVisibilitySave() {
+        popupWindow.addEventListener('visibilitychange', async () => {
+            if (popupWindow.document.visibilityState === 'hidden' && pendingChanges) {
+                console.log('[PDF Popup] Window hidden, saving changes...');
+                await savePDFFields(false);
+            }
+        });
+    }
+
+    // Reliable save on beforeunload using sendBeacon
+    function setupBeforeUnloadSave() {
+        popupWindow.addEventListener('beforeunload', (event) => {
+            if (pendingChanges && !isSaving) {
+                console.log('[PDF Popup] Page unloading, attempting to save...');
+                
+                // Use sendBeacon for reliable exit saves
+                try {
+                    const data = collectPdfFieldData();
+                    const fieldValuesPayload = (data.values && typeof data.values === 'object') ? data.values : {};
+                    
+                    if (Object.keys(fieldValuesPayload).length > 0) {
+                        const body = JSON.stringify({
+                            template_id: templateId,
+                            account_id: accountId,
+                            field_values: fieldValuesPayload,
+                        });
+                        
+                        // Use sendBeacon for reliable exit saves
+                        if (popupWindow.navigator.sendBeacon) {
+                            popupWindow.navigator.sendBeacon(
+                                appOrigin + '/api/pdf/save-fields',
+                                new Blob([body], { type: 'application/json' })
+                            );
+                            console.log('[PDF Popup] Exit save sent via sendBeacon');
+                        }
+                    }
+                } catch (error) {
+                    console.warn('[PDF Popup] Exit save failed:', error);
+                }
+            }
+        });
     }
 
     async function downloadPDF() {
@@ -686,13 +874,17 @@ function initializePDFEditorPopup(popupWindow, context) {
         }
     }
 
-    function initializeAdobePDF(localTemplateId) {
+    async function initializeAdobePDF(localTemplateId) {
         if (!adobeContainer) {
             setSaveStatus('error', 'PDF container not available.');
             return;
         }
 
         adobeContainer.innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div><p class="text-gray-600">Loading PDF...</p></div>';
+
+        // Load existing field values BEFORE initializing the PDF viewer
+        setSaveStatus('info', 'Loading saved field values...');
+        await loadExistingFieldValues(localTemplateId);
 
         const initializeViewer = () => {
             try {
@@ -719,23 +911,48 @@ function initializePDFEditorPopup(popupWindow, context) {
                     showSavePDF: false,
                     showLeftHandPanel: false,
                     showDisabledSaveButton: false,
-                }).then(adobeViewerController => {
+                }).then(async adobeViewerController => {
                     currentPDFViewer = adobeViewerController;
                     popupWindow.PDF_DEBUG = popupWindow.PDF_DEBUG || {};
                     popupWindow.PDF_DEBUG.viewer = currentPDFViewer;
                     popupWindow.PDF_DEBUG.state.viewerReady = true;
-                    setSaveStatus('info', 'PDF loaded. Retrieving saved field values...');
+                    setSaveStatus('info', 'PDF loaded. Applying saved field values...');
 
-                    currentPDFViewer.getAPIs().then(apis => {
+                    currentPDFViewer.getAPIs().then(async apis => {
                         currentPDFAPIs = apis;
                         popupWindow.PDF_DEBUG.apis = currentPDFAPIs;
-                    }).catch(apiError => {
+                        
+                        // Apply saved field values immediately after APIs are ready
+                        if (savedFieldValues) {
+                            await applySavedFieldValues(savedFieldValues);
+                        } else {
+                            setSaveStatus('info', 'PDF ready for editing. Save to store your changes.');
+                        }
+                        
+                        // Set up reliable save mechanisms
+                        trackFieldChanges();
+                        startAutoSave();
+                        setupVisibilitySave();
+                        setupBeforeUnloadSave();
+                        
+                        console.log('[PDF Popup] Reliable save mechanisms initialized');
+                    }).catch(async apiError => {
                         console.warn('[PDF Popup] Unable to access Adobe viewer APIs', apiError);
                         currentPDFAPIs = null;
                         popupWindow.PDF_DEBUG.apis = null;
+                        
+                        // Apply saved field values even without Adobe APIs
+                        if (savedFieldValues) {
+                            await applySavedFieldValues(savedFieldValues);
+                        } else {
+                            setSaveStatus('info', 'PDF ready for editing. Save to store your changes.');
+                        }
+                        
+                        // Still set up basic save mechanisms even without Adobe APIs
+                        startAutoSave();
+                        setupVisibilitySave();
+                        setupBeforeUnloadSave();
                     });
-
-                    loadExistingFieldValues(localTemplateId);
                 }).catch(error => {
                     console.error('[PDF Popup] Error loading PDF', error);
                     showPDFError(localTemplateId, error.message || 'The PDF could not be loaded.');
@@ -764,16 +981,15 @@ function initializePDFEditorPopup(popupWindow, context) {
         ensureTailwindStyles().catch(error => {
             console.warn('[PDF Popup] Tailwind stylesheet failed to load for PDF editor popup.', error);
             setSaveStatus('error', 'Tailwind CDN failed to load. Styling may be limited.');
-        }).finally(() => {
-            ensureAdobePDFSDK()
-                .then(() => {
-                    initializeAdobePDF(templateId);
-                })
-                .catch(error => {
-                    console.error('[PDF Popup] Failed to load Adobe SDK', error);
-                    setSaveStatus('error', error.message || 'Adobe PDF Embed API failed to load.');
-                    showPDFError(templateId, error.message || 'Adobe PDF Embed API failed to load.');
-                });
+        }).finally(async () => {
+            try {
+                await ensureAdobePDFSDK();
+                await initializeAdobePDF(templateId);
+            } catch (error) {
+                console.error('[PDF Popup] Failed to load Adobe SDK', error);
+                setSaveStatus('error', error.message || 'Adobe PDF Embed API failed to load.');
+                showPDFError(templateId, error.message || 'Adobe PDF Embed API failed to load.');
+            }
         });
     };
 
