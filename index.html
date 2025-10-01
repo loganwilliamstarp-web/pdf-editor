@@ -155,10 +155,10 @@
             <div class="px-6 py-4 flex justify-between items-center">
                 <h1 class="text-xl font-semibold text-gray-900">PDF Editor</h1>
                 <div class="flex space-x-3">
-                    <button onclick="savePDFFields('${templateId}')" id="saveBtn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700">
+                    <button onclick="savePDFFields(templateId)" id="saveBtn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700">
                         Save Fields
                     </button>
-                    <button onclick="downloadPDF('${templateId}')" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700">
+                    <button onclick="downloadPDF(templateId)" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700">
                         Download PDF
                     </button>
                     <button onclick="window.close()" class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50">
@@ -192,52 +192,93 @@
         // Global variables for popup window
         let currentPDFViewer = null;
         let currentPDFAPIs = null;
-        const accountId = '${accountId}';
-        const templateId = '${templateId}';
+        const accountId = ${JSON.stringify(accountId)};
+        const templateId = ${JSON.stringify(templateId)};
         const templateName = 'PDF Template';
+        
+        console.log('[PDF Popup] boot', { templateId, accountId });
+        
+        window.addEventListener('error', function(event) {
+            try {
+                setSaveStatus('error', 'Runtime error: ' + event.message);
+            } catch (setStatusError) {
+                console.warn('Unable to update status from global error handler', setStatusError);
+            }
+            if (event && event.error) {
+                console.error('[PDF Popup] uncaught error', event.error);
+            } else {
+                console.error('[PDF Popup] uncaught error', event.message);
+            }
+        });
         
         function ensureTailwindStyles() {
             if (window.tailwind) {
+                console.log('[PDF Popup] Tailwind already available');
                 return Promise.resolve();
             }
 
             const existing = document.getElementById('tailwind-popup-script');
             if (existing) {
+                console.log('[PDF Popup] Waiting for existing Tailwind script to load');
                 return new Promise(function(resolve, reject) {
-                    existing.addEventListener('load', function() { resolve(); });
-                    existing.addEventListener('error', function() { reject(new Error('Tailwind CDN failed to load')); });
+                    existing.addEventListener('load', function() {
+                        console.log('[PDF Popup] Tailwind script load event (existing)');
+                        resolve();
+                    });
+                    existing.addEventListener('error', function() {
+                        reject(new Error('Tailwind CDN failed to load'));
+                    });
                 });
             }
 
             return new Promise(function(resolve, reject) {
+                console.log('[PDF Popup] Injecting Tailwind CDN script');
                 const script = document.createElement('script');
                 script.id = 'tailwind-popup-script';
                 script.src = 'https://cdn.tailwindcss.com';
-                script.onload = function() { resolve(); };
-                script.onerror = function() { reject(new Error('Tailwind CDN failed to load')); };
+                script.onload = function() {
+                    console.log('[PDF Popup] Tailwind CDN script loaded');
+                    resolve();
+                };
+                script.onerror = function() {
+                    reject(new Error('Tailwind CDN failed to load'));
+                };
                 document.head.appendChild(script);
             });
         }
 
         function ensureAdobePDFSDK() {
             if (window.AdobeDC && window.AdobeDC.View) {
+                console.log('[PDF Popup] Adobe SDK already available');
                 return Promise.resolve();
             }
 
             const existing = document.getElementById('adobe-pdf-viewer-sdk');
             if (existing) {
+                console.log('[PDF Popup] Waiting for existing Adobe SDK script');
                 return new Promise(function(resolve, reject) {
-                    existing.addEventListener('load', function() { resolve(); });
-                    existing.addEventListener('error', function() { reject(new Error('Adobe PDF Embed API failed to load')); });
+                    existing.addEventListener('load', function() {
+                        console.log('[PDF Popup] Adobe SDK script load event (existing)');
+                        resolve();
+                    });
+                    existing.addEventListener('error', function() {
+                        reject(new Error('Adobe PDF Embed API failed to load'));
+                    });
                 });
             }
 
             return new Promise(function(resolve, reject) {
+                console.log('[PDF Popup] Injecting Adobe PDF Embed SDK script');
                 const script = document.createElement('script');
                 script.id = 'adobe-pdf-viewer-sdk';
                 script.src = 'https://acrobatservices.adobe.com/view-sdk/viewer.js';
-                script.onload = function() { resolve(); };
-                script.onerror = function() { reject(new Error('Adobe PDF Embed API failed to load')); };
+                script.onload = function() {
+                    console.log('[PDF Popup] Adobe PDF Embed SDK script loaded');
+                    resolve();
+                };
+                script.onerror = function() {
+                    reject(new Error('Adobe PDF Embed API failed to load'));
+                };
                 document.head.appendChild(script);
             });
         }
@@ -628,16 +669,21 @@
 
         // Initialize when popup loads
         window.addEventListener('load', function() {
+            setSaveStatus('info', 'Loading Adobe PDF viewer...');
+
             ensureTailwindStyles().catch(function(error) {
                 console.warn('Tailwind stylesheet failed to load for PDF editor popup.', error);
+                setSaveStatus('error', 'Tailwind CDN failed to load. Styling may be limited.');
             });
 
             ensureAdobePDFSDK()
                 .then(function() {
+                    console.log('[PDF Popup] Adobe SDK ready, initializing viewer');
                     initializeAdobePDF(templateId);
                 })
                 .catch(function(error) {
-                    console.error(error);
+                    console.error('[PDF Popup] Failed to load Adobe SDK', error);
+                    setSaveStatus('error', error.message || 'Adobe PDF Embed API failed to load.');
                     showPDFError(templateId, error.message || 'Adobe PDF Embed API failed to load.');
                 });
         });
