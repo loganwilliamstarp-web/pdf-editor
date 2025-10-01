@@ -180,7 +180,7 @@
         <!-- Status Bar -->
         <div class="bg-white border-t px-6 py-3">
             <div class="flex justify-between items-center">
-                <div id="saveStatus" class="text-sm text-blue-600">Preparing Adobe PDF viewer...</div>
+            <div id="saveStatus" class="text-sm text-blue-600">Preparing Adobe PDF viewer...</div>
                 <div class="text-xs text-gray-500">Press Ctrl+S directly in the PDF viewer to save</div>
             </div>
         </div>
@@ -524,16 +524,18 @@ function initializePDFEditorPopup(popupWindow, context) {
                 }
                             } catch (alternateError) {
                                 console.warn('[PDF Popup] Alternate setFormFields failed', alternateError);
-            }
-        }
+                            }
+                        }
 
         // If all methods fail, try to reload PDF with pre-filled values
         console.error('[PDF Popup] All field value application methods failed');
         console.log('[PDF Popup] Attempting to reload PDF with pre-filled values from server');
+        console.log('[PDF Popup] localTemplateId:', localTemplateId, 'accountId:', accountId, 'appOrigin:', appOrigin);
+        console.log('[PDF Popup] templateId from context:', templateId, 'accountId from context:', accountId);
         
         try {
             // Reload the PDF with pre-filled values from the server endpoint
-            const prefilledUrl = appOrigin + '/api/pdf/template/' + localTemplateId + '/' + accountId;
+            const prefilledUrl = appOrigin + '/api/pdf/template/' + templateId + '/' + accountId;
             console.log('[PDF Popup] Reloading PDF from:', prefilledUrl);
             
             // Re-initialize the viewer with the pre-filled PDF
@@ -545,7 +547,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                 },
                 metaData: {
                     fileName: "Certificate of Insurance",
-                    id: localTemplateId
+                    id: templateId
                 }
             });
             
@@ -860,9 +862,8 @@ function initializePDFEditorPopup(popupWindow, context) {
 
         adobeContainer.innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div><p class="text-gray-600">Loading PDF...</p></div>';
 
-        // Load existing field values BEFORE initializing the PDF viewer
-        setSaveStatus('info', 'Loading saved field values...');
-        await loadExistingFieldValues(localTemplateId);
+        // PDF will be loaded with pre-filled values from server endpoint
+        setSaveStatus('info', 'Loading PDF with saved field values...');
 
         const initializeViewer = () => {
             try {
@@ -879,10 +880,14 @@ function initializePDFEditorPopup(popupWindow, context) {
                     divId: 'adobe-dc-view',
                 });
 
+                // Load PDF with pre-filled values from server
+                const prefilledUrl = appOrigin + '/api/pdf/template/' + localTemplateId + '/' + accountId;
+                console.log('[PDF Popup] Loading PDF with pre-filled values from:', prefilledUrl);
+                
                 adobeDCView.previewFile({
                     content: {
                         location: {
-                            url: appOrigin + '/api/pdf/template/' + localTemplateId + '/' + accountId,
+                            url: prefilledUrl,
                         },
                     },
                     metaData: {
@@ -993,18 +998,9 @@ function initializePDFEditorPopup(popupWindow, context) {
                         console.log('[PDF Popup] Available API methods:', Object.keys(apis || {}));
                         setSaveStatus('success', 'PDF loaded. Click on fields to edit, then press Ctrl+S to save.');
                         
-                        // Apply saved field values if they exist
-                        console.log('[PDF Popup] Checking savedFieldValues:', savedFieldValues);
-                        console.log('[PDF Popup] savedFieldValues type:', typeof savedFieldValues);
-                        console.log('[PDF Popup] savedFieldValues keys:', savedFieldValues ? Object.keys(savedFieldValues) : 'null');
-                        console.log('[PDF Popup] savedFieldValues length:', savedFieldValues ? Object.keys(savedFieldValues).length : 0);
-                        
-                        if (savedFieldValues && Object.keys(savedFieldValues).length > 0) {
-                            console.log('[PDF Popup] Applying saved field values after PDF load');
-                            await applySavedFieldValues(savedFieldValues);
-                        } else {
-                            console.log('[PDF Popup] No saved field values to apply - savedFieldValues:', savedFieldValues);
-                        }
+                        // PDF is loaded with pre-filled values from server
+                        console.log('[PDF Popup] PDF loaded with pre-filled values from server endpoint');
+                        setSaveStatus('success', 'PDF loaded with saved field values. Click on fields to edit, then press Ctrl+S to save.');
                     }).catch(async apiError => {
                         console.warn('[PDF Popup] Unable to access Adobe viewer APIs', apiError);
                         currentPDFAPIs = null;
@@ -1013,14 +1009,9 @@ function initializePDFEditorPopup(popupWindow, context) {
                         console.log('[PDF Popup] PDF loaded without Adobe APIs');
                         setSaveStatus('info', 'PDF loaded. Use Ctrl+S to save changes.');
                         
-                        // Try to apply saved field values even without APIs
-                        console.log('[PDF Popup] Checking savedFieldValues (no APIs):', savedFieldValues);
-                        if (savedFieldValues && Object.keys(savedFieldValues).length > 0) {
-                            console.log('[PDF Popup] Attempting to apply saved field values without APIs');
-                            await applySavedFieldValues(savedFieldValues);
-                        } else {
-                            console.log('[PDF Popup] No saved field values to apply (no APIs) - savedFieldValues:', savedFieldValues);
-                        }
+                        // PDF is loaded with pre-filled values from server
+                        console.log('[PDF Popup] PDF loaded with pre-filled values from server endpoint (no APIs)');
+                        setSaveStatus('info', 'PDF loaded with saved field values. Use Ctrl+S to save changes.');
                     });
                 }).catch(error => {
                     console.error('[PDF Popup] Error loading PDF', error);
@@ -1034,10 +1025,10 @@ function initializePDFEditorPopup(popupWindow, context) {
 
         // Wait for Adobe SDK to be fully loaded with better error handling
         const waitForAdobeSDK = () => {
-            if (popupWindow.AdobeDC && popupWindow.AdobeDC.View) {
+        if (popupWindow.AdobeDC && popupWindow.AdobeDC.View) {
                 console.log('[PDF Popup] AdobeDC is available, initializing viewer');
-                initializeViewer();
-            } else {
+            initializeViewer();
+        } else {
                 console.log('[PDF Popup] AdobeDC not yet available, waiting...');
                 // Check every 100ms for AdobeDC to be available
                 const checkInterval = setInterval(() => {
@@ -1051,10 +1042,10 @@ function initializePDFEditorPopup(popupWindow, context) {
                 // Stop checking after 10 seconds
                 setTimeout(() => {
                     clearInterval(checkInterval);
-                    if (!popupWindow.AdobeDC || !popupWindow.AdobeDC.View) {
+            if (!popupWindow.AdobeDC || !popupWindow.AdobeDC.View) {
                         console.warn('[PDF Popup] AdobeDC not available after 10 seconds, showing error');
-                        showAdobeSDKError(localTemplateId);
-                    }
+                showAdobeSDKError(localTemplateId);
+            }
                 }, 10000);
             }
         };
