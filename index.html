@@ -923,6 +923,13 @@ function initializePDFEditorPopup(popupWindow, context) {
             saveButton.onclick = () => savePDFFields(true);
             formContainer.appendChild(saveButton);
             
+            // Add extract fields button
+            const extractButton = popupWindow.document.createElement('button');
+            extractButton.className = 'mt-2 ml-4 px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500';
+            extractButton.textContent = 'Extract Fields from PDF';
+            extractButton.onclick = () => extractFieldsFromPDF();
+            formContainer.appendChild(extractButton);
+            
             console.log('[PDF Popup] Custom form UI created successfully');
             console.log('[PDF Popup] Form container has', formContainer.children.length, 'sections');
             setSaveStatus('success', 'Custom form UI ready for editing. Fields are organized by category.');
@@ -930,6 +937,58 @@ function initializePDFEditorPopup(popupWindow, context) {
         } catch (error) {
             console.error('[PDF Popup] Error creating custom form UI:', error);
             setSaveStatus('error', 'Failed to create form UI: ' + error.message);
+        }
+    }
+
+    async function extractFieldsFromPDF() {
+        try {
+            console.log('[PDF Popup] Extracting fields from PDF...');
+            setSaveStatus('info', 'Extracting fields from PDF...');
+            
+            // Get the current PDF content from the account-specific endpoint
+            const response = await fetch(appOrigin + '/api/pdf/template/' + templateId + '/' + accountId);
+            if (!response.ok) {
+                throw new Error('Failed to fetch PDF content');
+            }
+            
+            const pdfBlob = await response.blob();
+            const formData = new FormData();
+            formData.append('pdf', pdfBlob);
+            
+            // Extract fields using server-side extraction
+            const extractResponse = await fetch(appOrigin + '/api/extract-fields', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await extractResponse.json();
+            console.log('[PDF Popup] Field extraction result:', result);
+            
+            if (result.success && result.form_data) {
+                console.log('[PDF Popup] Extracted', result.field_count, 'fields from PDF');
+                console.log('[PDF Popup] Sample extracted values:', Object.entries(result.form_data).slice(0, 5));
+                
+                // Update the form UI with extracted values
+                const formContainer = popupWindow.document.getElementById('formFieldsContainer');
+                if (formContainer) {
+                    const inputs = formContainer.querySelectorAll('input[type="text"]');
+                    inputs.forEach(input => {
+                        const fieldName = input.getAttribute('data-field-name');
+                        if (fieldName && result.form_data[fieldName] !== undefined) {
+                            input.value = result.form_data[fieldName] || '';
+                        }
+                    });
+                }
+                
+                // Save the extracted values
+                await savePDFFields(false);
+                setSaveStatus('success', `Extracted and saved ${result.field_count} field values from PDF`);
+            } else {
+                setSaveStatus('error', 'Failed to extract fields: ' + (result.error || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('[PDF Popup] Error extracting fields from PDF:', error);
+            setSaveStatus('error', 'Error extracting fields: ' + error.message);
         }
     }
 
