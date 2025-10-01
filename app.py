@@ -1120,6 +1120,49 @@ def render_pdf(template_id):
             cur.close()
             conn.close()
 
+@app.route('/api/debug/database', methods=['GET'])
+def debug_database():
+    """Debug endpoint to check database contents"""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        
+        # Check template_data table
+        cur.execute('''
+            SELECT account_id, template_id, field_values, updated_at 
+            FROM template_data 
+            WHERE account_id = '001qr00000umdmiian' 
+            ORDER BY updated_at DESC 
+            LIMIT 5
+        ''')
+        results = cur.fetchall()
+        
+        debug_info = {
+            'template_data_records': len(results),
+            'recent_records': []
+        }
+        
+        for row in results:
+            field_values = row.get('field_values') or {}
+            non_empty = {k: v for k, v in field_values.items() if v and str(v).strip()}
+            debug_info['recent_records'].append({
+                'account_id': row.get('account_id'),
+                'template_id': row.get('template_id'),
+                'field_count': len(field_values),
+                'non_empty_count': len(non_empty),
+                'updated_at': str(row.get('updated_at')),
+                'sample_fields': list(field_values.items())[:3] if field_values else []
+            })
+        
+        return jsonify(debug_info)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            cur.close()
+            conn.close()
+
 @app.route('/api/pdf/save-fields', methods=['POST'])
 def save_pdf_fields():
     """Save PDF field values to database with automatic field extraction from PDF content."""
