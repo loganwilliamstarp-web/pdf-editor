@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Certificate Management System</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>PDF</text></svg>">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" id="tailwind-main-styles" href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.4/dist/tailwind.min.css">
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 </head>
 <body>
@@ -147,8 +147,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>PDF Editor - Template</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>PDF</text></svg>">
-    <script src="https://cdn.tailwindcss.com">${"</scr" + "ipt>"}
-    <script src="https://acrobatservices.adobe.com/view-sdk/viewer.js">${"</scr" + "ipt>"}
 </head>
 <body class="bg-gray-100">
     <div class="h-screen flex flex-col">
@@ -198,6 +196,46 @@
         const templateId = '${templateId}';
         const templateName = 'PDF Template';
         
+        function ensureTailwindStyles() {
+            const existing = document.getElementById('tailwind-popup-styles');
+            if (existing) {
+                return Promise.resolve();
+            }
+
+            return new Promise(function(resolve, reject) {
+                const link = document.createElement('link');
+                link.id = 'tailwind-popup-styles';
+                link.rel = 'stylesheet';
+                link.href = 'https://cdn.jsdelivr.net/npm/tailwindcss@3.4.4/dist/tailwind.min.css';
+                link.onload = function() { resolve(); };
+                link.onerror = function() { reject(new Error('Tailwind stylesheet failed to load')); };
+                document.head.appendChild(link);
+            });
+        }
+
+        function ensureAdobePDFSDK() {
+            if (window.AdobeDC && window.AdobeDC.View) {
+                return Promise.resolve();
+            }
+
+            const existing = document.getElementById('adobe-pdf-viewer-sdk');
+            if (existing) {
+                return new Promise(function(resolve, reject) {
+                    existing.addEventListener('load', function() { resolve(); });
+                    existing.addEventListener('error', function() { reject(new Error('Adobe PDF Embed API failed to load')); });
+                });
+            }
+
+            return new Promise(function(resolve, reject) {
+                const script = document.createElement('script');
+                script.id = 'adobe-pdf-viewer-sdk';
+                script.src = 'https://acrobatservices.adobe.com/view-sdk/viewer.js';
+                script.onload = function() { resolve(); };
+                script.onerror = function() { reject(new Error('Adobe PDF Embed API failed to load')); };
+                document.head.appendChild(script);
+            });
+        }
+
         // Initialize Adobe PDF Embed API
         function initializeAdobePDF(templateId) {
             // Show loading state
@@ -584,12 +622,20 @@
 
         // Initialize when popup loads
         window.addEventListener('load', function() {
-            // Add a small delay to ensure Adobe SDK is fully loaded
-            setTimeout(function() {
-                initializeAdobePDF(templateId);
-            }, 1000);
+            ensureTailwindStyles().catch(function(error) {
+                console.warn('Tailwind stylesheet failed to load for PDF editor popup.', error);
+            });
+
+            ensureAdobePDFSDK()
+                .then(function() {
+                    initializeAdobePDF(templateId);
+                })
+                .catch(function(error) {
+                    console.error(error);
+                    showPDFError(templateId, error.message || 'Adobe PDF Embed API failed to load.');
+                });
         });
-    ${"</scr" + "ipt>"}
+    </script>
 </body>
 </html>`;
             
