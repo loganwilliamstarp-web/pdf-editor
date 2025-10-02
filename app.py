@@ -666,6 +666,7 @@ def resolve_checkbox_state(saved_value):
 
 
 
+
 def fill_checkboxes_with_pypdf(pdf_bytes, checkbox_values):
     '''Update checkbox states using pypdf to preserve original appearance streams.'''
     if not checkbox_values:
@@ -747,6 +748,9 @@ def fill_checkboxes_with_pypdf(pdf_bytes, checkbox_values):
                 if alias in bare_map:
                     chosen = bare_map[alias]
                     break
+
+        if chosen is None and (desired_lower == '/off' or desired_bare in off_aliases):
+            chosen = '/Off'
 
         if chosen is None:
             chosen = available_states[0]
