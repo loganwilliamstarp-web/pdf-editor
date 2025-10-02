@@ -662,6 +662,7 @@ def resolve_checkbox_state(saved_value):
 
 
 
+
 def fill_checkboxes_with_pypdf(pdf_bytes, checkbox_values):
     '''Update checkbox states using pypdf to preserve original appearance streams.'''
     if not checkbox_values:
@@ -680,9 +681,34 @@ def fill_checkboxes_with_pypdf(pdf_bytes, checkbox_values):
         if not annots:
             continue
 
+        if hasattr(annots, 'get_object'):
+            try:
+                annots = annots.get_object()
+            except Exception as annots_error:
+                print(f"Page {page_index}: unable to resolve annotations ({annots_error})")
+                continue
+
+        if not isinstance(annots, (list, tuple)):
+            annots = [annots]
+
         for annot_ref in annots:
-            annot = annot_ref.get_object()
-            field_dict = annot.get('/Parent', annot)
+            try:
+                annot = annot_ref.get_object() if hasattr(annot_ref, 'get_object') else annot_ref
+            except Exception as annot_error:
+                print(f"Checkbox update skipped: unable to resolve annotation ({annot_error})")
+                continue
+
+            if annot is None:
+                continue
+
+            parent = annot.get('/Parent')
+            if parent is not None and hasattr(parent, 'get_object'):
+                try:
+                    parent = parent.get_object()
+                except Exception:
+                    parent = None
+            field_dict = parent or annot
+
             field_name_obj = field_dict.get('/T')
             if not field_name_obj:
                 continue
@@ -694,9 +720,13 @@ def fill_checkboxes_with_pypdf(pdf_bytes, checkbox_values):
             pdf_state, _ = resolve_checkbox_state(checkbox_values[field_name])
             state_name = NameObject(pdf_state)
 
-            annot.update({NameObject('/AS'): state_name})
-            field_dict.update({NameObject('/V'): state_name})
-            successful.add(field_name)
+            try:
+                annot.update({NameObject('/AS'): state_name})
+                field_dict.update({NameObject('/V'): state_name})
+                successful.add(field_name)
+            except Exception as update_error:
+                print(f"Checkbox '{field_name}' pypdf update failed: {update_error}")
+                continue
 
     writer = PdfWriter()
     writer.clone_reader_document_root(reader)
@@ -710,6 +740,8 @@ def fill_checkboxes_with_pypdf(pdf_bytes, checkbox_values):
 
     missing = [name for name in checkbox_values.keys() if name not in successful]
     return output.getvalue(), list(successful), missing
+
+
 
 
 
