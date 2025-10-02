@@ -34,6 +34,7 @@ except ImportError:
 
 try:
     from pypdf import PdfReader, PdfWriter
+    from pypdf.generic import NameObject, BooleanObject
     PYPDF_AVAILABLE = True
 except ImportError:
     print("Warning: pypdf not available. PDF field extraction will be limited.")
@@ -660,27 +661,56 @@ def resolve_checkbox_state(saved_value):
     return f'/{value_str}', value_str
 
 
-def apply_checkbox_widget_value(pdf_doc, widget, saved_value, field_name):
-    '''Attempt to set checkbox-like widgets without regenerating their appearance.'''
-    pdf_state, field_state = resolve_checkbox_state(saved_value)
-    field_label = field_name or getattr(widget, 'field_name', 'UNKNOWN')
 
-    try:
-        pdf_doc.xref_set_key(widget.xref, "AS", pdf_state)
-        pdf_doc.xref_set_key(widget.xref, "V", pdf_state)
-        field_xref = getattr(widget, 'field_xref', None)
-        if field_xref:
-            pdf_doc.xref_set_key(field_xref, "V", pdf_state)
-        return True
-    except Exception as direct_error:
-        print(f"Checkbox '{field_label}': direct state apply failed ({direct_error}). Trying fallback update().")
-        try:
-            widget.field_value = field_state
-            widget.update()
-            return True
-        except Exception as fallback_error:
-            print(f"Checkbox '{field_label}': fallback update failed ({fallback_error}).")
-            return False
+def fill_checkboxes_with_pypdf(pdf_bytes, checkbox_values):
+    '''Update checkbox states using pypdf to preserve original appearance streams.'''
+    if not checkbox_values:
+        return pdf_bytes, [], []
+
+    if not PYPDF_AVAILABLE:
+        missing = list(checkbox_values.keys())
+        print(f"pypdf unavailable; cannot update {len(missing)} checkbox fields.")
+        return pdf_bytes, [], missing
+
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+    successful = set()
+
+    for page_index, page in enumerate(reader.pages):
+        annots = page.get('/Annots')
+        if not annots:
+            continue
+
+        for annot_ref in annots:
+            annot = annot_ref.get_object()
+            field_dict = annot.get('/Parent', annot)
+            field_name_obj = field_dict.get('/T')
+            if not field_name_obj:
+                continue
+
+            field_name = str(field_name_obj)
+            if field_name not in checkbox_values:
+                continue
+
+            pdf_state, _ = resolve_checkbox_state(checkbox_values[field_name])
+            state_name = NameObject(pdf_state)
+
+            annot.update({NameObject('/AS'): state_name})
+            field_dict.update({NameObject('/V'): state_name})
+            successful.add(field_name)
+
+    writer = PdfWriter()
+    writer.clone_reader_document_root(reader)
+
+    acro_form = writer._root_object.get(NameObject('/AcroForm'))
+    if acro_form is not None:
+        acro_form[NameObject('/NeedAppearances')] = BooleanObject(False)
+
+    output = io.BytesIO()
+    writer.write(output)
+
+    missing = [name for name in checkbox_values.keys() if name not in successful]
+    return output.getvalue(), list(successful), missing
+
 
 
 def resolve_local_template_file(template_type, storage_path):
@@ -912,6 +942,7 @@ def serve_pdf_template_with_fields(template_id, account_id):
 
                 filled_count = 0
                 failed_fields = []
+                checkbox_updates = {}
 
                 # Simple approach: iterate through all pages and widgets
                 for page_num in range(len(pdf_doc)):
@@ -943,9 +974,19 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                     filled_count += 1
 
                                 elif field_type_lower in {'checkbox', 'button', 'btn'}:
-                                    if apply_checkbox_widget_value(pdf_doc, widget, saved_value, field_name):
-                                        filled_count += 1
+                                    if PYPDF_AVAILABLE:
+                                        checkbox_updates[field_name] = saved_value
+                                        continue
 
+                                    pdf_state, field_state = resolve_checkbox_state(saved_value)
+                                    try:
+                                        widget.field_value = field_state
+                                        widget.update()
+                                        filled_count += 1
+                                    except Exception as widget_error:
+                                        failed_fields.append((field_name, str(widget_error)))
+                                        print(f"Checkbox '{field_name}' fallback update failed: {widget_error}")
+                                    continue
                                 elif field_type_lower == 'radiobutton':
                                     if saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X']:
                                         widget.field_value = 'X'
@@ -965,15 +1006,32 @@ def serve_pdf_template_with_fields(template_id, account_id):
                                 failed_fields.append((field_name, str(field_error)))
                                 print(f"? Failed to fill '{field_name}': {field_error}")
 
+                # Generate PDF bytes from PyMuPDF result
+                filled_pdf_content = pdf_doc.write()
+                pdf_doc.close()
+
+                checkbox_successes = []
+                checkbox_failures = []
+                if checkbox_updates and PYPDF_AVAILABLE:
+                    filled_pdf_content, checkbox_successes, checkbox_failures = fill_checkboxes_with_pypdf(
+                        filled_pdf_content,
+                        checkbox_updates,
+                    )
+                    filled_count += len(checkbox_successes)
+                    if checkbox_successes:
+                        print(f"Checkbox states applied via pypdf: {checkbox_successes[:5]}")
+                    if checkbox_failures:
+                        for failed_name in checkbox_failures:
+                            failed_fields.append((failed_name, 'checkbox update failed'))
+                        print(f"Checkbox updates failed for: {checkbox_failures}")
+                elif checkbox_updates:
+                    print(f"PyPDF unavailable; {len(checkbox_updates)} checkboxes filled via PyMuPDF fallback appearance.")
+
                 print(f"=== PRE-FILL COMPLETE ===")
                 print(f"Successfully filled: {filled_count} fields")
                 print(f"Failed fields: {len(failed_fields)}")
                 if failed_fields:
                     print(f"Failures: {failed_fields[:5]}")  # Show first 5
-
-                # Save the filled PDF
-                filled_pdf_content = pdf_doc.write()
-                pdf_doc.close()
 
                 from flask import Response
                 return Response(
@@ -1114,6 +1172,7 @@ def debug_pymupdf_test(template_id, account_id):
 
                 filled_count = 0
                 failed_fields = []
+                checkbox_updates = {}
 
                 test_fields = [(name, value) for name, value in field_values.items()
                                if value and str(value).strip()][:5]
@@ -1132,8 +1191,29 @@ def debug_pymupdf_test(template_id, account_id):
                                     widget.update()
                                     filled_count += 1
                                 elif field_type_lower in {'checkbox', 'button', 'btn'}:
-                                    if apply_checkbox_widget_value(pdf_doc, widget, saved_value, field_name):
+                                    if PYPDF_AVAILABLE:
+                                        checkbox_updates[field_name] = saved_value
+                                        continue
+
+                                    pdf_state, field_state = resolve_checkbox_state(saved_value)
+                                    try:
+                                        widget.field_value = field_state
+                                        widget.update()
                                         filled_count += 1
+                                        debug_info['test_results'][f'field_{field_name}'] = {
+                                            'type': field_type,
+                                            'value': saved_value,
+                                            'status': 'filled'
+                                        }
+                                    except Exception as widget_error:
+                                        debug_info['test_results'][f'field_{field_name}'] = {
+                                            'type': field_type,
+                                            'value': saved_value,
+                                            'status': 'error',
+                                            'error': str(widget_error)
+                                        }
+                                        failed_fields.append(field_name)
+                                    continue
                                 elif field_type_lower == 'radiobutton':
                                     widget.field_value = str(saved_value)
                                     widget.update()
@@ -1165,12 +1245,38 @@ def debug_pymupdf_test(template_id, account_id):
                         }
                         failed_fields.append(field_name)
 
-                debug_info['test_results']['filled_count'] = filled_count
-                debug_info['test_results']['failed_fields'] = failed_fields
-
                 filled_pdf_content = pdf_doc.write()
                 pdf_doc.close()
 
+                checkbox_successes = []
+                checkbox_failures = []
+                if checkbox_updates and PYPDF_AVAILABLE:
+                    filled_pdf_content, checkbox_successes, checkbox_failures = fill_checkboxes_with_pypdf(
+                        filled_pdf_content,
+                        checkbox_updates,
+                    )
+                    filled_count += len(checkbox_successes)
+                    for name in checkbox_successes:
+                        debug_info['test_results'][f'field_{name}'] = {
+                            'type': 'checkbox',
+                            'value': checkbox_updates[name],
+                            'status': 'filled (pypdf)'
+                        }
+                    for name in checkbox_failures:
+                        debug_info['test_results'][f'field_{name}'] = {
+                            'type': 'checkbox',
+                            'value': checkbox_updates.get(name),
+                            'status': 'error',
+                            'error': 'checkbox update failed'
+                        }
+                        failed_fields.append(name)
+                elif checkbox_updates:
+                    debug_info['test_results']['checkbox_notice'] = 'PyPDF unavailable; checkboxes filled via PyMuPDF fallback.'
+
+                debug_info['test_results']['checkbox_successes'] = checkbox_successes
+                debug_info['test_results']['checkbox_failures'] = checkbox_failures
+                debug_info['test_results']['filled_count'] = filled_count
+                debug_info['test_results']['failed_fields'] = failed_fields
                 debug_info['test_results']['filled_pdf_size'] = len(filled_pdf_content)
                 debug_info['test_results']['success'] = True
             except Exception as pymupdf_error:
