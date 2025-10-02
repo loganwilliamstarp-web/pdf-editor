@@ -663,6 +663,7 @@ def resolve_checkbox_state(saved_value):
 
 
 
+
 def fill_checkboxes_with_pypdf(pdf_bytes, checkbox_values):
     '''Update checkbox states using pypdf to preserve original appearance streams.'''
     if not checkbox_values:
@@ -675,6 +676,53 @@ def fill_checkboxes_with_pypdf(pdf_bytes, checkbox_values):
 
     reader = PdfReader(io.BytesIO(pdf_bytes))
     successful = set()
+
+    def normalize_state_name(state):
+        if not state:
+            return '/Off'
+        if isinstance(state, str):
+            return state if state.startswith('/') else '/' + state
+        return '/' + str(state)
+
+    def choose_available_state(annot, desired_state):
+        desired_state = normalize_state_name(desired_state)
+        desired_core = desired_state[1:]
+
+        available_states = []
+        ap = annot.get('/AP')
+        if ap and hasattr(ap, 'get_object'):
+            try:
+                ap = ap.get_object()
+            except Exception:
+                ap = None
+        if ap and isinstance(ap, dict):
+            normal_ap = ap.get(NameObject('/N'), ap)
+            if normal_ap and hasattr(normal_ap, 'get_object'):
+                try:
+                    normal_ap = normal_ap.get_object()
+                except Exception:
+                    normal_ap = None
+            if normal_ap and isinstance(normal_ap, dict):
+                for key in normal_ap.keys():
+                    key_str = normalize_state_name(str(key))
+                    if key_str not in available_states:
+                        available_states.append(key_str)
+        if not available_states:
+            return desired_state
+
+        if desired_state in available_states:
+            return desired_state
+        if desired_state[1:] in available_states:
+            return desired_state[1:]
+
+        preferred_true = {'yes', 'true', 'on', '1', 'checked', 'x'}
+        if desired_core.lower() in preferred_true:
+            for candidate in available_states:
+                if candidate.lower() not in {'/off'}:
+                    return candidate
+        if '/Off' in available_states:
+            return '/Off'
+        return available_states[0]
 
     for page_index, page in enumerate(reader.pages):
         annots = page.get('/Annots')
@@ -717,8 +765,9 @@ def fill_checkboxes_with_pypdf(pdf_bytes, checkbox_values):
             if field_name not in checkbox_values:
                 continue
 
-            pdf_state, _ = resolve_checkbox_state(checkbox_values[field_name])
-            state_name = NameObject(pdf_state)
+            desired_pdf_state, _ = resolve_checkbox_state(checkbox_values[field_name])
+            target_state = choose_available_state(annot, desired_pdf_state)
+            state_name = NameObject(normalize_state_name(target_state))
 
             try:
                 annot.update({NameObject('/AS'): state_name})
@@ -732,7 +781,7 @@ def fill_checkboxes_with_pypdf(pdf_bytes, checkbox_values):
     writer.clone_reader_document_root(reader)
 
     acro_form = writer._root_object.get(NameObject('/AcroForm'))
-    if acro_form is not None:
+    if acro_form is not None and NameObject('/NeedAppearances') not in acro_form:
         acro_form[NameObject('/NeedAppearances')] = BooleanObject(False)
 
     output = io.BytesIO()
@@ -1050,8 +1099,8 @@ def serve_pdf_template_with_fields(template_id, account_id):
                         checkbox_updates,
                     )
                     filled_count += len(checkbox_successes)
-                    if checkbox_successes:
-                        print(f"Checkbox states applied via pypdf: {checkbox_successes[:5]}")
+                    summary_msg = f"Checkbox states applied via pypdf: {checkbox_successes[:5]} (total {len(checkbox_successes)} successes, {len(checkbox_failures)} failures)"
+                    print(summary_msg)
                     if checkbox_failures:
                         for failed_name in checkbox_failures:
                             failed_fields.append((failed_name, 'checkbox update failed'))
@@ -1302,6 +1351,11 @@ def debug_pymupdf_test(template_id, account_id):
                             'error': 'checkbox update failed'
                         }
                         failed_fields.append(name)
+                    debug_info['test_results']['checkbox_summary'] = {
+                        'attempted': len(checkbox_updates),
+                        'successes': len(checkbox_successes),
+                        'failures': len(checkbox_failures)
+                    }
                 elif checkbox_updates:
                     debug_info['test_results']['checkbox_notice'] = 'PyPDF unavailable; checkboxes filled via PyMuPDF fallback.'
 
