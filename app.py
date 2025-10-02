@@ -664,6 +664,8 @@ def resolve_checkbox_state(saved_value):
 
 
 
+
+
 def fill_checkboxes_with_pypdf(pdf_bytes, checkbox_values):
     '''Update checkbox states using pypdf to preserve original appearance streams.'''
     if not checkbox_values:
@@ -684,11 +686,11 @@ def fill_checkboxes_with_pypdf(pdf_bytes, checkbox_values):
             return state if state.startswith('/') else '/' + state
         return '/' + str(state)
 
-    def choose_available_state(annot, desired_state):
-        desired_state = normalize_state_name(desired_state)
-        desired_core = desired_state[1:]
+    off_aliases = {'off', '0', 'false', 'unchecked'}
+    on_aliases = {'yes', 'true', '1', 'on', 'checked', 'x'}
 
-        available_states = []
+    def collect_available_states(annot):
+        states = []
         ap = annot.get('/AP')
         if ap and hasattr(ap, 'get_object'):
             try:
@@ -705,24 +707,54 @@ def fill_checkboxes_with_pypdf(pdf_bytes, checkbox_values):
             if normal_ap and isinstance(normal_ap, dict):
                 for key in normal_ap.keys():
                     key_str = normalize_state_name(str(key))
-                    if key_str not in available_states:
-                        available_states.append(key_str)
+                    if key_str not in states:
+                        states.append(key_str)
+        return states
+
+    def choose_available_state(field_name, annot, desired_state):
+        desired_state = normalize_state_name(desired_state)
+        desired_lower = desired_state.lower()
+        desired_bare = desired_lower.lstrip('/')
+
+        available_states = collect_available_states(annot)
         if not available_states:
+            print(f"Checkbox {field_name}: desired={desired_state}, available=NONE -> using desired")
             return desired_state
 
-        if desired_state in available_states:
-            return desired_state
-        if desired_state[1:] in available_states:
-            return desired_state[1:]
+        lower_map = {state.lower(): state for state in available_states}
+        bare_map = {state.lower().lstrip('/'): state for state in available_states}
 
-        preferred_true = {'yes', 'true', 'on', '1', 'checked', 'x'}
-        if desired_core.lower() in preferred_true:
-            for candidate in available_states:
-                if candidate.lower() not in {'/off'}:
-                    return candidate
-        if '/Off' in available_states:
-            return '/Off'
-        return available_states[0]
+        if desired_lower in lower_map:
+            return lower_map[desired_lower]
+        if desired_bare in bare_map:
+            return bare_map[desired_bare]
+
+        chosen = None
+        if desired_bare in off_aliases:
+            for alias in off_aliases:
+                if alias in bare_map:
+                    chosen = bare_map[alias]
+                    break
+        elif desired_bare in on_aliases:
+            for alias in on_aliases:
+                if alias in bare_map:
+                    chosen = bare_map[alias]
+                    break
+
+        if chosen is None and desired_bare not in on_aliases:
+            # When we expect an unchecked value but couldn't match, prefer any "off"-like state.
+            for alias in off_aliases:
+                if alias in bare_map:
+                    chosen = bare_map[alias]
+                    break
+
+        if chosen is None:
+            chosen = available_states[0]
+
+        print(
+            f"Checkbox {field_name}: desired={desired_state}, available={available_states}, chosen={chosen}"
+        )
+        return chosen
 
     for page_index, page in enumerate(reader.pages):
         annots = page.get('/Annots')
@@ -766,8 +798,13 @@ def fill_checkboxes_with_pypdf(pdf_bytes, checkbox_values):
                 continue
 
             desired_pdf_state, _ = resolve_checkbox_state(checkbox_values[field_name])
-            target_state = choose_available_state(annot, desired_pdf_state)
+            target_state = choose_available_state(field_name, annot, desired_pdf_state)
             state_name = NameObject(normalize_state_name(target_state))
+
+            if normalize_state_name(target_state) != normalize_state_name(desired_pdf_state):
+                print(
+                    f"Checkbox {field_name}: using fallback state '{target_state}' for saved value '{desired_pdf_state}'"
+                )
 
             try:
                 annot.update({NameObject('/AS'): state_name})
