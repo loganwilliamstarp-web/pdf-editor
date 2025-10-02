@@ -631,6 +631,58 @@ def upload_template_simple():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+
+def resolve_checkbox_state(saved_value):
+    '''Return (pdf_state, field_state) tuples for checkbox-like fields.'''
+    true_values = {"true", "1", "yes", "on", "checked", "x"}
+    false_values = {"false", "0", "no", "off", "unchecked"}
+
+    if isinstance(saved_value, bool):
+        return ('/Yes' if saved_value else '/Off', 'Yes' if saved_value else 'Off')
+
+    if saved_value is None:
+        return '/Off', 'Off'
+
+    value_str = str(saved_value).strip()
+    if not value_str:
+        return '/Off', 'Off'
+
+    if value_str.startswith('/'):
+        core = value_str[1:] or 'Off'
+        return f'/{core}', core
+
+    lowered = value_str.lower()
+    if lowered in true_values:
+        return '/Yes', 'Yes'
+    if lowered in false_values:
+        return '/Off', 'Off'
+
+    return f'/{value_str}', value_str
+
+
+def apply_checkbox_widget_value(pdf_doc, widget, saved_value, field_name):
+    '''Attempt to set checkbox-like widgets without regenerating their appearance.'''
+    pdf_state, field_state = resolve_checkbox_state(saved_value)
+    field_label = field_name or getattr(widget, 'field_name', 'UNKNOWN')
+
+    try:
+        pdf_doc.xref_set_key(widget.xref, "AS", pdf_state)
+        pdf_doc.xref_set_key(widget.xref, "V", pdf_state)
+        field_xref = getattr(widget, 'field_xref', None)
+        if field_xref:
+            pdf_doc.xref_set_key(field_xref, "V", pdf_state)
+        return True
+    except Exception as direct_error:
+        print(f"Checkbox '{field_label}': direct state apply failed ({direct_error}). Trying fallback update().")
+        try:
+            widget.field_value = field_state
+            widget.update()
+            return True
+        except Exception as fallback_error:
+            print(f"Checkbox '{field_label}': fallback update failed ({fallback_error}).")
+            return False
+
+
 def resolve_local_template_file(template_type, storage_path):
     """Resolve a local PDF template file path if available."""
     candidates = []
@@ -852,91 +904,77 @@ def serve_pdf_template_with_fields(template_id, account_id):
         
         # Pre-fill PDF with saved field values using PyMuPDF (fitz)
         print(f"Pre-filling PDF with {len(field_values)} saved field values")
-        
+
         try:
             if PYMUPDF_AVAILABLE and field_values:
                 # Load PDF with PyMuPDF
                 pdf_doc = fitz.open(stream=pdf_content, filetype="pdf")
-                
+
                 filled_count = 0
                 failed_fields = []
-                
+
                 # Simple approach: iterate through all pages and widgets
                 for page_num in range(len(pdf_doc)):
                     page = pdf_doc[page_num]
-                    
+
                     # Get all widgets on this page
                     widgets = list(page.widgets())
-                    
+
                     for widget in widgets:
                         field_name = widget.field_name
-                        
+
                         # Check if we have a saved value for this field
                         if field_name in field_values:
                             saved_value = field_values[field_name]
-                            
+
                             # Skip empty values for text fields only
                             # For checkboxes, we need to process /Off values too
                             field_type = widget.field_type_string
-                            is_checkbox = field_type in ['CheckBox', 'Button', 'Btn', 'RadioButton']
-                            
-                            if not is_checkbox and (not saved_value or saved_value == ''):
+                            field_type_lower = (field_type or '').lower()
+                            is_checkbox_like = field_type_lower in {'checkbox', 'button', 'btn', 'radiobutton'}
+
+                            if not is_checkbox_like and (not saved_value or saved_value == ''):
                                 continue
-                            
+
                             try:
-                                if field_type == 'Text':
+                                if field_type_lower == 'text':
                                     widget.field_value = str(saved_value)
                                     widget.update()
                                     filled_count += 1
-                                
-                                elif field_type in ['CheckBox', 'Button', 'Btn']:
-                                    # For checkboxes, we need to use the EXACT appearance state
-                                    # The extraction captures the /AS value (e.g. '/1', '/Yes', '/Off')
-                                    # We need to strip the leading '/' to get the state name PyMuPDF expects
-                                    
-                                    if isinstance(saved_value, str) and saved_value.startswith('/'):
-                                        state_name = saved_value[1:]  # Strip leading '/'
-                                    else:
-                                        state_name = str(saved_value) if saved_value else 'Off'
-                                    
-                                    try:
-                                        widget.field_value = state_name
-                                        widget.update()
+
+                                elif field_type_lower in {'checkbox', 'button', 'btn'}:
+                                    if apply_checkbox_widget_value(pdf_doc, widget, saved_value, field_name):
                                         filled_count += 1
-                                    except Exception as e:
-                                        print(f"✗ Checkbox '{field_name}' failed: {e}")
-                                
-                                elif field_type == 'RadioButton':
-                                    # Try different values for radio buttons
+
+                                elif field_type_lower == 'radiobutton':
                                     if saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X']:
                                         widget.field_value = 'X'
                                     else:
                                         widget.field_value = 'Off'
                                     widget.update()
                                     filled_count += 1
-                                    print(f"✓ Set radio button '{field_name}' to: {widget.field_value}")
-                                
+                                    print(f"[radio] Set radio button '{field_name}' to: {widget.field_value}")
+
                                 else:
-                                    # Generic approach for other field types
                                     widget.field_value = str(saved_value)
                                     widget.update()
                                     filled_count += 1
-                                    print(f"✓ Filled generic field '{field_name}': '{saved_value}'")
-                            
+                                    print(f"[generic] Filled field '{field_name}': '{saved_value}'")
+
                             except Exception as field_error:
                                 failed_fields.append((field_name, str(field_error)))
-                                print(f"✗ Failed to fill '{field_name}': {field_error}")
-                
+                                print(f"? Failed to fill '{field_name}': {field_error}")
+
                 print(f"=== PRE-FILL COMPLETE ===")
                 print(f"Successfully filled: {filled_count} fields")
                 print(f"Failed fields: {len(failed_fields)}")
                 if failed_fields:
                     print(f"Failures: {failed_fields[:5]}")  # Show first 5
-                
+
                 # Save the filled PDF
                 filled_pdf_content = pdf_doc.write()
                 pdf_doc.close()
-                
+
                 from flask import Response
                 return Response(
                     filled_pdf_content,
@@ -954,7 +992,7 @@ def serve_pdf_template_with_fields(template_id, account_id):
                     print("PyMuPDF not available, returning original template")
                 if not field_values:
                     print("No field values to fill, returning original template")
-                
+
                 from flask import Response
                 return Response(
                     pdf_content,
@@ -965,7 +1003,7 @@ def serve_pdf_template_with_fields(template_id, account_id):
                         'Cache-Control': 'no-cache'
                     }
                 )
-                
+
         except Exception as fill_error:
             print(f"Error filling PDF fields: {fill_error}")
             import traceback
@@ -981,7 +1019,8 @@ def serve_pdf_template_with_fields(template_id, account_id):
                     'Cache-Control': 'no-cache'
                 }
             )
-        
+
+
     except Exception as e:
         print(f"Error serving PDF template with fields: {e}")
         return jsonify({'error': str(e)}), 500
@@ -990,337 +1029,15 @@ def serve_pdf_template_with_fields(template_id, account_id):
             cur.close()
             conn.close()
 
-def create_pdf_with_form_fields(template_name, form_fields_payload):
-    """Create a PDF with form fields based on template type"""
-    
-    # Define common ACORD form fields based on template name
-    acord_fields = {
-        'ACORD 25': [
-            {'name': 'company_name', 'label': 'Company Name', 'x': 100, 'y': 700},
-            {'name': 'policy_number', 'label': 'Policy Number', 'x': 400, 'y': 700},
-            {'name': 'effective_date', 'label': 'Effective Date', 'x': 100, 'y': 650},
-            {'name': 'expiration_date', 'label': 'Expiration Date', 'x': 400, 'y': 650},
-            {'name': 'insured_name', 'label': 'Insured Name', 'x': 100, 'y': 600},
-            {'name': 'address', 'label': 'Address', 'x': 100, 'y': 550},
-        ],
-        'ACORD 125': [
-            {'name': 'company_name', 'label': 'Company Name', 'x': 100, 'y': 700},
-            {'name': 'policy_number', 'label': 'Policy Number', 'x': 400, 'y': 700},
-            {'name': 'effective_date', 'label': 'Effective Date', 'x': 100, 'y': 650},
-            {'name': 'expiration_date', 'label': 'Expiration Date', 'x': 400, 'y': 650},
-            {'name': 'insured_name', 'label': 'Insured Name', 'x': 100, 'y': 600},
-            {'name': 'address', 'label': 'Address', 'x': 100, 'y': 550},
-            {'name': 'liability_limit', 'label': 'Liability Limit', 'x': 100, 'y': 500},
-        ],
-        'ACORD 126': [
-            {'name': 'company_name', 'label': 'Company Name', 'x': 100, 'y': 700},
-            {'name': 'policy_number', 'label': 'Policy Number', 'x': 400, 'y': 700},
-            {'name': 'effective_date', 'label': 'Effective Date', 'x': 100, 'y': 650},
-            {'name': 'expiration_date', 'label': 'Expiration Date', 'x': 400, 'y': 650},
-            {'name': 'insured_name', 'label': 'Insured Name', 'x': 100, 'y': 600},
-            {'name': 'address', 'label': 'Address', 'x': 100, 'y': 550},
-            {'name': 'liability_limit', 'label': 'Liability Limit', 'x': 100, 'y': 500},
-            {'name': 'additional_insured', 'label': 'Additional Insured', 'x': 100, 'y': 450},
-        ],
-        'ACORD 130': [
-            {'name': 'company_name', 'label': 'Company Name', 'x': 100, 'y': 700},
-            {'name': 'policy_number', 'label': 'Policy Number', 'x': 400, 'y': 700},
-            {'name': 'effective_date', 'label': 'Effective Date', 'x': 100, 'y': 650},
-            {'name': 'expiration_date', 'label': 'Expiration Date', 'x': 400, 'y': 650},
-            {'name': 'insured_name', 'label': 'Insured Name', 'x': 100, 'y': 600},
-            {'name': 'property_address', 'label': 'Property Address', 'x': 100, 'y': 550},
-        ]
-    }
-    
-    # Get fields for this template type
-    fields = acord_fields.get(template_name, acord_fields['ACORD 25'])  # Default to ACORD 25
-    
-    # Create a PDF with form fields
-    pdf_content = create_simple_pdf_with_fields(template_name, fields)
-    
-    return pdf_content
-
-def create_simple_pdf_with_fields(template_name, fields):
-    """Create a simple PDF with form fields using a working PDF structure"""
-    
-    # Create a simple working PDF with form fields
-    # This creates a valid PDF that Adobe PDF Embed can load and edit
-    
-    pdf_content = f"""%PDF-1.4
-1 0 obj
-<<
-/Type /Catalog
-/Pages 2 0 R
-/AcroForm <<
-/Fields ["""
-    
-    # Add field references
-    for i in range(len(fields)):
-        pdf_content += f"{10 + i} 0 R "
-    
-    pdf_content += """]
-/NeedAppearances true
->>
->>
-endobj
-
-2 0 obj
-<<
-/Type /Pages
-/Kids [3 0 R]
-/Count 1
->>
-endobj
-
-3 0 obj
-<<
-/Type /Page
-/Parent 2 0 R
-/MediaBox [0 0 612 792]
-/Contents 4 0 R
-/Annots ["""
-    
-    # Add annotation references
-    for i in range(len(fields)):
-        pdf_content += f"{20 + i} 0 R "
-    
-    pdf_content += """]
->>
-endobj
-
-4 0 obj
-<<
-/Length 300
->>
-stream
-BT
-/F1 18 Tf
-100 750 Td
-({template_name}) Tj
-0 -40 Td
-/F1 12 Tf
-(Certificate Management System) Tj
-0 -60 Td
-/F1 10 Tf
-(Form Fields - Click to edit) Tj
-ET
-endstream
-endobj"""
-    
-    # Add form field objects
-    for i, field in enumerate(fields):
-        field_num = 10 + i
-        annot_num = 20 + i
-        y_pos = 650 - (i * 30)  # Space fields vertically
-        
-        pdf_content += f"""
-
-{field_num} 0 obj
-<<
-/Type /Annot
-/Subtype /Widget
-/Rect [100 {y_pos} 450 {y_pos + 20}]
-/FT /Tx
-/T ({field['name']})
-/V ()
-/DA (/Helv 10 Tf 0 g)
-/F 4
-/BS <<
-/W 1
-/S /S
->>
->>
-endobj
-
-{annot_num} 0 obj
-<<
-/Type /Annot
-/Subtype /Widget
-/Rect [100 {y_pos} 450 {y_pos + 20}]
-/FT /Tx
-/T ({field['name']})
-/V ()
-/DA (/Helv 10 Tf 0 g)
-/F 4
-/BS <<
-/W 1
-/S /S
->>
->>
-endobj"""
-    
-    pdf_content += """
-
-xref
-0 30"""
-    
-    # Add xref entries (simplified)
-    for i in range(30):
-        pdf_content += f"\n0000000000 00000 n "
-    
-    pdf_content += """
-
-trailer
-<<
-/Size 30
-/Root 1 0 R
->>
-startxref
-2000
-%%EOF"""
-    
-    return pdf_content.encode('utf-8')
-
-@app.route('/api/pdf/render/<template_id>')
-def render_pdf(template_id):
-    """Render PDF template for editing (legacy endpoint)"""
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        
-        # Get template from database
-        cur.execute('SELECT template_name, storage_path FROM master_templates WHERE id = %s', (template_id,))
-        template = cur.fetchone()
-        
-        if not template:
-            return jsonify({'error': 'Template not found'}), 404
-        
-        template_name, storage_path = template
-        
-        return jsonify({
-            'success': True,
-            'template_name': template_name,
-            'pdf_url': f'/api/pdf/template/{template_id}'
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    finally:
-        if 'conn' in locals():
-            cur.close()
-            conn.close()
-
-@app.route('/api/debug/pdf-content', methods=['POST'])
-def debug_pdf_content():
-    """Debug endpoint to inspect PDF content being sent"""
-    try:
-        data = request.get_json()
-        pdf_content = data.get('pdf_content')
-        
-        if not pdf_content:
-            return jsonify({'error': 'No PDF content provided'}), 400
-        
-        # Decode base64 PDF content
-        if pdf_content.startswith('data:application/pdf;base64,'):
-            pdf_content = pdf_content.split(',')[1]
-        
-        try:
-            pdf_bytes = base64.b64decode(pdf_content)
-            print(f"PDF content size: {len(pdf_bytes)} bytes")
-            
-            # Try to extract fields using pypdf
-            if PYPDF_AVAILABLE:
-                pdf_reader = PdfReader(io.BytesIO(pdf_bytes))
-                print(f"PDF pages: {len(pdf_reader.pages)}")
-                
-                # Try get_fields() method
-                fields_dict = pdf_reader.get_fields()
-                if fields_dict:
-                    print(f"Found {len(fields_dict)} fields using get_fields()")
-                    field_info = []
-                    for field_name, field_obj in list(fields_dict.items())[:5]:
-                        field_value = ''
-                        if hasattr(field_obj, 'get') and field_obj.get('/V'):
-                            field_value = str(field_obj.get('/V'))
-                        elif hasattr(field_obj, 'get') and field_obj.get('/AS'):
-                            field_value = str(field_obj.get('/AS'))
-                        field_info.append({
-                            'name': field_name,
-                            'value': field_value,
-                            'type': str(field_obj.get('/FT', 'unknown'))
-                        })
-                    
-                    return jsonify({
-                        'success': True,
-                        'pdf_size': len(pdf_bytes),
-                        'pages': len(pdf_reader.pages),
-                        'fields_found': len(fields_dict),
-                        'sample_fields': field_info
-                    })
-                else:
-                    return jsonify({
-                        'success': True,
-                        'pdf_size': len(pdf_bytes),
-                        'pages': len(pdf_reader.pages),
-                        'fields_found': 0,
-                        'message': 'No fields found using get_fields()'
-                    })
-            else:
-                return jsonify({'error': 'pypdf not available'}), 500
-                
-        except Exception as e:
-            return jsonify({'error': f'PDF processing error: {str(e)}'}), 500
-            
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/debug/test', methods=['GET'])
-def debug_test():
-    """Simple test endpoint to verify server is running latest code"""
-    return jsonify({
-        'message': 'Debug test endpoint working',
-        'timestamp': '2024-01-01 16:01:00',
-        'version': 'latest'
-    })
-
-@app.route('/api/pdf/field-values/<template_id>/<account_id>')
-def get_pdf_field_values(template_id, account_id):
-    """Get saved field values for client-side PDF pre-filling"""
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        
-        # Get saved field values from template_data table
-        cur.execute('''
-            SELECT field_values FROM template_data 
-            WHERE account_id = %s AND template_id = %s
-        ''', (account_id, template_id))
-        
-        result = cur.fetchone()
-        if result and result.get('field_values'):
-            field_values = result.get('field_values')
-            if isinstance(field_values, str):
-                try:
-                    field_values = json.loads(field_values)
-                except json.JSONDecodeError:
-                    field_values = {}
-        else:
-            field_values = {}
-        
-        return jsonify({
-            'success': True,
-            'template_id': template_id,
-            'account_id': account_id,
-            'field_values': field_values,
-            'field_count': len(field_values),
-            'non_empty_count': len({k: v for k, v in field_values.items() if v and str(v).strip()})
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    finally:
-        if 'conn' in locals():
-            cur.close()
-            conn.close()
 
 @app.route('/api/debug/pymupdf-test/<template_id>/<account_id>')
 def debug_pymupdf_test(template_id, account_id):
-    """Debug endpoint to test PyMuPDF pre-filling directly"""
+    '''Run a small PyMuPDF fill test and return diagnostic information.'''
     try:
         conn = get_db()
         cur = conn.cursor()
-        
-        # Get template and field values
+
+        # Get template and account-specific data
         try:
             cur.execute('''
                 SELECT
@@ -1342,14 +1059,17 @@ def debug_pymupdf_test(template_id, account_id):
                     ON td.template_id = mt.id AND td.account_id = %s
                 WHERE mt.id = %s
             ''', (account_id, template_id))
-        
+
         result = cur.fetchone()
         if not result:
             return jsonify({'error': 'Template not found'}), 404
-        
+
+        template_name = result.get('template_name')
+        template_type = (result.get('template_type') or '').lower()
+        storage_path = result.get('storage_path') or ''
+        pdf_blob = result.get('pdf_blob')
         field_values_raw = result.get('field_values') or {}
-        
-        # Parse field_values if it's a JSON string
+
         if isinstance(field_values_raw, str):
             try:
                 field_values = json.loads(field_values_raw)
@@ -1357,122 +1077,120 @@ def debug_pymupdf_test(template_id, account_id):
                 field_values = {}
         else:
             field_values = field_values_raw or {}
-        
-        # Get PDF content
+
         pdf_content = None
-        pdf_blob = result.get('pdf_blob')
         if pdf_blob:
             try:
                 pdf_content = bytes(pdf_blob)
             except (TypeError, ValueError):
                 pdf_content = pdf_blob
-        
+
         if not pdf_content:
-            local_file = resolve_local_template_file(result.get('template_type', '').lower(), result.get('storage_path', ''))
+            local_file = resolve_local_template_file(template_type, storage_path)
             if local_file:
                 pdf_content = local_file.read_bytes()
-        
+
         if not pdf_content:
             return jsonify({'error': 'No PDF content available'}), 404
-        
-        # Test PyMuPDF pre-filling
+
         debug_info = {
             'template_id': template_id,
             'account_id': account_id,
-            'template_name': result.get('template_name'),
+            'template_name': template_name,
             'field_values_count': len(field_values),
             'non_empty_count': len({k: v for k, v in field_values.items() if v and str(v).strip()}),
             'pymupdf_available': PYMUPDF_AVAILABLE,
             'pdf_size': len(pdf_content),
             'test_results': {}
         }
-        
+
         if PYMUPDF_AVAILABLE:
             try:
-                # Load PDF with PyMuPDF
-                pdf_doc = fitz.open(stream=pdf_content, filetype="pdf")
-                
-                # Get all form fields
-                form_fields = list(pdf_doc[0].widgets())  # Convert generator to list
+                pdf_doc = fitz.open(stream=pdf_content, filetype='pdf')
+
+                form_fields = list(pdf_doc[0].widgets()) if pdf_doc.page_count else []
                 debug_info['test_results']['form_fields_found'] = len(form_fields)
-                debug_info['test_results']['form_field_names'] = [widget.field_name for widget in form_fields[:10]]  # First 10
-                
+                debug_info['test_results']['form_field_names'] = [widget.field_name for widget in form_fields[:10]]
+
                 filled_count = 0
                 failed_fields = []
-                
-                # Test filling a few fields
-                test_fields = list(field_values.items())[:5]  # Test first 5 fields
+
+                test_fields = [(name, value) for name, value in field_values.items()
+                               if value and str(value).strip()][:5]
+
                 for field_name, saved_value in test_fields:
-                    if not saved_value or str(saved_value).strip() == '':
-                        continue
-                        
                     field_found = False
                     for widget in form_fields:
                         if widget.field_name == field_name:
                             field_found = True
                             field_type = widget.field_type_string
-                            
+                            field_type_lower = (field_type or '').lower()
+
                             try:
-                                if field_type == 'text':
+                                if field_type_lower == 'text':
                                     widget.field_value = str(saved_value)
                                     widget.update()
                                     filled_count += 1
-                                elif field_type == 'checkbox':
-                                    widget.field_value = True if saved_value in [True, 'true', '1', 'Yes'] else False
-                                    widget.update()
-                                    filled_count += 1
-                                elif field_type == 'radiobutton':
+                                elif field_type_lower in {'checkbox', 'button', 'btn'}:
+                                    if apply_checkbox_widget_value(pdf_doc, widget, saved_value, field_name):
+                                        filled_count += 1
+                                elif field_type_lower == 'radiobutton':
                                     widget.field_value = str(saved_value)
                                     widget.update()
                                     filled_count += 1
-                                    
+                                else:
+                                    widget.field_value = str(saved_value)
+                                    widget.update()
+                                    filled_count += 1
+
                                 debug_info['test_results'][f'field_{field_name}'] = {
                                     'type': field_type,
                                     'value': saved_value,
                                     'status': 'filled'
                                 }
-                            except Exception as e:
+                            except Exception as widget_error:
                                 debug_info['test_results'][f'field_{field_name}'] = {
                                     'type': field_type,
                                     'value': saved_value,
                                     'status': 'error',
-                                    'error': str(e)
+                                    'error': str(widget_error)
                                 }
                                 failed_fields.append(field_name)
                             break
-                    
+
                     if not field_found:
                         debug_info['test_results'][f'field_{field_name}'] = {
                             'value': saved_value,
                             'status': 'not_found'
                         }
                         failed_fields.append(field_name)
-                
+
                 debug_info['test_results']['filled_count'] = filled_count
                 debug_info['test_results']['failed_fields'] = failed_fields
-                
-                # Save the filled PDF
+
                 filled_pdf_content = pdf_doc.write()
                 pdf_doc.close()
-                
+
                 debug_info['test_results']['filled_pdf_size'] = len(filled_pdf_content)
                 debug_info['test_results']['success'] = True
-                
-            except Exception as e:
-                debug_info['test_results']['error'] = str(e)
+            except Exception as pymupdf_error:
+                debug_info['test_results']['error'] = str(pymupdf_error)
                 debug_info['test_results']['success'] = False
         else:
             debug_info['test_results']['error'] = 'PyMuPDF not available'
             debug_info['test_results']['success'] = False
-        
+
         return jsonify(debug_info)
-        
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     finally:
         if 'conn' in locals():
             cur.close()
             conn.close()
+
+
+
 
 @app.route('/api/debug/pdf-prefill/<template_id>/<account_id>')
 def debug_pdf_prefill(template_id, account_id):
