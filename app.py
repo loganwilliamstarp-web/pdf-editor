@@ -1091,7 +1091,14 @@ def serve_pdf_template_with_fields(template_id, account_id):
 
                             try:
                                 if field_type_lower == 'text':
-                                    widget.field_value = str(saved_value)
+                                    text_value = str(saved_value)
+                                    if text_value.startswith('/') and len(text_value) > 1:
+                                        core = text_value[1:].lower()
+                                        if core in {'yes', 'on', '1', 'true', 'y'}:
+                                            text_value = 'Yes'
+                                        elif core in {'no', 'off', '0', 'false', 'n'}:
+                                            text_value = 'No'
+                                    widget.field_value = text_value
                                     widget.update()
                                     filled_count += 1
 
@@ -1309,7 +1316,14 @@ def debug_pymupdf_test(template_id, account_id):
 
                             try:
                                 if field_type_lower == 'text':
-                                    widget.field_value = str(saved_value)
+                                    text_value = str(saved_value)
+                                    if text_value.startswith('/') and len(text_value) > 1:
+                                        core = text_value[1:].lower()
+                                        if core in {'yes', 'on', '1', 'true', 'y'}:
+                                            text_value = 'Yes'
+                                        elif core in {'no', 'off', '0', 'false', 'n'}:
+                                            text_value = 'No'
+                                    widget.field_value = text_value
                                     widget.update()
                                     filled_count += 1
                                 elif field_type_lower in {'checkbox', 'button', 'btn'}:
@@ -1713,6 +1727,13 @@ def save_pdf_fields():
         def is_checkbox_field(field_name):
             """Check if a field is likely a checkbox based on name patterns"""
             checkbox_indicators = ['indicator', 'checkbox', 'check', 'box']
+            force_text_fields = {
+                'WorkersCompensationEmployersLiability_AnyPersonsExcludedIndicator_A',
+            }
+
+            if field_name in force_text_fields:
+                return False
+
             is_checkbox = any(indicator in field_name.lower() for indicator in checkbox_indicators)
             if is_checkbox:
                 print(f"Field '{field_name}' identified as checkbox")
@@ -1720,7 +1741,7 @@ def save_pdf_fields():
         
         def is_checkbox_checked(value):
             """Determine if a checkbox value represents 'checked'"""
-            checked_values = ['/1', '/Yes', '/On', 'Yes', '1', 'On', 'true', 'True', True]
+            checked_values = ['/1', '/Yes', '/On', 'Yes', '1', 'On', 'true', 'True', True, 'Y', 'y']
             return str(value).strip() in checked_values if value else False
         
         def normalize_checkbox_value(value):
@@ -1758,7 +1779,7 @@ def save_pdf_fields():
                 print(f"  Current checked: {current_checked}, Existing checked: {existing_checked}")
                 
                 # Check if current value is explicitly set (either /Yes or /Off)
-                current_is_explicit = str(current_value).strip() in ['/Yes', '/Off', '/On', '/1', 'Yes', 'No', 'On', 'Off', '1', '0', 'true', 'false', 'True', 'False']
+                current_is_explicit = str(current_value).strip() in ['/Yes', '/Off', '/On', '/1', 'Yes', 'No', 'On', 'Off', '1', '0', 'true', 'false', 'True', 'False', 'Y', 'N', 'y', 'n']
                 
                 if current_is_explicit:
                     # Current value is explicitly set (user made a choice) - always use it
