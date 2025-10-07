@@ -76,29 +76,21 @@ def create_database_tables():
                     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                     account_id VARCHAR(18) NOT NULL,
                     name VARCHAR(255) NOT NULL,
-                    master_remarks TEXT,
                     address_line1 VARCHAR(255),
-                    address_line2 VARCHAR(255),
                     city VARCHAR(120),
                     state VARCHAR(2),
-                    postal_code VARCHAR(20),
                     email VARCHAR(255),
                     phone VARCHAR(50),
                     created_at TIMESTAMP DEFAULT NOW(),
-                    updated_at TIMESTAMP DEFAULT NOW(),
-                    address TEXT
+                    updated_at TIMESTAMP DEFAULT NOW()
                 );
-                ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS master_remarks TEXT;
                 ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS address_line1 VARCHAR(255);
-                ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS address_line2 VARCHAR(255);
                 ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS city VARCHAR(120);
                 ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS state VARCHAR(2);
-                ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS postal_code VARCHAR(20);
+                ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS email VARCHAR(255);
                 ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
                 ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
-                ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS address TEXT;
                 ALTER TABLE certificate_holders ALTER COLUMN name SET NOT NULL;
-                UPDATE certificate_holders SET address_line1 = COALESCE(address_line1, address) WHERE address IS NOT NULL AND (address_line1 IS NULL OR address_line1 = '');
                 UPDATE certificate_holders SET updated_at = COALESCE(updated_at, created_at, NOW());
                 DO $$
                 BEGIN

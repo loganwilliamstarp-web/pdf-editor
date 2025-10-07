@@ -97,23 +97,10 @@
                         </div>
 
                         <div class="md:col-span-2">
-                            <label for="holderMasterRemarks" class="block text-sm font-medium text-gray-700">Master Remarks</label>
-                            <textarea id="holderMasterRemarks" name="master_remarks" rows="3"
-                                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                      placeholder="Instructions or notes to include on generated certificates."></textarea>
-                        </div>
-
-                        <div>
                             <label for="holderAddress1" class="block text-sm font-medium text-gray-700">Address Line 1</label>
                             <input id="holderAddress1" name="address_line1" type="text" autocomplete="off"
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                    placeholder="123 Main Street">
-                        </div>
-                        <div>
-                            <label for="holderAddress2" class="block text-sm font-medium text-gray-700">Address Line 2</label>
-                            <input id="holderAddress2" name="address_line2" type="text" autocomplete="off"
-                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                   placeholder="Suite 400">
                         </div>
 
                         <div>
@@ -121,20 +108,12 @@
                             <input id="holderCity" name="city" type="text" autocomplete="off"
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                         </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label for="holderState" class="block text-sm font-medium text-gray-700">State</label>
-                                <select id="holderState" name="state"
-                                        class="mt-1 block w-full rounded-md border-gray-300 bg-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                    <option value="">Select state</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label for="holderPostalCode" class="block text-sm font-medium text-gray-700">Postal Code</label>
-                                <input id="holderPostalCode" name="postal_code" type="text" autocomplete="off"
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                       placeholder="12345">
-                            </div>
+                        <div>
+                            <label for="holderState" class="block text-sm font-medium text-gray-700">State</label>
+                            <select id="holderState" name="state"
+                                    class="mt-1 block w-full rounded-md border-gray-300 bg-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">Select state</option>
+                            </select>
                         </div>
 
                         <div>
@@ -397,38 +376,6 @@
             return trimmed ? escapeHtml(trimmed) : placeholder;
         }
 
-        function formatMultiline(value, placeholder = 'N/A') {
-            if (!value) {
-                return placeholder;
-            }
-            return escapeHtml(value).replace(/\n/g, '<br>');
-        }
-
-        function formatAddress(holder) {
-            const parts = [];
-            if (holder.address_line1) {
-                parts.push(escapeHtml(holder.address_line1));
-            }
-            if (holder.address_line2) {
-                parts.push(escapeHtml(holder.address_line2));
-            }
-            const localityParts = [];
-            if (holder.city) {
-                localityParts.push(holder.city);
-            }
-            const stateAndPostal = [holder.state, holder.postal_code].filter(Boolean).join(' ');
-            if (stateAndPostal) {
-                localityParts.push(stateAndPostal);
-            }
-            if (localityParts.length) {
-                parts.push(escapeHtml(localityParts.join(', ')));
-            }
-            if (parts.length === 0) {
-                return 'N/A';
-            }
-            return parts.join('<br>');
-        }
-
         function formatDate(value) {
             if (!value) {
                 return 'N/A';
@@ -508,22 +455,28 @@
                                 <p>Updated ${formatDate(holder.updated_at)}</p>
                             </div>
                         </div>
-                        <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700">
+                        <dl class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700">
                             <div>
-                                <h5 class="font-medium text-gray-900">Address</h5>
-                                <p class="text-gray-600 leading-relaxed">${formatAddress(holder)}</p>
+                                <dt class="font-medium text-gray-900">Address Line 1</dt>
+                                <dd class="text-gray-600">${formatValue(holder.address_line1)}</dd>
                             </div>
                             <div>
-                                <h5 class="font-medium text-gray-900">Contact</h5>
-                                <p class="text-gray-600">Email: ${emailMarkup}</p>
-                                <p class="text-gray-600 mt-1">Phone: ${phoneMarkup}</p>
-                                <p class="text-gray-600 mt-1">State: ${stateLabel}</p>
+                                <dt class="font-medium text-gray-900">City</dt>
+                                <dd class="text-gray-600">${formatValue(holder.city)}</dd>
                             </div>
-                        </div>
-                        <div class="mt-4">
-                            <h5 class="font-medium text-gray-900">Master Remarks</h5>
-                            <p class="text-gray-600 leading-relaxed">${formatMultiline(holder.master_remarks)}</p>
-                        </div>
+                            <div>
+                                <dt class="font-medium text-gray-900">State</dt>
+                                <dd class="text-gray-600">${stateLabel}</dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-900">Email</dt>
+                                <dd class="text-gray-600">${emailMarkup}</dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-900">Phone</dt>
+                                <dd class="text-gray-600">${phoneMarkup}</dd>
+                            </div>
+                        </dl>
                     </div>
                 `;
             }).join('');
@@ -545,12 +498,9 @@
 
             const payload = {
                 name: document.getElementById('holderName')?.value?.trim() || '',
-                master_remarks: document.getElementById('holderMasterRemarks')?.value?.trim() || '',
                 address_line1: document.getElementById('holderAddress1')?.value?.trim() || '',
-                address_line2: document.getElementById('holderAddress2')?.value?.trim() || '',
                 city: document.getElementById('holderCity')?.value?.trim() || '',
                 state: document.getElementById('holderState')?.value?.trim() || '',
-                postal_code: document.getElementById('holderPostalCode')?.value?.trim() || '',
                 email: document.getElementById('holderEmail')?.value?.trim() || '',
                 phone: document.getElementById('holderPhone')?.value?.trim() || ''
             };
