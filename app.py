@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 import base64
+import re
 
 # Optional imports with fallbacks
 
@@ -24,6 +25,67 @@ LOCAL_TEMPLATE_FILES = {
     "acord130": "acord130.pdf",
     "acord140": "acord140.pdf",
 }
+
+US_STATE_CHOICES = {
+    "AL": "Alabama",
+    "AK": "Alaska",
+    "AZ": "Arizona",
+    "AR": "Arkansas",
+    "CA": "California",
+    "CO": "Colorado",
+    "CT": "Connecticut",
+    "DE": "Delaware",
+    "DC": "District of Columbia",
+    "FL": "Florida",
+    "GA": "Georgia",
+    "HI": "Hawaii",
+    "ID": "Idaho",
+    "IL": "Illinois",
+    "IN": "Indiana",
+    "IA": "Iowa",
+    "KS": "Kansas",
+    "KY": "Kentucky",
+    "LA": "Louisiana",
+    "ME": "Maine",
+    "MD": "Maryland",
+    "MA": "Massachusetts",
+    "MI": "Michigan",
+    "MN": "Minnesota",
+    "MS": "Mississippi",
+    "MO": "Missouri",
+    "MT": "Montana",
+    "NE": "Nebraska",
+    "NV": "Nevada",
+    "NH": "New Hampshire",
+    "NJ": "New Jersey",
+    "NM": "New Mexico",
+    "NY": "New York",
+    "NC": "North Carolina",
+    "ND": "North Dakota",
+    "OH": "Ohio",
+    "OK": "Oklahoma",
+    "OR": "Oregon",
+    "PA": "Pennsylvania",
+    "RI": "Rhode Island",
+    "SC": "South Carolina",
+    "SD": "South Dakota",
+    "TN": "Tennessee",
+    "TX": "Texas",
+    "UT": "Utah",
+    "VT": "Vermont",
+    "VA": "Virginia",
+    "WA": "Washington",
+    "WV": "West Virginia",
+    "WI": "Wisconsin",
+    "WY": "Wyoming",
+}
+
+US_STATE_CODES = set(US_STATE_CHOICES.keys())
+US_STATE_OPTIONS = [
+    {'code': code, 'name': name} for code, name in sorted(US_STATE_CHOICES.items(), key=lambda item: item[1])
+]
+EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+ACCOUNT_ID_REGEX = re.compile(r"^[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?$")
 
 try:
     from supabase import create_client, Client
@@ -187,12 +249,34 @@ def create_database_schema():
             CREATE TABLE IF NOT EXISTS certificate_holders (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 account_id VARCHAR(18) NOT NULL,
-                name VARCHAR(255),
+                name VARCHAR(255) NOT NULL,
+                master_remarks TEXT,
+                address_line1 VARCHAR(255),
+                address_line2 VARCHAR(255),
+                city VARCHAR(120),
+                state VARCHAR(2),
+                postal_code VARCHAR(20),
                 email VARCHAR(255),
-                address TEXT,
-                created_at TIMESTAMP DEFAULT NOW()
+                phone VARCHAR(50),
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW(),
+                address TEXT
             );
         ''')
+        cur.execute('ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS master_remarks TEXT;')
+        cur.execute('ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS address_line1 VARCHAR(255);')
+        cur.execute('ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS address_line2 VARCHAR(255);')
+        cur.execute('ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS city VARCHAR(120);')
+        cur.execute('ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS state VARCHAR(2);')
+        cur.execute('ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS postal_code VARCHAR(20);')
+        cur.execute('ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS phone VARCHAR(50);')
+        cur.execute('ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP;')
+        cur.execute('ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS email VARCHAR(255);')
+        cur.execute('ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS address TEXT;')
+        cur.execute('ALTER TABLE certificate_holders ALTER COLUMN name SET NOT NULL;')
+        cur.execute('UPDATE certificate_holders SET address_line1 = COALESCE(address_line1, address) WHERE address IS NOT NULL AND (address_line1 IS NULL OR address_line1 = \'\');')
+        cur.execute('UPDATE certificate_holders SET updated_at = COALESCE(updated_at, created_at, NOW());')
+        cur.execute('ALTER TABLE certificate_holders ALTER COLUMN updated_at SET DEFAULT NOW();')
         
         # Create indexes
         cur.execute('CREATE INDEX IF NOT EXISTS idx_template_data_account ON template_data(account_id);')
@@ -210,6 +294,168 @@ def create_database_schema():
     except Exception as e:
         print(f"Database schema creation error: {e}")
         return False
+
+def normalize_string(value, max_length=None):
+    """Normalize incoming string data."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        value = str(value)
+    value = str(value).strip()
+    if not value:
+        return None
+    if max_length:
+        return value[:max_length]
+    return value
+
+
+def normalize_account_id(account_id):
+    """Validate and normalize a Salesforce Account ID."""
+    normalized = normalize_string(account_id)
+    if not normalized:
+        raise ValueError("Account ID is required.")
+
+    length = len(normalized)
+    if length not in (15, 18):
+        raise ValueError("Account ID must be 15 or 18 characters.")
+    if length == 15:
+        normalized = normalized.upper()
+    if length == 18:
+        normalized = normalized[:18]
+    if not ACCOUNT_ID_REGEX.match(normalized):
+        raise ValueError("Account ID must be alphanumeric.")
+
+    return normalized
+
+
+def serialize_timestamp(value):
+    """Return ISO formatted timestamp when possible."""
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
+
+def sanitize_certificate_holder_payload(raw_data, existing=None, account_id=None):
+    """Validate and normalize certificate holder payload."""
+    existing = existing or {}
+    errors = []
+    payload = {}
+
+    if not isinstance(raw_data, dict):
+        raw_data = {}
+
+    normalized_existing_account = None
+    if existing.get('account_id'):
+        try:
+            normalized_existing_account = normalize_account_id(existing.get('account_id'))
+        except ValueError:
+            normalized_existing_account = existing.get('account_id')
+
+    if account_id is not None:
+        try:
+            account_id = normalize_account_id(account_id)
+        except ValueError as exc:
+            errors.append(str(exc))
+            account_id = None
+
+    provided_account_id = raw_data.get('account_id')
+    if provided_account_id is not None:
+        try:
+            normalized_provided = normalize_account_id(provided_account_id)
+        except ValueError as exc:
+            errors.append(str(exc))
+        else:
+            if account_id and normalized_provided != account_id:
+                errors.append("Account ID mismatch for certificate holder payload.")
+            elif normalized_existing_account and normalized_provided != normalized_existing_account:
+                errors.append("Account ID mismatch for certificate holder payload.")
+            else:
+                account_id = normalized_provided
+    elif normalized_existing_account:
+        account_id = normalized_existing_account
+
+    name_source = raw_data.get('name')
+    if name_source is None and existing:
+        name_source = existing.get('name')
+    name = normalize_string(name_source, 255)
+    if not name:
+        errors.append("Name is required.")
+    payload['name'] = name
+
+    master_remarks_source = raw_data.get('master_remarks', existing.get('master_remarks') if existing else None)
+    payload['master_remarks'] = normalize_string(master_remarks_source)
+
+    address_line1_source = raw_data.get('address_line1', existing.get('address_line1') if existing else None)
+    payload['address_line1'] = normalize_string(address_line1_source, 255)
+
+    address_line2_source = raw_data.get('address_line2', existing.get('address_line2') if existing else None)
+    payload['address_line2'] = normalize_string(address_line2_source, 255)
+
+    city_source = raw_data.get('city', existing.get('city') if existing else None)
+    payload['city'] = normalize_string(city_source, 120)
+
+    state_source = raw_data.get('state')
+    if state_source is None and existing:
+        state_source = existing.get('state')
+    state = normalize_string(state_source, 2)
+    if state:
+        state = state.upper()
+        if state not in US_STATE_CODES:
+            errors.append("State must be a valid U.S. state code.")
+    payload['state'] = state
+
+    postal_code_source = raw_data.get('postal_code', existing.get('postal_code') if existing else None)
+    payload['postal_code'] = normalize_string(postal_code_source, 20)
+
+    email_source = raw_data.get('email', existing.get('email') if existing else None)
+    email = normalize_string(email_source, 255)
+    if email and not EMAIL_REGEX.match(email):
+        errors.append("Email address is not valid.")
+    payload['email'] = email
+
+    phone_source = raw_data.get('phone', existing.get('phone') if existing else None)
+    payload['phone'] = normalize_string(phone_source, 50)
+
+    if account_id:
+        payload['account_id'] = account_id
+    else:
+        errors.append("Account ID is required.")
+
+    return payload, errors
+
+
+def format_certificate_holder(row):
+    """Format database row for API responses."""
+    if not row:
+        return None
+    if not isinstance(row, dict):
+        row = dict(row)
+
+    holder = {
+        'id': str(row.get('id')),
+        'account_id': row.get('account_id'),
+        'name': row.get('name'),
+        'master_remarks': row.get('master_remarks'),
+        'address_line1': row.get('address_line1'),
+        'address_line2': row.get('address_line2'),
+        'city': row.get('city'),
+        'state': row.get('state'),
+        'state_name': US_STATE_CHOICES.get((row.get('state') or '').upper()),
+        'postal_code': row.get('postal_code'),
+        'email': row.get('email'),
+        'phone': row.get('phone'),
+        'created_at': serialize_timestamp(row.get('created_at')),
+        'updated_at': serialize_timestamp(row.get('updated_at'))
+    }
+    return holder
+
+
+def database_not_configured_response():
+    """Standard response when database features are unavailable."""
+    return jsonify({
+        'success': False,
+        'error': 'Database connectivity is not configured for this environment.'
+    }), 503
 
 # Form field helpers
 
@@ -461,6 +707,279 @@ def get_account_templates(account_id):
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/api/account/<account_id>/certificate-holders", methods=['GET'])
+def list_certificate_holders(account_id):
+    """List certificate holders for the given account."""
+    if not PSYCOPG2_AVAILABLE:
+        return database_not_configured_response()
+
+    try:
+        normalized_account_id = normalize_account_id(account_id)
+    except ValueError as exc:
+        return jsonify({'success': False, 'errors': [str(exc)]}), 400
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT id, account_id, name, master_remarks, address_line1, address_line2,
+                   city, state, postal_code, email, phone, created_at, updated_at
+            FROM certificate_holders
+            WHERE account_id = %s
+            ORDER BY name ASC, created_at DESC
+        ''', (normalized_account_id,))
+        rows = cur.fetchall()
+        holders = [format_certificate_holder(row) for row in rows]
+
+        return jsonify({
+            'success': True,
+            'account_id': normalized_account_id,
+            'certificate_holders': holders,
+            'state_options': US_STATE_OPTIONS
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.route("/api/account/<account_id>/certificate-holders", methods=['POST'])
+def create_certificate_holder(account_id):
+    """Create a certificate holder for the account."""
+    if not PSYCOPG2_AVAILABLE:
+        return database_not_configured_response()
+
+    try:
+        normalized_account_id = normalize_account_id(account_id)
+    except ValueError as exc:
+        return jsonify({'success': False, 'errors': [str(exc)]}), 400
+
+    try:
+        raw_payload = request.get_json(force=True) or {}
+    except Exception:
+        raw_payload = {}
+
+    sanitized, errors = sanitize_certificate_holder_payload(raw_payload, account_id=normalized_account_id)
+    if errors:
+        return jsonify({'success': False, 'errors': errors}), 400
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO certificate_holders (
+                account_id, name, master_remarks, address_line1, address_line2,
+                city, state, postal_code, email, phone
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
+        ''', (
+            normalized_account_id,
+            sanitized.get('name'),
+            sanitized.get('master_remarks'),
+            sanitized.get('address_line1'),
+            sanitized.get('address_line2'),
+            sanitized.get('city'),
+            sanitized.get('state'),
+            sanitized.get('postal_code'),
+            sanitized.get('email'),
+            sanitized.get('phone')
+        ))
+        record = cur.fetchone()
+        conn.commit()
+        holder = format_certificate_holder(record)
+
+        return jsonify({
+            'success': True,
+            'certificate_holder': holder
+        }), 201
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def fetch_certificate_holder(account_id, holder_id):
+    """Fetch a certificate holder row."""
+    normalized_account_id = normalize_account_id(account_id)
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute('''
+            SELECT id, account_id, name, master_remarks, address_line1, address_line2,
+                   city, state, postal_code, email, phone, created_at, updated_at
+            FROM certificate_holders
+            WHERE account_id = %s AND id = %s
+        ''', (normalized_account_id, holder_id))
+        row = cur.fetchone()
+        return row
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.route("/api/account/<account_id>/certificate-holders/<holder_id>", methods=['GET'])
+def get_certificate_holder(account_id, holder_id):
+    """Retrieve a single certificate holder."""
+    if not PSYCOPG2_AVAILABLE:
+        return database_not_configured_response()
+
+    try:
+        normalized_account_id = normalize_account_id(account_id)
+    except ValueError as exc:
+        return jsonify({'success': False, 'errors': [str(exc)]}), 400
+
+    try:
+        row = fetch_certificate_holder(normalized_account_id, holder_id)
+    except ValueError as exc:
+        return jsonify({'success': False, 'errors': [str(exc)]}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    if not row:
+        return jsonify({'success': False, 'error': 'Certificate holder not found'}), 404
+
+    return jsonify({
+        'success': True,
+        'certificate_holder': format_certificate_holder(row),
+        'state_options': US_STATE_OPTIONS
+    })
+
+
+@app.route("/api/account/<account_id>/certificate-holders/<holder_id>", methods=['PUT', 'PATCH'])
+def update_certificate_holder(account_id, holder_id):
+    """Update an existing certificate holder."""
+    if not PSYCOPG2_AVAILABLE:
+        return database_not_configured_response()
+
+    try:
+        normalized_account_id = normalize_account_id(account_id)
+    except ValueError as exc:
+        return jsonify({'success': False, 'errors': [str(exc)]}), 400
+
+    existing = None
+    try:
+        existing = fetch_certificate_holder(normalized_account_id, holder_id)
+    except ValueError as exc:
+        return jsonify({'success': False, 'errors': [str(exc)]}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    if not existing:
+        return jsonify({'success': False, 'error': 'Certificate holder not found'}), 404
+
+    try:
+        raw_payload = request.get_json(force=True) or {}
+    except Exception:
+        raw_payload = {}
+
+    sanitized, errors = sanitize_certificate_holder_payload(raw_payload, existing=existing, account_id=normalized_account_id)
+    if errors:
+        return jsonify({'success': False, 'errors': errors}), 400
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE certificate_holders
+            SET name = %s,
+                master_remarks = %s,
+                address_line1 = %s,
+                address_line2 = %s,
+                city = %s,
+                state = %s,
+                postal_code = %s,
+                email = %s,
+                phone = %s,
+                updated_at = NOW()
+            WHERE account_id = %s AND id = %s
+            RETURNING *
+        ''', (
+            sanitized.get('name'),
+            sanitized.get('master_remarks'),
+            sanitized.get('address_line1'),
+            sanitized.get('address_line2'),
+            sanitized.get('city'),
+            sanitized.get('state'),
+            sanitized.get('postal_code'),
+            sanitized.get('email'),
+            sanitized.get('phone'),
+            normalized_account_id,
+            holder_id
+        ))
+        record = cur.fetchone()
+        if not record:
+            conn.rollback()
+            return jsonify({'success': False, 'error': 'Certificate holder not found'}), 404
+        conn.commit()
+
+        return jsonify({
+            'success': True,
+            'certificate_holder': format_certificate_holder(record)
+        })
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.route("/api/account/<account_id>/certificate-holders/<holder_id>", methods=['DELETE'])
+def delete_certificate_holder(account_id, holder_id):
+    """Delete a certificate holder."""
+    if not PSYCOPG2_AVAILABLE:
+        return database_not_configured_response()
+
+    try:
+        normalized_account_id = normalize_account_id(account_id)
+    except ValueError as exc:
+        return jsonify({'success': False, 'errors': [str(exc)]}), 400
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            DELETE FROM certificate_holders
+            WHERE account_id = %s AND id = %s
+            RETURNING id
+        ''', (normalized_account_id, holder_id))
+        result = cur.fetchone()
+        if not result:
+            conn.rollback()
+            return jsonify({'success': False, 'error': 'Certificate holder not found'}), 404
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 @app.route("/api/provision-pdf", methods=['POST'])
 def provision_pdf():

@@ -43,11 +43,44 @@ CREATE TABLE IF NOT EXISTS generated_certificates (
 CREATE TABLE IF NOT EXISTS certificate_holders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id VARCHAR(18) NOT NULL,
-    name VARCHAR(255),
+    name VARCHAR(255) NOT NULL,
+    master_remarks TEXT,
+    address_line1 VARCHAR(255),
+    address_line2 VARCHAR(255),
+    city VARCHAR(120),
+    state VARCHAR(2),
+    postal_code VARCHAR(20),
     email VARCHAR(255),
-    address TEXT,
-    created_at TIMESTAMP DEFAULT NOW()
+    phone VARCHAR(50),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    address TEXT
 );
+
+ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS master_remarks TEXT;
+ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS address_line1 VARCHAR(255);
+ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS address_line2 VARCHAR(255);
+ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS city VARCHAR(120);
+ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS state VARCHAR(2);
+ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS postal_code VARCHAR(20);
+ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
+ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
+ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE certificate_holders ALTER COLUMN name SET NOT NULL;
+UPDATE certificate_holders SET address_line1 = COALESCE(address_line1, address) WHERE address IS NOT NULL AND (address_line1 IS NULL OR address_line1 = '');
+UPDATE certificate_holders SET updated_at = COALESCE(updated_at, created_at, NOW());
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'ck_certificate_holders_account_id_len'
+    ) THEN
+        ALTER TABLE certificate_holders
+        ADD CONSTRAINT ck_certificate_holders_account_id_len
+        CHECK (char_length(account_id) IN (15, 18));
+    END IF;
+END $$;
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_template_data_account ON template_data(account_id);

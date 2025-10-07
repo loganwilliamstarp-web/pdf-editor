@@ -39,11 +39,104 @@
                 </div>
             </div>
 
-            <!-- Certificate Holders Tab -->
-            <div id="holdersContent" class="bg-white shadow overflow-hidden sm:rounded-lg p-6" style="display: none;">
-                <h2 class="text-xl font-semibold text-gray-900 mb-4">Certificate Holders</h2>
-                <p class="text-gray-600">This section will allow you to manage recipients of certificates. (Coming soon!)</p>
+        <!-- Certificate Holders Tab -->
+        <div id="holdersContent" class="bg-white shadow overflow-hidden sm:rounded-lg p-6 space-y-6" style="display: none;">
+            <div>
+                <h2 class="text-xl font-semibold text-gray-900 mb-2">Certificate Holders</h2>
+                <p class="text-gray-600">Add and manage the contacts who should receive certificates for this Salesforce account.</p>
             </div>
+
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-5">
+                <h3 class="text-lg font-semibold text-gray-900 mb-3">Add Certificate Holder</h3>
+                <div id="holderFormAlert" class="hidden mb-3"></div>
+                <form id="holderForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2">
+                        <label for="holderName" class="block text-sm font-medium text-gray-700">Name <span class="text-red-500">*</span></label>
+                        <input id="holderName" name="name" type="text" required autocomplete="off"
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                               placeholder="ACME Inc. - Insurance Department">
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label for="holderMasterRemarks" class="block text-sm font-medium text-gray-700">Master Remarks</label>
+                        <textarea id="holderMasterRemarks" name="master_remarks" rows="3"
+                                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                  placeholder="Instructions or notes to include on generated certificates."></textarea>
+                    </div>
+
+                    <div>
+                        <label for="holderAddress1" class="block text-sm font-medium text-gray-700">Address Line 1</label>
+                        <input id="holderAddress1" name="address_line1" type="text" autocomplete="off"
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                               placeholder="123 Main Street">
+                    </div>
+                    <div>
+                        <label for="holderAddress2" class="block text-sm font-medium text-gray-700">Address Line 2</label>
+                        <input id="holderAddress2" name="address_line2" type="text" autocomplete="off"
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                               placeholder="Suite 400">
+                    </div>
+
+                    <div>
+                        <label for="holderCity" class="block text-sm font-medium text-gray-700">City</label>
+                        <input id="holderCity" name="city" type="text" autocomplete="off"
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label for="holderState" class="block text-sm font-medium text-gray-700">State</label>
+                            <select id="holderState" name="state"
+                                    class="mt-1 block w-full rounded-md border-gray-300 bg-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">Select state</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="holderPostalCode" class="block text-sm font-medium text-gray-700">Postal Code</label>
+                            <input id="holderPostalCode" name="postal_code" type="text" autocomplete="off"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="12345">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="holderEmail" class="block text-sm font-medium text-gray-700">Email</label>
+                        <input id="holderEmail" name="email" type="email" autocomplete="off"
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                               placeholder="certificates@example.com">
+                    </div>
+                    <div>
+                        <label for="holderPhone" class="block text-sm font-medium text-gray-700">Phone</label>
+                        <input id="holderPhone" name="phone" type="tel" autocomplete="off"
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                               placeholder="(123) 456-7890">
+                    </div>
+
+                    <div class="md:col-span-2 flex justify-end gap-3">
+                        <button id="holderResetBtn" type="button"
+                                class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                            Clear Form
+                        </button>
+                        <button id="holderSubmitBtn" type="submit"
+                                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                            Save Certificate Holder
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div>
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">Saved Certificate Holders</h3>
+                    <button id="refreshHoldersBtn"
+                            class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Refresh
+                    </button>
+                </div>
+                <div id="holderList" class="space-y-4">
+                    <p class="text-gray-600">Loading certificate holders...</p>
+                </div>
+            </div>
+        </div>
 
             <!-- Generated Certificates Tab -->
             <div id="generatedContent" class="bg-white shadow overflow-hidden sm:rounded-lg p-6" style="display: none;">
@@ -54,6 +147,28 @@
     </div>
 
     <script>
+        const DEFAULT_STATE_OPTIONS = [
+            { code: 'AL', name: 'Alabama' }, { code: 'AK', name: 'Alaska' }, { code: 'AZ', name: 'Arizona' },
+            { code: 'AR', name: 'Arkansas' }, { code: 'CA', name: 'California' }, { code: 'CO', name: 'Colorado' },
+            { code: 'CT', name: 'Connecticut' }, { code: 'DE', name: 'Delaware' }, { code: 'DC', name: 'District of Columbia' },
+            { code: 'FL', name: 'Florida' }, { code: 'GA', name: 'Georgia' }, { code: 'HI', name: 'Hawaii' },
+            { code: 'ID', name: 'Idaho' }, { code: 'IL', name: 'Illinois' }, { code: 'IN', name: 'Indiana' },
+            { code: 'IA', name: 'Iowa' }, { code: 'KS', name: 'Kansas' }, { code: 'KY', name: 'Kentucky' },
+            { code: 'LA', name: 'Louisiana' }, { code: 'ME', name: 'Maine' }, { code: 'MD', name: 'Maryland' },
+            { code: 'MA', name: 'Massachusetts' }, { code: 'MI', name: 'Michigan' }, { code: 'MN', name: 'Minnesota' },
+            { code: 'MS', name: 'Mississippi' }, { code: 'MO', name: 'Missouri' }, { code: 'MT', name: 'Montana' },
+            { code: 'NE', name: 'Nebraska' }, { code: 'NV', name: 'Nevada' }, { code: 'NH', name: 'New Hampshire' },
+            { code: 'NJ', name: 'New Jersey' }, { code: 'NM', name: 'New Mexico' }, { code: 'NY', name: 'New York' },
+            { code: 'NC', name: 'North Carolina' }, { code: 'ND', name: 'North Dakota' }, { code: 'OH', name: 'Ohio' },
+            { code: 'OK', name: 'Oklahoma' }, { code: 'OR', name: 'Oregon' }, { code: 'PA', name: 'Pennsylvania' },
+            { code: 'RI', name: 'Rhode Island' }, { code: 'SC', name: 'South Carolina' }, { code: 'SD', name: 'South Dakota' },
+            { code: 'TN', name: 'Tennessee' }, { code: 'TX', name: 'Texas' }, { code: 'UT', name: 'Utah' },
+            { code: 'VT', name: 'Vermont' }, { code: 'VA', name: 'Virginia' }, { code: 'WA', name: 'Washington' },
+            { code: 'WV', name: 'West Virginia' }, { code: 'WI', name: 'Wisconsin' }, { code: 'WY', name: 'Wyoming' }
+        ];
+        let certificateHolderStateOptions = [...DEFAULT_STATE_OPTIONS];
+        let certificateHoldersLoaded = false;
+
         // Get account ID from URL
         function getAccountId() {
             const path = window.location.pathname;
@@ -65,7 +180,33 @@
         function initApp() {
             const accountId = getAccountId();
             document.getElementById('accountId').textContent = `(${accountId})`;
+
+            setupCertificateHolderUI();
             loadTemplates();
+            loadCertificateHolders(true);
+        }
+
+        function setupCertificateHolderUI() {
+            const form = document.getElementById('holderForm');
+            if (form) {
+                form.addEventListener('submit', submitCertificateHolder);
+            }
+
+            const resetBtn = document.getElementById('holderResetBtn');
+            if (resetBtn) {
+                resetBtn.addEventListener('click', resetHolderForm);
+            }
+
+            const refreshBtn = document.getElementById('refreshHoldersBtn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', () => {
+                    certificateHoldersLoaded = false;
+                    loadCertificateHolders(true);
+                });
+            }
+
+            renderHolderStateOptions();
+            showHolderAlert(); // hide by default
         }
 
         // Show tab content
@@ -83,6 +224,288 @@
             // Show selected content and highlight tab
             document.getElementById(tab + 'Content').style.display = 'block';
             document.getElementById(tab + 'Tab').className = 'px-3 py-2 rounded-md text-sm font-medium bg-indigo-600 text-white';
+
+            if (tab === 'holders') {
+                renderHolderStateOptions();
+                if (!certificateHoldersLoaded) {
+                    loadCertificateHolders(true);
+                }
+            }
+        }
+
+        function renderHolderStateOptions() {
+            const select = document.getElementById('holderState');
+            if (!select) {
+                return;
+            }
+
+            const currentValue = select.value;
+            const optionsMarkup = ['<option value="">Select state</option>']
+                .concat(
+                    certificateHolderStateOptions.map(option => `<option value="${option.code}">${option.name}</option>`)
+                )
+                .join('');
+
+            select.innerHTML = optionsMarkup;
+
+            if (currentValue && certificateHolderStateOptions.some(option => option.code === currentValue)) {
+                select.value = currentValue;
+            } else {
+                select.value = '';
+            }
+        }
+
+        function showHolderAlert(type, message) {
+            const alertEl = document.getElementById('holderFormAlert');
+            if (!alertEl) {
+                return;
+            }
+
+            if (!message) {
+                alertEl.className = 'hidden mb-3';
+                alertEl.innerHTML = '';
+                return;
+            }
+
+            const classMap = {
+                success: 'border-green-200 bg-green-50 text-green-700',
+                error: 'border-red-200 bg-red-50 text-red-700',
+                info: 'border-blue-200 bg-blue-50 text-blue-700'
+            };
+            const styleClass = classMap[type] || classMap.info;
+            alertEl.className = `mb-3 rounded-md border px-4 py-3 text-sm ${styleClass}`;
+            alertEl.innerHTML = message;
+        }
+
+        function resetHolderForm() {
+            const form = document.getElementById('holderForm');
+            if (form) {
+                form.reset();
+            }
+            renderHolderStateOptions();
+            showHolderAlert();
+        }
+
+        function escapeHtml(value) {
+            if (value === null || value === undefined) {
+                return '';
+            }
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatValue(value, placeholder = '—') {
+            if (value === null || value === undefined) {
+                return placeholder;
+            }
+            const trimmed = String(value).trim();
+            return trimmed ? escapeHtml(trimmed) : placeholder;
+        }
+
+        function formatMultiline(value, placeholder = '—') {
+            if (!value) {
+                return placeholder;
+            }
+            return escapeHtml(value).replace(/\n/g, '<br>');
+        }
+
+        function formatAddress(holder) {
+            const parts = [];
+            if (holder.address_line1) {
+                parts.push(escapeHtml(holder.address_line1));
+            }
+            if (holder.address_line2) {
+                parts.push(escapeHtml(holder.address_line2));
+            }
+            const localityParts = [];
+            if (holder.city) {
+                localityParts.push(holder.city);
+            }
+            const stateAndPostal = [holder.state, holder.postal_code].filter(Boolean).join(' ');
+            if (stateAndPostal) {
+                localityParts.push(stateAndPostal);
+            }
+            if (localityParts.length) {
+                parts.push(escapeHtml(localityParts.join(', ')));
+            }
+            if (parts.length === 0) {
+                return '—';
+            }
+            return parts.join('<br>');
+        }
+
+        function formatDate(value) {
+            if (!value) {
+                return '—';
+            }
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return '—';
+            }
+            return date.toLocaleString();
+        }
+
+        async function loadCertificateHolders(forceRefresh = false) {
+            const holderList = document.getElementById('holderList');
+            if (!holderList) {
+                return;
+            }
+            if (!forceRefresh && certificateHoldersLoaded) {
+                return;
+            }
+
+            const accountId = getAccountId();
+            holderList.innerHTML = '<p class="text-gray-600">Loading certificate holders...</p>';
+
+            try {
+                const response = await fetch(`/api/account/${accountId}/certificate-holders`);
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Unable to load certificate holders.');
+                }
+
+                if (Array.isArray(data.state_options) && data.state_options.length > 0) {
+                    certificateHolderStateOptions = data.state_options.map(option => ({
+                        code: option.code,
+                        name: option.name
+                    }));
+                    renderHolderStateOptions();
+                }
+
+                renderCertificateHolderList(Array.isArray(data.certificate_holders) ? data.certificate_holders : []);
+                certificateHoldersLoaded = true;
+            } catch (error) {
+                holderList.innerHTML = `<p class="text-red-600">Error loading certificate holders: ${escapeHtml(error.message)}</p>`;
+                certificateHoldersLoaded = false;
+            }
+        }
+
+        function renderCertificateHolderList(holders) {
+            const holderList = document.getElementById('holderList');
+            if (!holderList) {
+                return;
+            }
+
+            if (!holders || holders.length === 0) {
+                holderList.innerHTML = '<p class="text-gray-600">No certificate holders yet. Add your first one using the form above.</p>';
+                return;
+            }
+
+            const markup = holders.map(holder => {
+                const emailMarkup = holder.email
+                    ? `<a class="text-indigo-600 hover:text-indigo-700" href="mailto:${encodeURIComponent(holder.email)}">${escapeHtml(holder.email)}</a>`
+                    : '—';
+                const phoneMarkup = holder.phone ? escapeHtml(holder.phone) : '—';
+                const stateLabel = holder.state
+                    ? `${escapeHtml(holder.state)}${holder.state_name ? ` (${escapeHtml(holder.state_name)})` : ''}`
+                    : '—';
+
+                return `
+                    <div class="border border-gray-200 rounded-lg p-4 shadow-sm">
+                        <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                            <div>
+                                <h4 class="text-lg font-semibold text-gray-900">${formatValue(holder.name, 'Unnamed Holder')}</h4>
+                                <p class="text-sm text-gray-500">Account: ${formatValue(holder.account_id)}</p>
+                            </div>
+                            <div class="text-xs text-gray-500 md:text-right">
+                                <p>Created ${formatDate(holder.created_at)}</p>
+                                <p>Updated ${formatDate(holder.updated_at)}</p>
+                            </div>
+                        </div>
+                        <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700">
+                            <div>
+                                <h5 class="font-medium text-gray-900">Address</h5>
+                                <p class="text-gray-600 leading-relaxed">${formatAddress(holder)}</p>
+                            </div>
+                            <div>
+                                <h5 class="font-medium text-gray-900">Contact</h5>
+                                <p class="text-gray-600">Email: ${emailMarkup}</p>
+                                <p class="text-gray-600 mt-1">Phone: ${phoneMarkup}</p>
+                                <p class="text-gray-600 mt-1">State: ${stateLabel}</p>
+                            </div>
+                        </div>
+                        <div class="mt-4">
+                            <h5 class="font-medium text-gray-900">Master Remarks</h5>
+                            <p class="text-gray-600 leading-relaxed">${formatMultiline(holder.master_remarks)}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            holderList.innerHTML = markup;
+        }
+
+        async function submitCertificateHolder(event) {
+            event.preventDefault();
+
+            const submitBtn = document.getElementById('holderSubmitBtn');
+            const originalBtnText = submitBtn ? submitBtn.textContent : '';
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Saving...';
+            }
+
+            showHolderAlert('info', 'Saving certificate holder...');
+
+            const payload = {
+                name: document.getElementById('holderName')?.value?.trim() || '',
+                master_remarks: document.getElementById('holderMasterRemarks')?.value?.trim() || '',
+                address_line1: document.getElementById('holderAddress1')?.value?.trim() || '',
+                address_line2: document.getElementById('holderAddress2')?.value?.trim() || '',
+                city: document.getElementById('holderCity')?.value?.trim() || '',
+                state: document.getElementById('holderState')?.value?.trim() || '',
+                postal_code: document.getElementById('holderPostalCode')?.value?.trim() || '',
+                email: document.getElementById('holderEmail')?.value?.trim() || '',
+                phone: document.getElementById('holderPhone')?.value?.trim() || ''
+            };
+
+            if (payload.state) {
+                payload.state = payload.state.toUpperCase();
+            }
+
+            Object.keys(payload).forEach(key => {
+                if (payload[key] === '') {
+                    payload[key] = null;
+                }
+            });
+
+            const accountId = getAccountId();
+
+            try {
+                const response = await fetch(`/api/account/${accountId}/certificate-holders`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (!result.success) {
+                    const messages = Array.isArray(result.errors) && result.errors.length > 0
+                        ? result.errors.map(escapeHtml).join('<br>')
+                        : escapeHtml(result.error || 'Unable to save certificate holder.');
+                    showHolderAlert('error', messages);
+                    return;
+                }
+
+                showHolderAlert('success', 'Certificate holder saved successfully.');
+                resetHolderForm();
+                certificateHoldersLoaded = false;
+                await loadCertificateHolders(true);
+
+                setTimeout(() => showHolderAlert(), 5000);
+            } catch (error) {
+                showHolderAlert('error', `Failed to save certificate holder: ${escapeHtml(error.message)}`);
+            } finally {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = originalBtnText || 'Save Certificate Holder';
+                }
+            }
         }
 
         // Load templates
