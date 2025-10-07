@@ -58,6 +58,8 @@
                 </div>
             </div>
 
+            <p id="holderSelectionSummary" class="text-sm text-gray-500">No certificate holders selected.</p>
+
             <div id="holderList" class="space-y-4">
                 <p class="text-gray-600">Loading certificate holders...</p>
             </div>
@@ -78,7 +80,7 @@
             <div class="bg-white shadow-xl rounded-lg overflow-hidden">
                 <div class="flex items-center justify-between border-b px-6 py-4">
                     <div>
-                        <h3 class="text-lg font-semibold text-gray-900">Add Certificate Holder</h3>
+                        <h3 id="holderModalTitle" class="text-lg font-semibold text-gray-900">Add Certificate Holder</h3>
                         <p class="text-sm text-gray-500">Provide the details for the recipient who should receive certificates.</p>
                     </div>
                     <button id="holderModalCloseBtn" type="button" class="text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 rounded-full p-1">
@@ -94,6 +96,13 @@
                             <input id="holderName" name="name" type="text" required autocomplete="off"
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                    placeholder="ACME Inc. - Insurance Department">
+                        </div>
+
+                        <div class="md:col-span-2">
+                            <label for="holderMasterRemarks" class="block text-sm font-medium text-gray-700">Master Remarks</label>
+                            <textarea id="holderMasterRemarks" name="master_remarks" rows="3"
+                                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                      placeholder="Instructions or notes to include on generated certificates."></textarea>
                         </div>
 
                         <div class="md:col-span-2">
@@ -173,6 +182,11 @@
         ];
         let certificateHolderStateOptions = [...DEFAULT_STATE_OPTIONS];
         let certificateHoldersLoaded = false;
+        let certificateHolderCache = [];
+        let selectedCertificateHolderIds = new Set();
+        let editingCertificateHolderId = null;
+        const HOLDER_MODAL_TITLE_DEFAULT = 'Add Certificate Holder';
+        const HOLDER_MODAL_TITLE_EDIT = 'Edit Certificate Holder';
 
         // Get account ID from URL
         function getAccountId() {
@@ -234,6 +248,9 @@
 
             renderHolderStateOptions();
             showHolderAlert(); // hide by default
+            window.getSelectedCertificateHolderIds = () => Array.from(selectedCertificateHolderIds);
+            window.editCertificateHolder = editCertificateHolder;
+            updateHolderSelectionSummary();
             closeHolderModal(true); // ensure hidden on load
         }
 
@@ -258,6 +275,7 @@
                 if (!certificateHoldersLoaded) {
                     loadCertificateHolders(true);
                 }
+                updateHolderSelectionSummary();
             }
         }
 
@@ -314,17 +332,180 @@
             showHolderAlert();
         }
 
+        function updateHolderSelectionSummary(total = null) {
+            const summaryEl = document.getElementById('holderSelectionSummary');
+            if (!summaryEl) {
+                return;
+            }
+
+            if (total === null || total === undefined) {
+                total = certificateHolderCache.length;
+            }
+
+            if (total === 0) {
+                summaryEl.textContent = 'No certificate holders available.';
+                return;
+            }
+
+            const count = selectedCertificateHolderIds.size;
+            if (count === 0) {
+                summaryEl.textContent = 'No certificate holders selected.';
+            } else if (count === 1) {
+                summaryEl.textContent = '1 certificate holder selected.';
+            } else {
+                summaryEl.textContent = `${count} certificate holders selected.`;
+            }
+        }
+
+        function updateHolderSelectAllState(selectAllEl, checkboxEls) {
+            if (!selectAllEl) {
+                return;
+            }
+
+            const enabledCheckboxes = checkboxEls.filter(cb => !cb.disabled);
+            if (enabledCheckboxes.length === 0) {
+                selectAllEl.checked = false;
+                selectAllEl.indeterminate = false;
+                return;
+            }
+
+            const checkedCount = enabledCheckboxes.filter(cb => cb.checked).length;
+            if (checkedCount === 0) {
+                selectAllEl.checked = false;
+                selectAllEl.indeterminate = false;
+            } else if (checkedCount === enabledCheckboxes.length) {
+                selectAllEl.checked = true;
+                selectAllEl.indeterminate = false;
+            } else {
+                selectAllEl.checked = false;
+                selectAllEl.indeterminate = true;
+            }
+        }
+
+        function setupHolderSelectionHandlers(holders) {
+            const selectAllEl = document.getElementById('holderSelectAll');
+            const checkboxEls = Array.from(document.querySelectorAll('input.holder-select'));
+
+            checkboxEls.forEach(cb => {
+                const holderId = cb.dataset.holderId;
+                if (holderId && selectedCertificateHolderIds.has(holderId)) {
+                    cb.checked = true;
+                }
+                cb.addEventListener('change', () => {
+                    if (holderId) {
+                        if (cb.checked) {
+                            selectedCertificateHolderIds.add(holderId);
+                        } else {
+                            selectedCertificateHolderIds.delete(holderId);
+                        }
+                    }
+                    updateHolderSelectAllState(selectAllEl, checkboxEls);
+                    updateHolderSelectionSummary(holders.length);
+                });
+            });
+
+            if (selectAllEl) {
+                updateHolderSelectAllState(selectAllEl, checkboxEls);
+                selectAllEl.addEventListener('change', () => {
+                    const shouldSelect = selectAllEl.checked;
+                    checkboxEls.forEach(cb => {
+                        if (cb.disabled) {
+                            return;
+                        }
+                        cb.checked = shouldSelect;
+                        const holderId = cb.dataset.holderId;
+                        if (!holderId) {
+                            return;
+                        }
+                        if (shouldSelect) {
+                            selectedCertificateHolderIds.add(holderId);
+                        } else {
+                            selectedCertificateHolderIds.delete(holderId);
+                        }
+                    });
+                    updateHolderSelectAllState(selectAllEl, checkboxEls);
+                    updateHolderSelectionSummary(holders.length);
+                });
+            }
+
+            updateHolderSelectionSummary(holders.length);
+        }
+
+        function populateHolderForm(holder) {
+            if (!holder) {
+                return;
+            }
+
+            renderHolderStateOptions();
+
+            const setValue = (id, value = '') => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.value = value || '';
+                }
+            };
+
+            setValue('holderName', holder.name);
+            setValue('holderMasterRemarks', holder.master_remarks);
+            setValue('holderAddress1', holder.address_line1);
+            setValue('holderCity', holder.city);
+            setValue('holderEmail', holder.email);
+            setValue('holderPhone', holder.phone);
+
+            const stateField = document.getElementById('holderState');
+            if (stateField) {
+                stateField.value = holder.state || '';
+            }
+        }
+
+        function editCertificateHolder(holderId) {
+            if (!holderId) {
+                return;
+            }
+            const normalizedId = String(holderId);
+            const target = certificateHolderCache.find(holder => holder && String(holder.id) === normalizedId);
+            if (!target) {
+                console.warn('Certificate holder not found for edit:', holderId);
+                return;
+            }
+            openHolderModal(target);
+        }
+
         function isHolderModalOpen() {
             const modal = document.getElementById('holderModal');
             return modal ? !modal.classList.contains('hidden') : false;
         }
 
-        function openHolderModal() {
+        function openHolderModal(existingHolder = null) {
             const modal = document.getElementById('holderModal');
             if (!modal) {
                 return;
             }
+
+            const titleEl = document.getElementById('holderModalTitle');
+            const submitBtn = document.getElementById('holderSubmitBtn');
+
             resetHolderForm();
+
+            if (existingHolder && existingHolder.id) {
+                editingCertificateHolderId = String(existingHolder.id);
+                if (titleEl) {
+                    titleEl.textContent = HOLDER_MODAL_TITLE_EDIT;
+                }
+                if (submitBtn) {
+                    submitBtn.textContent = 'Save Changes';
+                }
+                populateHolderForm(existingHolder);
+            } else {
+                editingCertificateHolderId = null;
+                if (titleEl) {
+                    titleEl.textContent = HOLDER_MODAL_TITLE_DEFAULT;
+                }
+                if (submitBtn) {
+                    submitBtn.textContent = 'Save Certificate Holder';
+                }
+            }
+
             modal.classList.remove('hidden');
             modal.classList.add('flex');
             modal.setAttribute('aria-hidden', 'false');
@@ -345,6 +526,15 @@
             modal.classList.remove('flex');
             modal.setAttribute('aria-hidden', 'true');
             if (shouldReset) {
+                editingCertificateHolderId = null;
+                const titleEl = document.getElementById('holderModalTitle');
+                const submitBtn = document.getElementById('holderSubmitBtn');
+                if (titleEl) {
+                    titleEl.textContent = HOLDER_MODAL_TITLE_DEFAULT;
+                }
+                if (submitBtn) {
+                    submitBtn.textContent = 'Save Certificate Holder';
+                }
                 resetHolderForm();
             }
         }
@@ -420,6 +610,7 @@
             } catch (error) {
                 holderList.innerHTML = `<p class="text-red-600">Error loading certificate holders: ${escapeHtml(error.message)}</p>`;
                 certificateHoldersLoaded = false;
+                updateHolderSelectionSummary();
             }
         }
 
@@ -429,12 +620,29 @@
                 return;
             }
 
+            certificateHolderCache = Array.isArray(holders)
+                ? holders.map(holder => holder ? { ...holder, id: holder.id ? String(holder.id) : '' } : holder)
+                : [];
+
             if (!holders || holders.length === 0) {
                 holderList.innerHTML = '<p class="text-gray-600">No certificate holders yet. Click "+ Add Certificate Holder" to create one.</p>';
+                selectedCertificateHolderIds.clear();
+                updateHolderSelectionSummary(0);
                 return;
             }
 
+            const validHolderIds = new Set();
+            holders.forEach(holder => {
+                if (holder && holder.id) {
+                    validHolderIds.add(String(holder.id));
+                }
+            });
+            selectedCertificateHolderIds = new Set(
+                [...selectedCertificateHolderIds].filter(id => validHolderIds.has(id))
+            );
+
             const rows = holders.map(holder => {
+                const holderId = holder && holder.id ? String(holder.id) : '';
                 const emailMarkup = holder.email
                     ? `<a class="text-indigo-600 hover:text-indigo-700" href="mailto:${encodeURIComponent(holder.email)}">${escapeHtml(holder.email)}</a>`
                     : 'N/A';
@@ -442,15 +650,28 @@
                 const stateLabel = holder.state
                     ? `${escapeHtml(holder.state)}${holder.state_name ? ` (${escapeHtml(holder.state_name)})` : ''}`
                     : 'N/A';
+                const isSelectable = Boolean(holderId);
+                const checkedAttr = isSelectable && selectedCertificateHolderIds.has(holderId) ? 'checked' : '';
+                const disabledAttr = isSelectable ? '' : 'disabled';
+                const dataAttr = isSelectable ? `data-holder-id="${escapeHtml(holderId)}"` : '';
+                const rowTitleAttr = holder && holder.master_remarks ? ` title="${escapeHtml(holder.master_remarks)}"` : '';
+                const rowDataAttr = holderId ? ` data-holder-id="${escapeHtml(holderId)}"` : '';
+                const editButton = holderId
+                    ? `<button type="button" class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-indigo-600 bg-white hover:bg-indigo-50" onclick="editCertificateHolder('${escapeHtml(holderId)}')">Edit</button>`
+                    : '<span class="text-gray-400 text-xs">N/A</span>';
 
                 return `
-                    <tr class="hover:bg-gray-50">
+                    <tr class="hover:bg-gray-50"${rowTitleAttr}${rowDataAttr}>
+                        <td class="px-4 py-3 text-center">
+                            <input type="checkbox" class="holder-select h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" ${dataAttr} ${checkedAttr} ${disabledAttr}>
+                        </td>
                         <td class="px-4 py-3 text-sm font-medium text-gray-900">${formatValue(holder.name, 'Unnamed Holder')}</td>
                         <td class="px-4 py-3 text-sm text-gray-700">${formatValue(holder.address_line1)}</td>
                         <td class="px-4 py-3 text-sm text-gray-700">${formatValue(holder.city)}</td>
                         <td class="px-4 py-3 text-sm text-gray-700">${stateLabel}</td>
                         <td class="px-4 py-3 text-sm text-gray-700">${emailMarkup}</td>
                         <td class="px-4 py-3 text-sm text-gray-700">${phoneMarkup}</td>
+                        <td class="px-4 py-3 text-sm text-right">${editButton}</td>
                     </tr>
                 `;
             }).join('');
@@ -460,12 +681,16 @@
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">
                             <tr>
+                                <th scope="col" class="px-4 py-3 text-center w-12">
+                                    <input id="holderSelectAll" type="checkbox" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                                </th>
                                 <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
                                 <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Address Line 1</th>
                                 <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">City</th>
                                 <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">State</th>
                                 <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
                                 <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
+                                <th scope="col" class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-100">
@@ -474,6 +699,8 @@
                     </table>
                 </div>
             `;
+
+            setupHolderSelectionHandlers(holders);
         }
 
         async function submitCertificateHolder(event) {
@@ -490,6 +717,7 @@
 
             const payload = {
                 name: document.getElementById('holderName')?.value?.trim() || '',
+                master_remarks: document.getElementById('holderMasterRemarks')?.value?.trim() || '',
                 address_line1: document.getElementById('holderAddress1')?.value?.trim() || '',
                 city: document.getElementById('holderCity')?.value?.trim() || '',
                 state: document.getElementById('holderState')?.value?.trim() || '',
@@ -508,10 +736,15 @@
             });
 
             const accountId = getAccountId();
+            const isEditing = Boolean(editingCertificateHolderId);
+            const endpoint = isEditing
+                ? `/api/account/${accountId}/certificate-holders/${editingCertificateHolderId}`
+                : `/api/account/${accountId}/certificate-holders`;
+            const method = isEditing ? 'PUT' : 'POST';
 
             try {
-                const response = await fetch(`/api/account/${accountId}/certificate-holders`, {
-                    method: 'POST',
+                const response = await fetch(endpoint, {
+                    method,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
@@ -525,7 +758,10 @@
                     return;
                 }
 
-                showHolderAlert('success', 'Certificate holder saved successfully.');
+                const successMessage = isEditing
+                    ? 'Certificate holder updated successfully.'
+                    : 'Certificate holder saved successfully.';
+                showHolderAlert('success', successMessage);
                 certificateHoldersLoaded = false;
                 await loadCertificateHolders(true);
 

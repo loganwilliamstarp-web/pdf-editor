@@ -382,6 +382,9 @@ def sanitize_certificate_holder_payload(raw_data, existing=None, account_id=None
         errors.append("Name is required.")
     payload['name'] = name
 
+    master_remarks_source = raw_data.get('master_remarks', existing.get('master_remarks') if existing else None)
+    payload['master_remarks'] = normalize_string(master_remarks_source)
+
     address_line1_source = raw_data.get('address_line1', existing.get('address_line1') if existing else None)
     payload['address_line1'] = normalize_string(address_line1_source, 255)
 
@@ -426,6 +429,7 @@ def format_certificate_holder(row):
         'id': str(row.get('id')),
         'account_id': row.get('account_id'),
         'name': row.get('name'),
+        'master_remarks': row.get('master_remarks'),
         'address_line1': row.get('address_line1'),
         'city': row.get('city'),
         'state': row.get('state'),
@@ -714,7 +718,7 @@ def list_certificate_holders(account_id):
         conn = get_db()
         cur = conn.cursor()
         cur.execute('''
-            SELECT id, account_id, name, address_line1, city, state, email, phone,
+            SELECT id, account_id, name, master_remarks, address_line1, city, state, email, phone,
                    created_at, updated_at
             FROM certificate_holders
             WHERE account_id = %s
@@ -765,13 +769,14 @@ def create_certificate_holder(account_id):
         cur = conn.cursor()
         cur.execute('''
             INSERT INTO certificate_holders (
-                account_id, name, address_line1, city, state, email, phone
+                account_id, name, master_remarks, address_line1, city, state, email, phone
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
         ''', (
             normalized_account_id,
             sanitized.get('name'),
+            sanitized.get('master_remarks'),
             sanitized.get('address_line1'),
             sanitized.get('city'),
             sanitized.get('state'),
@@ -804,7 +809,7 @@ def fetch_certificate_holder(account_id, holder_id):
     cur = conn.cursor()
     try:
         cur.execute('''
-            SELECT id, account_id, name, address_line1,
+            SELECT id, account_id, name, master_remarks, address_line1,
                    city, state, email, phone, created_at, updated_at
             FROM certificate_holders
             WHERE account_id = %s AND id = %s
@@ -883,6 +888,7 @@ def update_certificate_holder(account_id, holder_id):
         cur.execute('''
             UPDATE certificate_holders
             SET name = %s,
+                master_remarks = %s,
                 address_line1 = %s,
                 city = %s,
                 state = %s,
@@ -893,6 +899,7 @@ def update_certificate_holder(account_id, holder_id):
             RETURNING *
         ''', (
             sanitized.get('name'),
+            sanitized.get('master_remarks'),
             sanitized.get('address_line1'),
             sanitized.get('city'),
             sanitized.get('state'),
