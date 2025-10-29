@@ -1281,16 +1281,15 @@ def generate_acord25_certificates(account_id):
     try:
         conn = get_db()
         cur = conn.cursor()
-        cur.execute(
-            '''
+        placeholders = ','.join(['%s'] * len(holder_ids))
+        query = f"""
             SELECT id, account_id, name, master_remarks, address_line1, address_line2,
                    city, state, postal_code, email, phone
             FROM certificate_holders
-            WHERE account_id = %s AND id = ANY(%s::uuid[])
+            WHERE account_id = %s AND id IN ({placeholders})
             ORDER BY name ASC, created_at DESC
-            ''',
-            (normalized_account_id, holder_ids)
-        )
+        """
+        cur.execute(query, [normalized_account_id, *holder_ids])
         rows = cur.fetchall()
         if template_id and template_blob is None and not template_storage_path:
             try:
@@ -1328,15 +1327,15 @@ def generate_acord25_certificates(account_id):
         holder_key = str(raw_id)
         holders_by_id[holder_key] = row
 
-    missing_ids = [hid for hid in holder_ids if str(hid) not in holders_by_id]
+    missing_ids = [hid for hid in holder_ids if hid not in holders_by_id]
     if missing_ids:
         return jsonify({'success': False, 'error': f'Certificate holders not found: {missing_ids}'}), 404
 
     generation_date = datetime.utcnow().strftime('%Y-%m-%d')
     generated_files = []
 
-    for holder_uuid in holder_ids:
-        holder_row = holders_by_id.get(str(holder_uuid))
+    for holder_key in holder_ids:
+        holder_row = holders_by_id.get(holder_key)
         if not holder_row:
             continue
         holder = format_certificate_holder(holder_row)
@@ -1370,7 +1369,7 @@ def generate_acord25_certificates(account_id):
         except Exception as fill_error:
             return jsonify({'success': False, 'error': f'Failed to generate PDF for {holder.get("name")}: {fill_error}'}), 500
 
-        holder_name_component = sanitize_filename_component(holder.get('name'), fallback=f'holder_{holder_uuid}')
+        holder_name_component = sanitize_filename_component(holder.get('name'), fallback=f'holder_{holder_key}')
         filename = f"{holder_name_component}_{generation_date}.pdf"
         generated_files.append((filename, filled_pdf))
 
@@ -1403,7 +1402,7 @@ def generate_acord25_certificates(account_id):
         cur = conn.cursor()
 
         for idx, (filename, pdf_bytes) in enumerate(generated_files):
-            holder_uuid = holder_ids[idx] if idx < len(holder_ids) else None
+            holder_key = holder_ids[idx] if idx < len(holder_ids) else None
             local_path = None
             if LOCAL_TEMPLATE_DIR.exists():
                 account_dir = LOCAL_TEMPLATE_DIR.parent / 'generated' / sanitize_filename_component(normalized_account_id)
@@ -1423,7 +1422,7 @@ def generate_acord25_certificates(account_id):
                     str(uuid.uuid4()),
                     normalized_account_id,
                     template_id,
-                    str(holder_uuid) if holder_uuid else None,
+                    holder_key,
                     filename,
                     local_path,
                     psycopg2.Binary(pdf_bytes) if PSYCOPG2_AVAILABLE else None
