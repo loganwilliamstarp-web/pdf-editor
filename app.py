@@ -1255,7 +1255,7 @@ def generate_acord25_certificates(account_id):
         holder_key = str(holder_uuid)
         if holder_key in holder_id_keys:
             continue
-        holder_ids.append(holder_key)
+        holder_ids.append(holder_uuid)
         holder_id_keys.add(holder_key)
 
     if not holder_ids:
@@ -1328,7 +1328,7 @@ def generate_acord25_certificates(account_id):
         holder_key = str(raw_id)
         holders_by_id[holder_key] = row
 
-    missing_ids = [str(hid) for hid in holder_ids if str(hid) not in holders_by_id]
+    missing_ids = [hid for hid in holder_ids if str(hid) not in holders_by_id]
     if missing_ids:
         return jsonify({'success': False, 'error': f'Certificate holders not found: {missing_ids}'}), 404
 
@@ -1370,7 +1370,7 @@ def generate_acord25_certificates(account_id):
         except Exception as fill_error:
             return jsonify({'success': False, 'error': f'Failed to generate PDF for {holder.get("name")}: {fill_error}'}), 500
 
-        holder_name_component = sanitize_filename_component(holder.get('name'), fallback=f'holder_{holder_id}')
+        holder_name_component = sanitize_filename_component(holder.get('name'), fallback=f'holder_{holder_uuid}')
         filename = f"{holder_name_component}_{generation_date}.pdf"
         generated_files.append((filename, filled_pdf))
 
