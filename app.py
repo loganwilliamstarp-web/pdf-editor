@@ -1255,7 +1255,7 @@ def generate_acord25_certificates(account_id):
         holder_key = str(holder_uuid)
         if holder_key in holder_id_keys:
             continue
-        holder_ids.append(holder_uuid)
+        holder_ids.append(holder_key)
         holder_id_keys.add(holder_key)
 
     if not holder_ids:
