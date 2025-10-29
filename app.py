@@ -1246,16 +1246,17 @@ def generate_acord25_certificates(account_id):
         return jsonify({'success': False, 'error': 'holder_ids must be a list'}), 400
 
     holder_ids = []
-    seen_holder_ids = set()
+    holder_id_keys = set()
     for value in holder_ids_raw:
         try:
-            holder_id = int(value)
+            holder_uuid = uuid.UUID(str(value).strip())
         except (TypeError, ValueError):
-            return jsonify({'success': False, 'error': 'holder_ids must contain integers'}), 400
-        if holder_id in seen_holder_ids:
+            return jsonify({'success': False, 'error': 'holder_ids must contain valid UUIDs'}), 400
+        holder_key = str(holder_uuid)
+        if holder_key in holder_id_keys:
             continue
-        holder_ids.append(holder_id)
-        seen_holder_ids.add(holder_id)
+        holder_ids.append(holder_uuid)
+        holder_id_keys.add(holder_key)
 
     if not holder_ids:
         return jsonify({'success': False, 'error': 'No certificate holders selected'}), 400
@@ -1322,21 +1323,22 @@ def generate_acord25_certificates(account_id):
         if not isinstance(row, dict):
             row = dict(row)
         raw_id = row.get('id')
-        try:
-            holder_id = int(raw_id)
-        except (TypeError, ValueError):
+        if not raw_id:
             continue
-        holders_by_id[holder_id] = row
+        holder_key = str(raw_id)
+        holders_by_id[holder_key] = row
 
-    missing_ids = [hid for hid in holder_ids if hid not in holders_by_id]
+    missing_ids = [str(hid) for hid in holder_ids if str(hid) not in holders_by_id]
     if missing_ids:
         return jsonify({'success': False, 'error': f'Certificate holders not found: {missing_ids}'}), 404
 
     generation_date = datetime.utcnow().strftime('%Y-%m-%d')
     generated_files = []
 
-    for holder_id in holder_ids:
-        holder_row = holders_by_id[holder_id]
+    for holder_uuid in holder_ids:
+        holder_row = holders_by_id.get(str(holder_uuid))
+        if not holder_row:
+            continue
         holder = format_certificate_holder(holder_row)
         if not holder:
             continue
@@ -1401,7 +1403,7 @@ def generate_acord25_certificates(account_id):
         cur = conn.cursor()
 
         for idx, (filename, pdf_bytes) in enumerate(generated_files):
-            holder_id = holder_ids[idx] if idx < len(holder_ids) else None
+            holder_uuid = holder_ids[idx] if idx < len(holder_ids) else None
             local_path = None
             if LOCAL_TEMPLATE_DIR.exists():
                 account_dir = LOCAL_TEMPLATE_DIR.parent / 'generated' / sanitize_filename_component(normalized_account_id)
@@ -1421,7 +1423,7 @@ def generate_acord25_certificates(account_id):
                     str(uuid.uuid4()),
                     normalized_account_id,
                     template_id,
-                    holder_id,
+                    str(holder_uuid) if holder_uuid else None,
                     filename,
                     local_path,
                     psycopg2.Binary(pdf_bytes) if PSYCOPG2_AVAILABLE else None
@@ -3000,4 +3002,7 @@ def get_pdf_fields(template_id, account_id):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
+
+
 
