@@ -329,6 +329,29 @@ def normalize_account_id(account_id):
     return normalized
 
 
+def is_checkbox_field_name(field_name):
+    """Heuristic to detect checkbox/radio fields from their name."""
+    if not field_name:
+        return False
+    field_lower = field_name.lower()
+    if field_lower.endswith('text'):
+        return False
+    checkbox_indicators = ['indicator', 'checkbox', 'check', 'box']
+    return any(token in field_lower for token in checkbox_indicators)
+
+
+def normalize_checkbox_value(value):
+    """Normalize checkbox values so PDF rendering receives /Yes or /Off."""
+    if value is None:
+        return '/Off'
+    normalized = str(value).strip().lower()
+    if normalized in {'/yes', 'yes', 'true', '1', 'on', 'y', 'checked', 'x'}:
+        return '/Yes'
+    if normalized in {'/off', 'no', 'false', '0', 'off', 'n', ''}:
+        return '/Off'
+    return '/Yes'
+
+
 def serialize_timestamp(value):
     """Return ISO formatted timestamp when possible."""
     if isinstance(value, datetime):
@@ -635,9 +658,16 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
                 normalized_name = field_name.strip()
 
                 if normalized_name in field_values and field_values[normalized_name] is not None:
-                    value = str(field_values[normalized_name])
+                    value = field_values[normalized_name]
+                    field_type = (widget.field_type_string or '').lower()
                     try:
-                        widget.field_value = value
+                        if field_type in {'checkbox', 'button', 'btn'}:
+                            normalized = normalize_checkbox_value(value)
+                            widget.field_value = normalized
+                        elif field_type == 'radiobutton':
+                            widget.field_value = 'On' if str(value).strip().lower() in {'on', 'yes', '/yes', 'true', '1'} else 'Off'
+                        else:
+                            widget.field_value = str(value)
                         widget.update()
                     except Exception as fill_error:
                         print(f"Warning: failed to set field '{normalized_name}': {fill_error}")
@@ -2792,31 +2822,10 @@ def save_pdf_fields():
                 existing_field_values = {}
 
         # Merge logic: For checkboxes, preserve checked state
-        def is_checkbox_field(field_name):
-            """Check if a field is likely a checkbox based on name patterns"""
-            checkbox_indicators = ['indicator', 'checkbox', 'check', 'box']
-            force_text_fields = {
-                'WorkersCompensationEmployersLiability_AnyPersonsExcludedIndicator_A',
-            }
-
-            if field_name in force_text_fields:
-                return False
-
-            is_checkbox = any(indicator in field_name.lower() for indicator in checkbox_indicators)
-            if is_checkbox:
-                print(f"Field '{field_name}' identified as checkbox")
-            return is_checkbox
-        
         def is_checkbox_checked(value):
             """Determine if a checkbox value represents 'checked'"""
             checked_values = ['/1', '/Yes', '/On', 'Yes', '1', 'On', 'true', 'True', True, 'Y', 'y']
             return str(value).strip() in checked_values if value else False
-        
-        def normalize_checkbox_value(value):
-            """Convert various checkbox formats to standard '/Yes' or '/Off'"""
-            if is_checkbox_checked(value):
-                return '/Yes'
-            return '/Off'
 
         print(f"\n=== MERGE LOGIC DEBUG ===")
         print(f"Current fields: {len(final_field_values)}")
@@ -2832,7 +2841,7 @@ def save_pdf_fields():
         preserved_count = 0
         
         for field_name, current_value in final_field_values.items():
-            if is_checkbox_field(field_name):
+            if is_checkbox_field_name(field_name):
                 checkbox_count += 1
                 # Checkbox merge logic
                 existing_value = existing_field_values.get(field_name, '')
