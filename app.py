@@ -336,6 +336,30 @@ def serialize_timestamp(value):
     return value
 
 
+def ensure_certificate_holder_extended_columns():
+    """Ensure optional address fields exist on certificate_holders table."""
+    if not PSYCOPG2_AVAILABLE:
+        return
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS address_line2 VARCHAR(255);')
+        cur.execute('ALTER TABLE certificate_holders ADD COLUMN IF NOT EXISTS postal_code VARCHAR(20);')
+        conn.commit()
+    except Exception as error:
+        if conn:
+            conn.rollback()
+        print("Warning: unable to ensure extended certificate holder columns:", error)
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
 def sanitize_certificate_holder_payload(raw_data, existing=None, account_id=None):
     """Validate and normalize certificate holder payload."""
     existing = existing or {}
