@@ -532,7 +532,7 @@ def load_master_template_pdf(template_type="acord25"):
             if local_file:
                 pdf_content = local_file.read_bytes()
 
-        return template_id, template_name, pdf_content
+        return template_id, template_name, pdf_blob, storage_path, pdf_content
     except Exception as error:
         print(f"Error loading master template '{template_type}': {error}")
         return None, None, None
@@ -1196,9 +1196,14 @@ def generate_acord25_certificates(account_id):
     signature_data_url = agency_settings.get('signatureDataUrl') or agency_settings.get('signature_data_url')
     signature_bytes = decode_data_url(signature_data_url)
 
-    template_id, template_name, template_bytes = load_master_template_pdf('acord25')
+    template_id, template_name, template_blob, template_storage_path, template_bytes = load_master_template_pdf('acord25')
     if not template_bytes:
-        return jsonify({'success': False, 'error': 'ACORD 25 template is not available'}), 503
+        # Fallback to bundled template if database does not have binary data
+        local_template = resolve_local_template_file('acord25', None)
+        if local_template and local_template.exists():
+            template_bytes = local_template.read_bytes()
+        else:
+            return jsonify({'success': False, 'error': 'ACORD 25 template is not available'}), 503
 
     base_field_values = {}
 
@@ -1218,6 +1223,17 @@ def generate_acord25_certificates(account_id):
             (normalized_account_id, holder_ids)
         )
         rows = cur.fetchall()
+        if template_id and template_blob is None and not template_storage_path:
+            try:
+                cur.execute(
+                    'SELECT form_fields FROM master_templates WHERE id = %s LIMIT 1',
+                    (template_id,)
+                )
+                simple_template_row = cur.fetchone()
+                if simple_template_row and simple_template_row.get('form_fields'):
+                    base_field_values = coerce_form_fields_payload(simple_template_row['form_fields']).get('field_values') or {}
+            except Exception as template_meta_error:
+                print(f"Warning: unable to load template metadata: {template_meta_error}")
     except Exception as db_error:
         if conn:
             conn.rollback()
