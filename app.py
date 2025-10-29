@@ -351,6 +351,13 @@ def normalize_checkbox_value(value):
         return '/Off'
     return '/Yes'
 
+def is_checkbox_checked(value):
+    """Determine if a checkbox value represents 'checked'."""
+    if value is None:
+        return False
+    normalized = str(value).strip().lower()
+    return normalized in {'/1', '/yes', 'yes', 'true', '1', 'on', 'y', 'checked', 'x'}
+
 
 def serialize_timestamp(value):
     """Return ISO formatted timestamp when possible."""
