@@ -1263,7 +1263,7 @@ def generate_acord25_certificates(account_id):
 
     agency_settings = payload.get('agency_settings') or {}
     signature_data_url = agency_settings.get('signatureDataUrl') or agency_settings.get('signature_data_url')
-    signature_bytes = decode_data_url(signature_data_url)
+    signature_bytes = decode_data_url(signature_data_url) if signature_data_url else None
 
     template_id, template_name, template_blob, template_storage_path, template_bytes = load_master_template_pdf('acord25')
     if not template_bytes:
@@ -1292,6 +1292,38 @@ def generate_acord25_certificates(account_id):
         params = [normalized_account_id] + holder_ids
         cur.execute(query, params)
         rows = cur.fetchall()
+        account_template_values = {}
+        if template_id:
+            try:
+                cur.execute(
+                    '''
+                    SELECT field_values
+                    FROM template_data
+                    WHERE account_id = %s AND template_id = %s
+                    LIMIT 1
+                    ''',
+                    (normalized_account_id, template_id)
+                )
+                template_data_row = cur.fetchone()
+                if template_data_row:
+                    field_values_raw = template_data_row.get('field_values')
+                    if isinstance(field_values_raw, str):
+                        try:
+                            account_template_values = json.loads(field_values_raw) or {}
+                        except json.JSONDecodeError:
+                            account_template_values = {}
+                    elif isinstance(field_values_raw, dict):
+                        account_template_values = field_values_raw or {}
+            except Exception as template_data_error:
+                print(f"Warning: unable to load template data for account {normalized_account_id}: {template_data_error}")
+                account_template_values = {}
+
+        if isinstance(account_template_values, dict):
+            for key, value in account_template_values.items():
+                if value is None:
+                    continue
+                base_field_values[str(key)] = value
+
         if template_id and template_blob is None and not template_storage_path:
             try:
                 cur.execute(
@@ -1300,7 +1332,11 @@ def generate_acord25_certificates(account_id):
                 )
                 simple_template_row = cur.fetchone()
                 if simple_template_row and simple_template_row.get('form_fields'):
-                    base_field_values = coerce_form_fields_payload(simple_template_row['form_fields']).get('field_values') or {}
+                    metadata_values = coerce_form_fields_payload(simple_template_row['form_fields']).get('field_values') or {}
+                    for key, value in (metadata_values or {}).items():
+                        if value is None:
+                            continue
+                        base_field_values.setdefault(str(key), value)
             except Exception as template_meta_error:
                 print(f"Warning: unable to load template metadata: {template_meta_error}")
     except Exception as db_error:
@@ -1360,7 +1396,11 @@ def generate_acord25_certificates(account_id):
                 final_field_values[str(key)] = value
 
         for key, value in holder_field_values.items():
-            final_field_values[key] = value if value is not None else ''
+            base_val = final_field_values.get(key)
+            if base_val is None or str(base_val).strip() == '':
+                final_field_values[key] = value if value not in (None, '') else ''
+            elif value not in (None, ''):
+                final_field_values[key] = value
 
         if signature_bytes is not None:
             final_field_values['Producer_AuthorizedRepresentative_Signature_A'] = ''
