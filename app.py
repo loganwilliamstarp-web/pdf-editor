@@ -1307,17 +1307,6 @@ def generate_acord25_certificates(account_id):
     if not generated_files:
         return jsonify({'success': False, 'error': 'No certificates generated'}), 500
 
-    if len(generated_files) == 1:
-        filename, pdf_bytes = generated_files[0]
-        pdf_stream = io.BytesIO(pdf_bytes)
-        pdf_stream.seek(0)
-        return send_file(
-            pdf_stream,
-            mimetype='application/pdf',
-            as_attachment=True,
-            download_name=filename
-        )
-
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
         for filename, pdf_bytes in generated_files:
@@ -1325,6 +1314,57 @@ def generate_acord25_certificates(account_id):
 
     zip_buffer.seek(0)
     zip_filename = f"ACORD25_{sanitize_filename_component(normalized_account_id)}_{generation_date}.zip"
+
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+
+        for idx, (filename, pdf_bytes) in enumerate(generated_files):
+            holder_id = holder_ids[idx] if idx < len(holder_ids) else None
+            local_path = None
+            if LOCAL_TEMPLATE_DIR.exists():
+                account_dir = LOCAL_TEMPLATE_DIR.parent / 'generated' / sanitize_filename_component(normalized_account_id)
+                account_dir.mkdir(parents=True, exist_ok=True)
+                file_path = account_dir / filename
+                file_path.write_bytes(pdf_bytes)
+                local_path = str(file_path.relative_to(LOCAL_TEMPLATE_DIR.parent))
+
+            cur.execute(
+                '''
+                INSERT INTO generated_certificates (
+                    id, account_id, template_id, certificate_holder_id, filename, storage_path, pdf_blob, generated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                RETURNING id
+                ''',
+                (
+                    str(uuid.uuid4()),
+                    normalized_account_id,
+                    template_id,
+                    holder_id,
+                    filename,
+                    local_path,
+                    psycopg2.Binary(pdf_bytes) if PSYCOPG2_AVAILABLE else None
+                )
+            )
+        conn.commit()
+    except Exception as store_error:
+        print(f"Warning: unable to persist generated certificates: {store_error}")
+        if conn:
+            conn.rollback()
+    finally:
+        if 'cur' in locals() and cur:
+            cur.close()
+        if 'conn' in locals() and conn:
+            conn.close()
+
+    if len(generated_files) == 1:
+        return send_file(
+            zip_buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=generated_files[0][0]
+        )
+
     return send_file(
         zip_buffer,
         mimetype='application/zip',
@@ -2886,3 +2926,4 @@ def get_pdf_fields(template_id, account_id):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
