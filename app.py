@@ -340,7 +340,6 @@ def ensure_certificate_holder_extended_columns():
     """Ensure optional address fields exist on certificate_holders table."""
     if not PSYCOPG2_AVAILABLE:
         return
-
     conn = None
     cur = None
     try:
@@ -353,6 +352,54 @@ def ensure_certificate_holder_extended_columns():
         if conn:
             conn.rollback()
         print("Warning: unable to ensure extended certificate holder columns:", error)
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def ensure_generated_certificates_table():
+    """Ensure the generated_certificates table exists with required columns."""
+    if not PSYCOPG2_AVAILABLE:
+        return
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS generated_certificates (
+                id UUID PRIMARY KEY,
+                account_id VARCHAR(18) NOT NULL,
+                template_id UUID,
+                certificate_holder_id BIGINT,
+                filename TEXT NOT NULL,
+                storage_path TEXT,
+                pdf_blob BYTEA,
+                generated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+            )
+            '''
+        )
+        cur.execute(
+            '''
+            CREATE INDEX IF NOT EXISTS idx_generated_certificates_account
+            ON generated_certificates(account_id)
+            '''
+        )
+        cur.execute(
+            '''
+            CREATE INDEX IF NOT EXISTS idx_generated_certificates_holder
+            ON generated_certificates(certificate_holder_id)
+            '''
+        )
+        conn.commit()
+    except Exception as error:
+        if conn:
+            conn.rollback()
+        print("Warning: unable to ensure generated_certificates table:", error)
     finally:
         if cur:
             cur.close()
@@ -1307,14 +1354,27 @@ def generate_acord25_certificates(account_id):
     if not generated_files:
         return jsonify({'success': False, 'error': 'No certificates generated'}), 500
 
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
-        for filename, pdf_bytes in generated_files:
-            zip_file.writestr(filename, pdf_bytes)
+    response_stream = None
+    response_mimetype = 'application/zip'
+    response_filename = f"ACORD25_{sanitize_filename_component(normalized_account_id)}_{generation_date}.zip"
 
-    zip_buffer.seek(0)
-    zip_filename = f"ACORD25_{sanitize_filename_component(normalized_account_id)}_{generation_date}.zip"
+    if len(generated_files) == 1:
+        single_name, single_bytes = generated_files[0]
+        response_stream = io.BytesIO(single_bytes)
+        response_stream.seek(0)
+        response_mimetype = 'application/pdf'
+        response_filename = single_name
+    else:
+        response_stream = io.BytesIO()
+        with zipfile.ZipFile(response_stream, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
+            for filename, pdf_bytes in generated_files:
+                zip_file.writestr(filename, pdf_bytes)
+        response_stream.seek(0)
 
+    ensure_generated_certificates_table()
+
+    conn = None
+    cur = None
     try:
         conn = get_db()
         cur = conn.cursor()
@@ -1352,24 +1412,17 @@ def generate_acord25_certificates(account_id):
         if conn:
             conn.rollback()
     finally:
-        if 'cur' in locals() and cur:
+        if cur:
             cur.close()
-        if 'conn' in locals() and conn:
+        if conn:
             conn.close()
 
-    if len(generated_files) == 1:
-        return send_file(
-            zip_buffer,
-            mimetype='application/pdf',
-            as_attachment=True,
-            download_name=generated_files[0][0]
-        )
-
+    response_stream.seek(0)
     return send_file(
-        zip_buffer,
-        mimetype='application/zip',
+        response_stream,
+        mimetype=response_mimetype,
         as_attachment=True,
-        download_name=zip_filename
+        download_name=response_filename
     )
 
 
