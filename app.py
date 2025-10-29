@@ -1,4 +1,4 @@
-﻿from flask import Flask, jsonify, request, send_from_directory
+﻿from flask import Flask, jsonify, request, send_from_directory, send_file
 from flask_cors import CORS
 import os
 import io
@@ -8,6 +8,7 @@ from pathlib import Path
 from datetime import datetime
 import base64
 import re
+import zipfile
 
 # Optional imports with fallbacks
 
@@ -388,8 +389,14 @@ def sanitize_certificate_holder_payload(raw_data, existing=None, account_id=None
     address_line1_source = raw_data.get('address_line1', existing.get('address_line1') if existing else None)
     payload['address_line1'] = normalize_string(address_line1_source, 255)
 
+    address_line2_source = raw_data.get('address_line2', existing.get('address_line2') if existing else None)
+    payload['address_line2'] = normalize_string(address_line2_source, 255)
+
     city_source = raw_data.get('city', existing.get('city') if existing else None)
     payload['city'] = normalize_string(city_source, 120)
+
+    postal_code_source = raw_data.get('postal_code', existing.get('postal_code') if existing else None)
+    payload['postal_code'] = normalize_string(postal_code_source, 20)
 
     state_source = raw_data.get('state')
     if state_source is None and existing:
@@ -431,8 +438,10 @@ def format_certificate_holder(row):
         'name': row.get('name'),
         'master_remarks': row.get('master_remarks'),
         'address_line1': row.get('address_line1'),
+        'address_line2': row.get('address_line2'),
         'city': row.get('city'),
         'state': row.get('state'),
+        'postal_code': row.get('postal_code'),
         'state_name': US_STATE_CHOICES.get((row.get('state') or '').upper()),
         'email': row.get('email'),
         'phone': row.get('phone'),
@@ -440,6 +449,139 @@ def format_certificate_holder(row):
         'updated_at': serialize_timestamp(row.get('updated_at'))
     }
     return holder
+
+def decode_data_url(data_url):
+    """Decode a data URL into raw bytes."""
+    if not data_url or not isinstance(data_url, str):
+        return None
+
+    if not data_url.startswith('data:') or ',' not in data_url:
+        return None
+
+    try:
+        _, encoded = data_url.split(',', 1)
+    except ValueError:
+        return None
+
+    try:
+        return base64.b64decode(encoded)
+    except (ValueError, TypeError):
+        return None
+
+
+def load_master_template_pdf(template_type="acord25"):
+    """Load master template PDF bytes for the given template type."""
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            '''
+            SELECT id, template_name, template_type, storage_path, pdf_blob
+            FROM master_templates
+            WHERE LOWER(template_type) = %s
+            ORDER BY updated_at DESC NULLS LAST, created_at DESC
+            LIMIT 1
+            ''',
+            (template_type.lower(),)
+        )
+        template = cur.fetchone()
+        if not template:
+            return None, None, None
+
+        template_id = template.get('id')
+        template_name = template.get('template_name') or template_type.upper()
+        template_type_value = (template.get('template_type') or template_type).lower()
+        storage_path = template.get('storage_path') or ''
+        pdf_blob = template.get('pdf_blob')
+
+        pdf_content = None
+        if pdf_blob:
+            try:
+                pdf_content = bytes(pdf_blob)
+            except (TypeError, ValueError):
+                pdf_content = pdf_blob
+
+        if not pdf_content:
+            local_file = resolve_local_template_file(template_type_value, storage_path)
+            if local_file:
+                pdf_content = local_file.read_bytes()
+
+        return template_id, template_name, pdf_content
+    except Exception as error:
+        print(f"Error loading master template '{template_type}': {error}")
+        return None, None, None
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
+    """Fill ACORD 25 PDF fields using PyMuPDF."""
+    if not PYMUPDF_AVAILABLE:
+        raise RuntimeError("PyMuPDF (fitz) is required to generate ACORD 25 certificates")
+
+    if not pdf_bytes:
+        raise ValueError("Template PDF content is empty")
+
+    pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    signature_applied = False
+
+    try:
+        for page_index in range(len(pdf_doc)):
+            page = pdf_doc[page_index]
+            widgets = list(page.widgets())
+
+            for widget in widgets:
+                field_name = widget.field_name
+                if not field_name:
+                    continue
+
+                normalized_name = field_name.strip()
+
+                if normalized_name in field_values and field_values[normalized_name] is not None:
+                    value = str(field_values[normalized_name])
+                    try:
+                        widget.field_value = value
+                        widget.update()
+                    except Exception as fill_error:
+                        print(f"Warning: failed to set field '{normalized_name}': {fill_error}")
+
+                if (
+                    signature_bytes
+                    and not signature_applied
+                    and normalized_name == 'Producer_AuthorizedRepresentative_Signature_A'
+                ):
+                    try:
+                        rect = widget.rect
+                        if rect and rect.get_area() > 0:
+                            try:
+                                widget.field_value = ''
+                                widget.update()
+                            except Exception:
+                                pass
+
+                            image_rect = fitz.Rect(rect.x0, rect.y0, rect.x1, rect.y1)
+                            page.insert_image(image_rect, stream=signature_bytes, keep_proportion=True)
+                            signature_applied = True
+                    except Exception as signature_error:
+                        print(f"Warning: unable to insert signature image: {signature_error}")
+
+        filled_bytes = pdf_doc.write()
+        return filled_bytes
+    finally:
+        pdf_doc.close()
+
+
+def sanitize_filename_component(value, fallback="document"):
+    """Create a filesystem-safe component for filenames."""
+    if not value:
+        return fallback
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value)).strip("._")
+    return cleaned or fallback
 
 
 def database_not_configured_response():
@@ -734,13 +876,34 @@ def list_certificate_holders(account_id):
         conn = get_db()
         cur = conn.cursor()
         cur.execute('''
-            SELECT id, account_id, name, master_remarks, address_line1, city, state, email, phone,
+            SELECT id, account_id, name, master_remarks, address_line1, address_line2, city, state, postal_code, email, phone,
                    created_at, updated_at
             FROM certificate_holders
             WHERE account_id = %s
             ORDER BY name ASC, created_at DESC
         ''', (normalized_account_id,))
         rows = cur.fetchall()
+        if template_id:
+            try:
+                cur.execute(
+                    'SELECT field_values FROM template_data WHERE account_id = %s AND template_id = %s LIMIT 1',
+                    (normalized_account_id, template_id)
+                )
+                template_data_row = cur.fetchone()
+                if template_data_row:
+                    field_values_raw = template_data_row.get('field_values') or {}
+                    if isinstance(field_values_raw, str):
+                        try:
+                            base_field_values = json.loads(field_values_raw)
+                        except json.JSONDecodeError:
+                            base_field_values = {}
+                    elif isinstance(field_values_raw, dict):
+                        base_field_values = field_values_raw
+                    else:
+                        base_field_values = {}
+            except Exception as template_data_error:
+                print(f"Warning: unable to load template field values: {template_data_error}")
+                base_field_values = {}
         holders = [format_certificate_holder(row) for row in rows]
 
         return jsonify({
@@ -785,17 +948,19 @@ def create_certificate_holder(account_id):
         cur = conn.cursor()
         cur.execute('''
             INSERT INTO certificate_holders (
-                account_id, name, master_remarks, address_line1, city, state, email, phone
+                account_id, name, master_remarks, address_line1, address_line2, city, state, postal_code, email, phone
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
         ''', (
             normalized_account_id,
             sanitized.get('name'),
             sanitized.get('master_remarks'),
             sanitized.get('address_line1'),
+            sanitized.get('address_line2'),
             sanitized.get('city'),
             sanitized.get('state'),
+            sanitized.get('postal_code'),
             sanitized.get('email'),
             sanitized.get('phone')
         ))
@@ -825,8 +990,8 @@ def fetch_certificate_holder(account_id, holder_id):
     cur = conn.cursor()
     try:
         cur.execute('''
-            SELECT id, account_id, name, master_remarks, address_line1,
-                   city, state, email, phone, created_at, updated_at
+            SELECT id, account_id, name, master_remarks, address_line1, address_line2,
+                   city, state, postal_code, email, phone, created_at, updated_at
             FROM certificate_holders
             WHERE account_id = %s AND id = %s
         ''', (normalized_account_id, holder_id))
@@ -906,8 +1071,10 @@ def update_certificate_holder(account_id, holder_id):
             SET name = %s,
                 master_remarks = %s,
                 address_line1 = %s,
+                address_line2 = %s,
                 city = %s,
                 state = %s,
+                postal_code = %s,
                 email = %s,
                 phone = %s,
                 updated_at = NOW()
@@ -917,8 +1084,10 @@ def update_certificate_holder(account_id, holder_id):
             sanitized.get('name'),
             sanitized.get('master_remarks'),
             sanitized.get('address_line1'),
+            sanitized.get('address_line2'),
             sanitized.get('city'),
             sanitized.get('state'),
+            sanitized.get('postal_code'),
             sanitized.get('email'),
             sanitized.get('phone'),
             normalized_account_id,
@@ -981,6 +1150,171 @@ def delete_certificate_holder(account_id, holder_id):
             cur.close()
         if conn:
             conn.close()
+
+@app.route("/api/account/<account_id>/certificate-holders/generated/acord25", methods=['POST'])
+def generate_acord25_certificates(account_id):
+    """Generate ACORD 25 certificates for selected holders."""
+    if not PSYCOPG2_AVAILABLE:
+        return database_not_configured_response()
+
+    if not PYMUPDF_AVAILABLE:
+        return jsonify({'success': False, 'error': 'PDF generation requires PyMuPDF'}), 503
+
+    try:
+        normalized_account_id = normalize_account_id(account_id)
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+
+    try:
+        payload = request.get_json(force=True) or {}
+    except Exception:
+        payload = {}
+
+    holder_ids_raw = payload.get('holder_ids') or []
+    if not isinstance(holder_ids_raw, (list, tuple)):
+        return jsonify({'success': False, 'error': 'holder_ids must be a list'}), 400
+
+    holder_ids = []
+    seen_holder_ids = set()
+    for value in holder_ids_raw:
+        try:
+            holder_id = int(value)
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'holder_ids must contain integers'}), 400
+        if holder_id in seen_holder_ids:
+            continue
+        holder_ids.append(holder_id)
+        seen_holder_ids.add(holder_id)
+
+    if not holder_ids:
+        return jsonify({'success': False, 'error': 'No certificate holders selected'}), 400
+
+    agency_settings = payload.get('agency_settings') or {}
+    signature_data_url = agency_settings.get('signatureDataUrl') or agency_settings.get('signature_data_url')
+    signature_bytes = decode_data_url(signature_data_url)
+
+    template_id, template_name, template_bytes = load_master_template_pdf('acord25')
+    if not template_bytes:
+        return jsonify({'success': False, 'error': 'ACORD 25 template is not available'}), 503
+
+    base_field_values = {}
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            '''
+            SELECT id, account_id, name, master_remarks, address_line1, address_line2,
+                   city, state, postal_code, email, phone
+            FROM certificate_holders
+            WHERE account_id = %s AND id = ANY(%s)
+            ORDER BY name ASC, created_at DESC
+            ''',
+            (normalized_account_id, holder_ids)
+        )
+        rows = cur.fetchall()
+    except Exception as db_error:
+        if conn:
+            conn.rollback()
+        return jsonify({'success': False, 'error': str(db_error)}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+    if not rows:
+        return jsonify({'success': False, 'error': 'Certificate holders not found'}), 404
+
+    holders_by_id = {}
+    for row in rows:
+        if row is None:
+            continue
+        if not isinstance(row, dict):
+            row = dict(row)
+        raw_id = row.get('id')
+        try:
+            holder_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        holders_by_id[holder_id] = row
+
+    missing_ids = [hid for hid in holder_ids if hid not in holders_by_id]
+    if missing_ids:
+        return jsonify({'success': False, 'error': f'Certificate holders not found: {missing_ids}'}), 404
+
+    generation_date = datetime.utcnow().strftime('%Y-%m-%d')
+    generated_files = []
+
+    for holder_id in holder_ids:
+        holder_row = holders_by_id[holder_id]
+        holder = format_certificate_holder(holder_row)
+        if not holder:
+            continue
+
+        holder_field_values = {
+            'CertificateHolder_FullName_A': holder.get('name') or '',
+            'CertificateHolder_MailingAddress_LineOne_A': holder.get('address_line1') or '',
+            'CertificateHolder_MailingAddress_LineTwo_A': holder.get('address_line2') or '',
+            'CertificateHolder_MailingAddress_CityName_A': holder.get('city') or '',
+            'CertificateHolder_MailingAddress_StateOrProvinceCode_A': holder.get('state') or '',
+            'CertificateHolder_MailingAddress_PostalCode_A': holder.get('postal_code') or '',
+        }
+
+        final_field_values = {}
+        if isinstance(base_field_values, dict):
+            for key, value in base_field_values.items():
+                if value is None:
+                    continue
+                final_field_values[str(key)] = value
+
+        for key, value in holder_field_values.items():
+            final_field_values[key] = value if value is not None else ''
+
+        if signature_bytes is not None:
+            final_field_values['Producer_AuthorizedRepresentative_Signature_A'] = ''
+
+        try:
+            filled_pdf = fill_acord25_fields(template_bytes, final_field_values, signature_bytes=signature_bytes)
+        except Exception as fill_error:
+            return jsonify({'success': False, 'error': f'Failed to generate PDF for {holder.get("name")}: {fill_error}'}), 500
+
+        holder_name_component = sanitize_filename_component(holder.get('name'), fallback=f'holder_{holder_id}')
+        filename = f"{holder_name_component}_{generation_date}.pdf"
+        generated_files.append((filename, filled_pdf))
+
+    if not generated_files:
+        return jsonify({'success': False, 'error': 'No certificates generated'}), 500
+
+    if len(generated_files) == 1:
+        filename, pdf_bytes = generated_files[0]
+        pdf_stream = io.BytesIO(pdf_bytes)
+        pdf_stream.seek(0)
+        return send_file(
+            pdf_stream,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
+        for filename, pdf_bytes in generated_files:
+            zip_file.writestr(filename, pdf_bytes)
+
+    zip_buffer.seek(0)
+    zip_filename = f"ACORD25_{sanitize_filename_component(normalized_account_id)}_{generation_date}.zip"
+    return send_file(
+        zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=zip_filename
+    )
+
+
+
 
 @app.route("/api/provision-pdf", methods=['POST'])
 def provision_pdf():

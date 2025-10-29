@@ -60,6 +60,10 @@
                             class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
                         Refresh
                     </button>
+                    <button id="generateAcord25Btn" disabled
+                            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 opacity-50 cursor-not-allowed">
+                        Generate ACORD 25
+                    </button>
                     <button id="openHolderModalBtn"
                             class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
                         + Add Certificate Holder
@@ -68,6 +72,7 @@
             </div>
 
             <p id="holderSelectionSummary" class="text-sm text-gray-500">No certificate holders selected.</p>
+            <div id="holderActionMessage" class="hidden text-sm"></div>
 
             <div id="holderList" class="space-y-4">
                 <p class="text-gray-600">Loading certificate holders...</p>
@@ -118,10 +123,17 @@
                         </div>
 
                         <div class="md:col-span-2">
-                            <label for="holderAddress1" class="block text-sm font-medium text-gray-700">Address Line 1</label>
+                            <label for="holderAddress1" class="block text-sm font-medium text-gray-700">Address</label>
                             <input id="holderAddress1" name="address_line1" type="text" autocomplete="off"
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                    placeholder="123 Main Street">
+                        </div>
+
+                        <div class="md:col-span-2">
+                            <label for="holderAddress2" class="block text-sm font-medium text-gray-700">Address Line 2</label>
+                            <input id="holderAddress2" name="address_line2" type="text" autocomplete="off"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="Suite / Unit (optional)">
                         </div>
 
                         <div>
@@ -135,6 +147,13 @@
                                     class="mt-1 block w-full rounded-md border-gray-300 bg-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                 <option value="">Select state</option>
                             </select>
+                        </div>
+
+                        <div>
+                            <label for="holderPostalCode" class="block text-sm font-medium text-gray-700">Postal Code</label>
+                            <input id="holderPostalCode" name="postal_code" type="text" autocomplete="off"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="12345">
                         </div>
 
                         <div>
@@ -849,6 +868,11 @@
                 });
             }
 
+            const generateBtn = document.getElementById('generateAcord25Btn');
+            if (generateBtn) {
+                generateBtn.addEventListener('click', generateAcord25Certificates);
+            }
+
             document.addEventListener('keydown', handleHolderModalKeydown);
 
             renderHolderStateOptions();
@@ -857,6 +881,7 @@
             window.editCertificateHolder = editCertificateHolder;
             updateHolderSelectionSummary();
             closeHolderModal(true); // ensure hidden on load
+            updateGenerateAcord25ButtonState();
         }
 
         // Show tab content
@@ -949,17 +974,57 @@
 
             if (total === 0) {
                 summaryEl.textContent = 'No certificate holders available.';
+                setHolderActionMessage('info', 'Add a certificate holder to generate certificates.');
+                updateGenerateAcord25ButtonState();
                 return;
             }
 
             const count = selectedCertificateHolderIds.size;
             if (count === 0) {
                 summaryEl.textContent = 'No certificate holders selected.';
+                setHolderActionMessage('info', 'Select at least one certificate holder to generate ACORD 25 certificates.');
             } else if (count === 1) {
                 summaryEl.textContent = '1 certificate holder selected.';
+                setHolderActionMessage('success', 'Ready to generate 1 certificate.');
             } else {
                 summaryEl.textContent = `${count} certificate holders selected.`;
+                setHolderActionMessage('success', `Ready to generate ${count} certificates.`);
             }
+        }
+        updateGenerateAcord25ButtonState();
+
+        function setHolderActionMessage(type = null, message = '') {
+            const messageEl = document.getElementById('holderActionMessage');
+            if (!messageEl) {
+                return;
+            }
+
+            if (!message) {
+                messageEl.className = 'hidden text-sm';
+                messageEl.textContent = '';
+                return;
+            }
+
+            const classMap = {
+                success: 'text-sm text-green-600',
+                error: 'text-sm text-red-600',
+                info: 'text-sm text-gray-600'
+            };
+            messageEl.className = classMap[type] || classMap.info;
+            messageEl.textContent = message;
+        }
+
+        function updateGenerateAcord25ButtonState() {
+            const button = document.getElementById('generateAcord25Btn');
+            if (!button) {
+                return;
+            }
+
+            const disabled = certificateHolderCache.length === 0 || selectedCertificateHolderIds.size === 0;
+            button.disabled = disabled;
+            button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+            button.classList.toggle('opacity-50', disabled);
+            button.classList.toggle('cursor-not-allowed', disabled);
         }
 
         function updateHolderSelectAllState(selectAllEl, checkboxEls) {
@@ -1006,6 +1071,7 @@
                     }
                     updateHolderSelectAllState(selectAllEl, checkboxEls);
                     updateHolderSelectionSummary(holders.length);
+                    updateGenerateAcord25ButtonState();
                 });
             });
 
@@ -1030,10 +1096,12 @@
                     });
                     updateHolderSelectAllState(selectAllEl, checkboxEls);
                     updateHolderSelectionSummary(holders.length);
+                    updateGenerateAcord25ButtonState();
                 });
             }
 
             updateHolderSelectionSummary(holders.length);
+            updateGenerateAcord25ButtonState();
         }
 
         function populateHolderForm(holder) {
@@ -1053,7 +1121,9 @@
             setValue('holderName', holder.name);
             setValue('holderMasterRemarks', holder.master_remarks);
             setValue('holderAddress1', holder.address_line1);
+            setValue('holderAddress2', holder.address_line2);
             setValue('holderCity', holder.city);
+            setValue('holderPostalCode', holder.postal_code);
             setValue('holderEmail', holder.email);
             setValue('holderPhone', holder.phone);
 
@@ -1193,6 +1263,8 @@
 
             const accountId = getAccountId();
             holderList.innerHTML = '<p class="text-gray-600">Loading certificate holders...</p>';
+            setHolderActionMessage('info', 'Loading certificate holders...');
+            updateGenerateAcord25ButtonState();
 
             try {
                 const response = await fetch(`/api/account/${accountId}/certificate-holders`);
@@ -1217,6 +1289,8 @@
                 holderList.innerHTML = `<p class="text-red-600">Error loading certificate holders: ${escapeHtml(error.message)}</p>`;
                 certificateHoldersLoaded = false;
                 updateHolderSelectionSummary();
+                setHolderActionMessage('error', `Error loading certificate holders: ${escapeHtml(error.message)}`);
+                updateGenerateAcord25ButtonState();
             }
         }
 
@@ -1234,6 +1308,8 @@
                 holderList.innerHTML = '';
                 selectedCertificateHolderIds.clear();
                 updateHolderSelectionSummary(0);
+                setHolderActionMessage('info', 'Add a certificate holder to generate certificates.');
+                updateGenerateAcord25ButtonState();
                 return;
             }
 
@@ -1256,6 +1332,15 @@
                 const stateLabel = holder.state
                     ? `${escapeHtml(holder.state)}${holder.state_name ? ` (${escapeHtml(holder.state_name)})` : ''}`
                     : 'N/A';
+                const addressSegments = [];
+                if (holder.address_line1) {
+                    addressSegments.push(escapeHtml(holder.address_line1));
+                }
+                if (holder.address_line2) {
+                    addressSegments.push(escapeHtml(holder.address_line2));
+                }
+                const addressMarkup = addressSegments.length > 0 ? addressSegments.join('<br>') : 'N/A';
+                const postalCodeMarkup = holder.postal_code ? escapeHtml(holder.postal_code) : 'N/A';
                 const isSelectable = Boolean(holderId);
                 const checkedAttr = isSelectable && selectedCertificateHolderIds.has(holderId) ? 'checked' : '';
                 const disabledAttr = isSelectable ? '' : 'disabled';
@@ -1272,9 +1357,10 @@
                             <input type="checkbox" class="holder-select h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" ${dataAttr} ${checkedAttr} ${disabledAttr}>
                         </td>
                         <td class="px-4 py-3 text-sm font-medium text-gray-900">${formatValue(holder.name, 'Unnamed Holder')}</td>
-                        <td class="px-4 py-3 text-sm text-gray-700">${formatValue(holder.address_line1)}</td>
+                        <td class="px-4 py-3 text-sm text-gray-700">${addressMarkup}</td>
                         <td class="px-4 py-3 text-sm text-gray-700">${formatValue(holder.city)}</td>
                         <td class="px-4 py-3 text-sm text-gray-700">${stateLabel}</td>
+                        <td class="px-4 py-3 text-sm text-gray-700">${postalCodeMarkup}</td>
                         <td class="px-4 py-3 text-sm text-gray-700">${emailMarkup}</td>
                         <td class="px-4 py-3 text-sm text-gray-700">${phoneMarkup}</td>
                         <td class="px-4 py-3 text-sm text-right">${editButton}</td>
@@ -1294,6 +1380,7 @@
                                 <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Address Line 1</th>
                                 <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">City</th>
                                 <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">State</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Postal Code</th>
                                 <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
                                 <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
                                 <th scope="col" class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
@@ -1306,6 +1393,7 @@
                 </div>
             `;
 
+            setHolderActionMessage(null, '');
             setupHolderSelectionHandlers(holders);
         }
 
@@ -1325,8 +1413,10 @@
                 name: document.getElementById('holderName')?.value?.trim() || '',
                 master_remarks: document.getElementById('holderMasterRemarks')?.value?.trim() || '',
                 address_line1: document.getElementById('holderAddress1')?.value?.trim() || '',
+                address_line2: document.getElementById('holderAddress2')?.value?.trim() || '',
                 city: document.getElementById('holderCity')?.value?.trim() || '',
                 state: document.getElementById('holderState')?.value?.trim() || '',
+                postal_code: document.getElementById('holderPostalCode')?.value?.trim() || '',
                 email: document.getElementById('holderEmail')?.value?.trim() || '',
                 phone: document.getElementById('holderPhone')?.value?.trim() || ''
             };
@@ -1381,6 +1471,103 @@
                     submitBtn.disabled = false;
                     submitBtn.textContent = originalBtnText || 'Save Certificate Holder';
                 }
+            }
+        }
+
+        async function generateAcord25Certificates() {
+            const button = document.getElementById('generateAcord25Btn');
+            if (!button) {
+                return;
+            }
+
+            const selectedIds = Array.from(selectedCertificateHolderIds);
+            if (selectedIds.length === 0) {
+                setHolderActionMessage('info', 'Select at least one certificate holder to generate ACORD 25 certificates.');
+                updateGenerateAcord25ButtonState();
+                return;
+            }
+
+            const originalText = button.textContent;
+            button.disabled = true;
+            button.classList.add('cursor-wait');
+            button.textContent = selectedIds.length > 1 ? 'Generating ZIP...' : 'Generating PDF...';
+
+            setHolderActionMessage(
+                'info',
+                selectedIds.length > 1
+                    ? 'Generating certificates and preparing ZIP download...'
+                    : 'Generating certificate download...'
+            );
+
+            try {
+                loadAgencySettingsFromStorage();
+                const context = getAccountContext();
+                const accountId = context.accountId;
+                const ownerId = context.ownerId;
+
+                const payload = {
+                    holder_ids: selectedIds,
+                    owner_id: ownerId || null,
+                    agency_settings: agencySettings || null
+                };
+
+                const response = await fetch(`/api/account/${accountId}/certificate-holders/generated/acord25`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    let errorMessage = 'Failed to generate certificates.';
+                    try {
+                        const result = await response.json();
+                        errorMessage = result.error || errorMessage;
+                    } catch (jsonError) {
+                        errorMessage = `${errorMessage} (${response.status})`;
+                    }
+                    setHolderActionMessage('error', errorMessage);
+                    return;
+                }
+
+                const blob = await response.blob();
+                let filename = 'acord25.pdf';
+                const disposition = response.headers.get('Content-Disposition') || '';
+                const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/);
+                if (match) {
+                    try {
+                        filename = decodeURIComponent(match[1] || match[2] || filename);
+                    } catch (decodeError) {
+                        filename = match[1] || match[2] || filename;
+                    }
+                } else {
+                    const today = new Date().toISOString().slice(0, 10);
+                    filename = selectedIds.length > 1
+                        ? `ACORD25_${today}.zip`
+                        : `ACORD25_${today}.pdf`;
+                }
+
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+
+                setHolderActionMessage(
+                    'success',
+                    selectedIds.length > 1
+                        ? 'Certificate ZIP downloaded successfully.'
+                        : 'Certificate downloaded successfully.'
+                );
+            } catch (error) {
+                setHolderActionMessage('error', `Failed to generate certificates: ${escapeHtml(error.message)}`);
+            } finally {
+                button.classList.remove('cursor-wait');
+                button.disabled = false;
+                button.textContent = originalText || 'Generate ACORD 25';
+                updateGenerateAcord25ButtonState();
             }
         }
 
