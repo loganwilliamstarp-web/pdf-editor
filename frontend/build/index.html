@@ -1481,12 +1481,17 @@
             }
 
             const rawSelectedIds = Array.from(selectedCertificateHolderIds);
-            const selectedIds = rawSelectedIds
-                .map(id => {
-                    const parsed = Number.parseInt(id, 10);
-                    return Number.isNaN(parsed) ? null : parsed;
-                })
-                .filter(id => id !== null);
+            const parsedResults = rawSelectedIds.map(id => {
+                const parsed = Number.parseInt(id, 10);
+                return {
+                    original: id,
+                    parsed,
+                    valid: !Number.isNaN(parsed)
+                };
+            });
+
+            const selectedIds = parsedResults.filter(entry => entry.valid).map(entry => entry.parsed);
+            const invalidIds = parsedResults.filter(entry => !entry.valid).map(entry => entry.original);
 
             if (selectedIds.length === 0) {
                 setHolderActionMessage('info', 'Select at least one certificate holder to generate ACORD 25 certificates.');
@@ -1494,10 +1499,8 @@
                 return;
             }
 
-            if (selectedIds.length !== rawSelectedIds.length) {
-                setHolderActionMessage('error', 'One or more certificate holder identifiers were invalid. Please refresh and try again.');
-                updateGenerateAcord25ButtonState();
-                return;
+            if (invalidIds.length > 0) {
+                setHolderActionMessage('info', 'One or more certificate holder selections were skipped because they were invalid.');
             }
 
             const originalText = button.textContent;
