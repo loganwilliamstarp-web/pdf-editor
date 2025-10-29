@@ -30,11 +30,9 @@
                         </button>
                     </nav>
                     <button id="openAgencySettingsBtn" type="button"
-                            class="inline-flex items-center rounded-full border border-transparent bg-white p-2 text-gray-500 shadow-sm hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                            class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition hover:border-indigo-300 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                             aria-label="Configure agency settings">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                            <path fill-rule="evenodd" d="M11.983 1.574a1 1 0 0 0-1.966 0l-.217 1.086a1 1 0 0 1-1.371.73l-1.02-.413a1 1 0 0 0-1.258.485l-.983 1.7a1 1 0 0 0 .268 1.274l.873.654a1 1 0 0 1 0 1.606l-.873.654a1 1 0 0 0-.268 1.274l.983 1.7a1 1 0 0 0 1.258.485l1.02-.413a1 1 0 0 1 1.371.73l.217 1.086a1 1 0 0 0 1.966 0l.217-1.086a1 1 0 0 1 1.371-.73l1.02.413a1 1 0 0 0 1.258-.485l.983-1.7a1 1 0 0 0-.268-1.274l-.873-.654a1 1 0 0 1 0-1.606l.873-.654a1 1 0 0 0 .268-1.274l-.983-1.7a1 1 0 0 0-1.258-.485l-1.02.413a1 1 0 0 1-1.371-.73l-.217-1.086ZM13 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd"/>
-                        </svg>
+                        <i data-lucide="settings" class="h-5 w-5"></i>
                     </button>
                 </div>
             </div>
@@ -336,6 +334,10 @@
                     ownerEl.textContent = '';
                     ownerEl.classList.add('hidden');
                 }
+            }
+
+            if (window.lucide && typeof window.lucide.createIcons === 'function') {
+                window.lucide.createIcons();
             }
 
             setupAgencySettingsUI();
