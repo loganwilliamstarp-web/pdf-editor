@@ -1386,6 +1386,7 @@ def generate_acord25_certificates(account_id):
             'CertificateHolder_MailingAddress_CityName_A': holder.get('city') or '',
             'CertificateHolder_MailingAddress_StateOrProvinceCode_A': holder.get('state') or '',
             'CertificateHolder_MailingAddress_PostalCode_A': holder.get('postal_code') or '',
+            'CertificateOfLiabilityInsurance_ACORDForm_RemarkText_A': holder.get('master_remarks') or ''
         }
 
         final_field_values = {}
@@ -1402,8 +1403,14 @@ def generate_acord25_certificates(account_id):
             elif value not in (None, ''):
                 final_field_values[key] = value
 
+        signature_text = (agency_settings.get('signatureText')
+                          or agency_settings.get('signature_text')
+                          or agency_settings.get('name')
+                          or '')
+        if signature_text:
+            final_field_values['Producer_AuthorizedRepresentative_Signature_A'] = signature_text
         if signature_bytes is not None:
-            final_field_values['Producer_AuthorizedRepresentative_Signature_A'] = ''
+            final_field_values['Producer_AuthorizedRepresentative_Signature_A'] = signature_text
 
         try:
             filled_pdf = fill_acord25_fields(template_bytes, final_field_values, signature_bytes=signature_bytes)
