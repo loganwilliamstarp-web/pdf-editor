@@ -1231,7 +1231,7 @@
                 : [];
 
             if (!holders || holders.length === 0) {
-                holderList.innerHTML = '<p class="text-gray-600">No certificate holders yet. Click "+ Add Certificate Holder" to create one.</p>';
+                holderList.innerHTML = '';
                 selectedCertificateHolderIds.clear();
                 updateHolderSelectionSummary(0);
                 return;
