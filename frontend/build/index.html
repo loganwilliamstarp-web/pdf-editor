@@ -11,21 +11,32 @@
 <body>
     <div class="min-h-screen bg-gray-100">
         <header class="bg-white shadow-sm">
-            <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-                <h1 class="text-2xl font-bold text-gray-900">
-                    Certificate Management System <span class="text-gray-500 text-sm" id="accountId">Loading...</span>
+            <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center gap-4">
+                <h1 class="text-2xl font-bold text-gray-900 flex flex-wrap items-baseline gap-2">
+                    <span>Certificate Management System</span>
+                    <span class="text-sm text-gray-500" id="accountId">Account: Loading...</span>
+                    <span class="hidden text-sm text-gray-400" id="ownerId"></span>
                 </h1>
-                <nav class="flex space-x-4">
-                    <button onclick="showTab('master')" id="masterTab" class="px-3 py-2 rounded-md text-sm font-medium bg-indigo-600 text-white">
-                        Master Certificates
+                <div class="flex items-center gap-3">
+                    <nav class="flex space-x-4">
+                        <button onclick="showTab('master')" id="masterTab" class="px-3 py-2 rounded-md text-sm font-medium bg-indigo-600 text-white">
+                            Master Certificates
+                        </button>
+                        <button onclick="showTab('holders')" id="holdersTab" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Certificate Holders
+                        </button>
+                        <button onclick="showTab('generated')" id="generatedTab" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Generated Certificates
+                        </button>
+                    </nav>
+                    <button id="openAgencySettingsBtn" type="button"
+                            class="inline-flex items-center rounded-full border border-transparent bg-white p-2 text-gray-500 shadow-sm hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                            aria-label="Configure agency settings">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M11.983 1.574a1 1 0 0 0-1.966 0l-.217 1.086a1 1 0 0 1-1.371.73l-1.02-.413a1 1 0 0 0-1.258.485l-.983 1.7a1 1 0 0 0 .268 1.274l.873.654a1 1 0 0 1 0 1.606l-.873.654a1 1 0 0 0-.268 1.274l.983 1.7a1 1 0 0 0 1.258.485l1.02-.413a1 1 0 0 1 1.371.73l.217 1.086a1 1 0 0 0 1.966 0l.217-1.086a1 1 0 0 1 1.371-.73l1.02.413a1 1 0 0 0 1.258-.485l.983-1.7a1 1 0 0 0-.268-1.274l-.873-.654a1 1 0 0 1 0-1.606l.873-.654a1 1 0 0 0 .268-1.274l-.983-1.7a1 1 0 0 0-1.258-.485l-1.02.413a1 1 0 0 1-1.371-.73l-.217-1.086ZM13 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd"/>
+                        </svg>
                     </button>
-                    <button onclick="showTab('holders')" id="holdersTab" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        Certificate Holders
-                    </button>
-                    <button onclick="showTab('generated')" id="generatedTab" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        Generated Certificates
-                    </button>
-                </nav>
+                </div>
             </div>
         </header>
 
@@ -67,8 +78,11 @@
 
             <!-- Generated Certificates Tab -->
             <div id="generatedContent" class="bg-white shadow overflow-hidden sm:rounded-lg p-6" style="display: none;">
-                <h2 class="text-xl font-semibold text-gray-900 mb-4">Generated Certificates</h2>
+                <h2 class="mb-4 text-xl font-semibold text-gray-900">Generated Certificates</h2>
                 <p class="text-gray-600">This section will display certificates generated from templates for specific holders. (Coming soon!)</p>
+                <div id="agencySettingsSummary" class="mt-4 rounded-md border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600">
+                    <p class="text-sm text-gray-500">No agency details saved yet. Use the gear icon to configure them.</p>
+                </div>
             </div>
         </main>
     </div>
@@ -160,6 +174,89 @@
         </div>
     </div>
 
+    <!-- Agency Settings Modal -->
+    <div id="agencySettingsModal" class="fixed inset-0 z-50 hidden items-center justify-center">
+        <div id="agencySettingsModalOverlay" class="absolute inset-0 bg-gray-900 bg-opacity-50"></div>
+        <div class="relative z-10 mx-auto w-full max-w-2xl px-4">
+            <div class="overflow-hidden rounded-lg bg-white shadow-xl">
+                <div class="flex items-center justify-between border-b px-6 py-4">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900">Agency Settings</h3>
+                        <p class="text-sm text-gray-500">Store agency details used on generated certificates.</p>
+                    </div>
+                    <button id="agencySettingsCloseBtn" type="button"
+                            class="rounded-full p-1 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                        <span class="sr-only">Close</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 0 1 1.414 0L10 8.586l4.293-4.293a1 1 0 0 1 1.414 1.414L11.414 10l4.293 4.293a1 1 0 0 1-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 0 1-1.414-1.414L8.586 10 4.293 5.707a1 1 0 0 1 0-1.414Z" clip-rule="evenodd"/>
+                        </svg>
+                    </button>
+                </div>
+                <form id="agencySettingsForm" class="space-y-5 px-6 py-5">
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div class="md:col-span-2">
+                            <label for="agencyName" class="block text-sm font-medium text-gray-700">Agency Name</label>
+                            <input id="agencyName" name="agency_name" type="text" autocomplete="organization"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="Acme Insurance Agency">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label for="agencyStreet" class="block text-sm font-medium text-gray-700">Street Address</label>
+                            <input id="agencyStreet" name="agency_street" type="text" autocomplete="address-line1"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="123 Main Street">
+                        </div>
+                        <div>
+                            <label for="agencySuite" class="block text-sm font-medium text-gray-700">Suite Number</label>
+                            <input id="agencySuite" name="agency_suite" type="text" autocomplete="address-line2"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="Suite 400">
+                        </div>
+                        <div>
+                            <label for="agencyCity" class="block text-sm font-medium text-gray-700">City</label>
+                            <input id="agencyCity" name="agency_city" type="text" autocomplete="address-level2"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="Atlanta">
+                        </div>
+                        <div>
+                            <label for="agencyState" class="block text-sm font-medium text-gray-700">State</label>
+                            <select id="agencyState" name="agency_state"
+                                    class="mt-1 block w-full rounded-md border-gray-300 bg-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">Select state</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="agencyZip" class="block text-sm font-medium text-gray-700">Zip Code</label>
+                            <input id="agencyZip" name="agency_zip" type="text" inputmode="numeric" autocomplete="postal-code"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="30301">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="agencySignaturePad" class="block text-sm font-medium text-gray-700">Agent Signature</label>
+                        <div class="mt-2 rounded-md border border-gray-200 bg-white">
+                            <canvas id="agencySignaturePad" class="w-full" style="height: 200px;"></canvas>
+                        </div>
+                        <div class="mt-2 flex items-center justify-between text-xs text-gray-500">
+                            <span>Use your mouse or touch to sign.</span>
+                            <button id="agencySignatureClearBtn" type="button" class="font-medium text-indigo-600 hover:text-indigo-500">Clear signature</button>
+                        </div>
+                    </div>
+                    <div class="flex justify-end space-x-3 border-t pt-4">
+                        <button id="agencySettingsCancelBtn" type="button"
+                                class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Cancel
+                        </button>
+                        <button type="submit"
+                                class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                            Save
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script>
         const DEFAULT_STATE_OPTIONS = [
             { code: 'AL', name: 'Alabama' }, { code: 'AK', name: 'Alaska' }, { code: 'AZ', name: 'Arizona' },
@@ -187,22 +284,456 @@
         let editingCertificateHolderId = null;
         const HOLDER_MODAL_TITLE_DEFAULT = 'Add Certificate Holder';
         const HOLDER_MODAL_TITLE_EDIT = 'Edit Certificate Holder';
+        const AGENCY_SETTINGS_STORAGE_PREFIX = 'certificateManager.agencySettings';
+        let agencySettings = null;
+        let agencySignatureCanvas = null;
+        let agencySignatureCtx = null;
+        let agencySignatureDrawing = false;
+        let agencySignatureHasData = false;
 
-        // Get account ID from URL
+        function getAccountContext() {
+            const pathParts = window.location.pathname.split('/').filter(part => part);
+            const accountId = pathParts[0] || '001000000000001';
+            const ownerId = pathParts[1] || '';
+            return { accountId, ownerId };
+        }
+
         function getAccountId() {
-            const path = window.location.pathname;
-            const pathParts = path.split('/').filter(part => part);
-            return pathParts[0] || '001000000000001';
+            return getAccountContext().accountId;
+        }
+
+        function getOwnerId() {
+            return getAccountContext().ownerId;
+        }
+
+        function getAgencySettingsStorageKey() {
+            const { accountId, ownerId } = getAccountContext();
+            const ownerSegment = ownerId || 'default';
+            return `${AGENCY_SETTINGS_STORAGE_PREFIX}:${accountId}:${ownerSegment}`;
+        }
+
+        function getLegacyAgencySettingsStorageKey() {
+            const { accountId } = getAccountContext();
+            return `${AGENCY_SETTINGS_STORAGE_PREFIX}:${accountId}`;
         }
 
         // Initialize the app
         function initApp() {
             const accountId = getAccountId();
-            document.getElementById('accountId').textContent = `(${accountId})`;
+            const ownerId = getOwnerId();
 
+            const accountEl = document.getElementById('accountId');
+            if (accountEl) {
+                accountEl.textContent = `Account: ${accountId}`;
+            }
+
+            const ownerEl = document.getElementById('ownerId');
+            if (ownerEl) {
+                if (ownerId) {
+                    ownerEl.textContent = `Owner: ${ownerId}`;
+                    ownerEl.classList.remove('hidden');
+                } else {
+                    ownerEl.textContent = '';
+                    ownerEl.classList.add('hidden');
+                }
+            }
+
+            setupAgencySettingsUI();
             setupCertificateHolderUI();
             loadTemplates();
             loadCertificateHolders(true);
+        }
+
+        function setupAgencySettingsUI() {
+            loadAgencySettingsFromStorage();
+            renderAgencyStateOptions();
+            updateAgencySettingsSummary();
+
+            const openBtn = document.getElementById('openAgencySettingsBtn');
+            if (openBtn) {
+                openBtn.addEventListener('click', openAgencySettingsModal);
+            }
+
+            const overlay = document.getElementById('agencySettingsModalOverlay');
+            if (overlay) {
+                overlay.addEventListener('click', () => closeAgencySettingsModal(true));
+            }
+
+            const closeBtn = document.getElementById('agencySettingsCloseBtn');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => closeAgencySettingsModal(true));
+            }
+
+            const cancelBtn = document.getElementById('agencySettingsCancelBtn');
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', () => closeAgencySettingsModal(true));
+            }
+
+            const form = document.getElementById('agencySettingsForm');
+            if (form) {
+                form.addEventListener('submit', handleAgencySettingsSubmit);
+            }
+
+            const clearBtn = document.getElementById('agencySignatureClearBtn');
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => clearAgencySignature());
+            }
+
+            document.addEventListener('keydown', handleAgencySettingsKeydown);
+
+            setupAgencySignaturePad();
+        }
+
+        function loadAgencySettingsFromStorage() {
+            const storageKey = getAgencySettingsStorageKey();
+            try {
+                let stored = window.localStorage.getItem(storageKey);
+                if (!stored) {
+                    const legacyKey = getLegacyAgencySettingsStorageKey();
+                    if (legacyKey !== storageKey) {
+                        stored = window.localStorage.getItem(legacyKey);
+                        if (stored) {
+                            try {
+                                const parsedLegacy = JSON.parse(stored);
+                                saveAgencySettingsToStorage(parsedLegacy);
+                                agencySettings = parsedLegacy;
+                                return;
+                            } catch (legacyError) {
+                                console.warn('Unable to parse legacy agency settings.', legacyError);
+                                stored = null;
+                            }
+                        }
+                    }
+                }
+                agencySettings = stored ? JSON.parse(stored) : null;
+            } catch (error) {
+                console.warn('Unable to load agency settings from storage.', error);
+                agencySettings = null;
+            }
+        }
+
+        function saveAgencySettingsToStorage(settings) {
+            const storageKey = getAgencySettingsStorageKey();
+            try {
+                window.localStorage.setItem(storageKey, JSON.stringify(settings));
+            } catch (error) {
+                console.warn('Unable to persist agency settings.', error);
+            }
+        }
+
+        function openAgencySettingsModal() {
+            const modal = document.getElementById('agencySettingsModal');
+            if (!modal) {
+                return;
+            }
+
+            populateAgencySettingsForm();
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            modal.setAttribute('aria-hidden', 'false');
+
+            requestAnimationFrame(() => {
+                resizeAgencySignatureCanvas();
+                if (agencySettings && agencySettings.signatureDataUrl) {
+                    renderAgencySignatureFromDataUrl(agencySettings.signatureDataUrl);
+                } else {
+                    clearAgencySignature();
+                }
+            });
+
+            setTimeout(() => {
+                const nameInput = document.getElementById('agencyName');
+                if (nameInput) {
+                    nameInput.focus();
+                }
+            }, 50);
+        }
+
+        function closeAgencySettingsModal(shouldReset = false) {
+            const modal = document.getElementById('agencySettingsModal');
+            if (!modal) {
+                return;
+            }
+
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            modal.setAttribute('aria-hidden', 'true');
+
+            if (shouldReset) {
+                populateAgencySettingsForm();
+            }
+        }
+
+        function isAgencySettingsModalOpen() {
+            const modal = document.getElementById('agencySettingsModal');
+            return modal ? !modal.classList.contains('hidden') : false;
+        }
+
+        function handleAgencySettingsKeydown(event) {
+            if (event.key === 'Escape' && isAgencySettingsModalOpen()) {
+                event.preventDefault();
+                closeAgencySettingsModal(true);
+            }
+        }
+
+        function populateAgencySettingsForm() {
+            const data = agencySettings || {};
+            const setValue = (id, value) => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.value = value ? String(value) : '';
+                }
+            };
+
+            setValue('agencyName', data.name);
+            setValue('agencyStreet', data.street);
+            setValue('agencySuite', data.suite);
+            setValue('agencyCity', data.city);
+            setValue('agencyZip', data.zip);
+
+            const stateEl = document.getElementById('agencyState');
+            if (stateEl) {
+                stateEl.value = data.state || '';
+            }
+        }
+
+        function handleAgencySettingsSubmit(event) {
+            event.preventDefault();
+
+            const getValue = id => {
+                const el = document.getElementById(id);
+                return el ? el.value.trim() : '';
+            };
+
+            const stateEl = document.getElementById('agencyState');
+            const stateValue = stateEl ? stateEl.value : '';
+            let stateName = '';
+            if (stateEl && stateValue) {
+                const selectedOption = stateEl.options[stateEl.selectedIndex];
+                stateName = selectedOption ? selectedOption.text.trim() : '';
+            }
+
+            const signatureDataUrl = agencySignatureHasData && agencySignatureCanvas
+                ? agencySignatureCanvas.toDataURL('image/png')
+                : '';
+
+            const { accountId, ownerId } = getAccountContext();
+
+            agencySettings = {
+                accountId,
+                ownerId,
+                name: getValue('agencyName'),
+                street: getValue('agencyStreet'),
+                suite: getValue('agencySuite'),
+                city: getValue('agencyCity'),
+                state: stateValue,
+                stateName,
+                zip: getValue('agencyZip'),
+                signatureDataUrl
+            };
+
+            saveAgencySettingsToStorage(agencySettings);
+            updateAgencySettingsSummary();
+            closeAgencySettingsModal(true);
+        }
+
+        function renderAgencyStateOptions() {
+            const select = document.getElementById('agencyState');
+            if (!select) {
+                return;
+            }
+
+            const currentValue = select.value || (agencySettings ? agencySettings.state : '');
+            const optionsMarkup = ['<option value="">Select state</option>']
+                .concat(
+                    certificateHolderStateOptions.map(option => `<option value="${option.code}">${option.name}</option>`)
+                )
+                .join('');
+
+            select.innerHTML = optionsMarkup;
+
+            if (currentValue && certificateHolderStateOptions.some(option => option.code === currentValue)) {
+                select.value = currentValue;
+            } else {
+                select.value = '';
+            }
+
+            renderAgencyStateOptions();
+        }
+
+        function updateAgencySettingsSummary() {
+            const summaryEl = document.getElementById('agencySettingsSummary');
+            if (!summaryEl) {
+                return;
+            }
+
+            if (!agencySettings) {
+                summaryEl.innerHTML = '<p class="text-sm text-gray-500">No agency details saved yet. Use the gear icon to configure them.</p>';
+                return;
+            }
+
+            const lines = [];
+
+            if (agencySettings.name) {
+                lines.push(`<p class="text-sm font-medium text-gray-900">${escapeHtml(agencySettings.name)}</p>`);
+            }
+
+            const addressParts = [];
+            if (agencySettings.street) {
+                addressParts.push(agencySettings.street);
+            }
+            if (agencySettings.suite) {
+                addressParts.push(agencySettings.suite);
+            }
+            const cityStateParts = [];
+            if (agencySettings.city) {
+                cityStateParts.push(agencySettings.city);
+            }
+            const stateDisplay = agencySettings.stateName
+                ? `${agencySettings.stateName}${agencySettings.state ? ` (${agencySettings.state})` : ''}`
+                : agencySettings.state;
+            if (stateDisplay) {
+                cityStateParts.push(stateDisplay);
+            }
+            if (cityStateParts.length > 0) {
+                addressParts.push(cityStateParts.join(', '));
+            }
+            if (agencySettings.zip) {
+                addressParts.push(agencySettings.zip);
+            }
+
+            if (addressParts.length > 0) {
+                const escapedParts = addressParts.map(part => escapeHtml(part));
+                lines.push(`<p class="mt-1 text-sm text-gray-600">${escapedParts.join('<br>')}</p>`);
+            }
+
+            const signatureStatus = agencySettings.signatureDataUrl
+                ? 'Signature saved.'
+                : 'No signature saved yet.';
+
+            const metaParts = [signatureStatus];
+            const ownerId = getOwnerId();
+            if (ownerId) {
+                metaParts.push(`Owner: ${ownerId}`);
+            }
+
+            lines.push(`<p class="mt-2 text-xs text-gray-500">${metaParts.map(part => escapeHtml(part)).join(' · ')}</p>`);
+
+            summaryEl.innerHTML = lines.join('');
+        }
+
+        function setupAgencySignaturePad() {
+            agencySignatureCanvas = document.getElementById('agencySignaturePad');
+            if (!agencySignatureCanvas) {
+                return;
+            }
+
+            agencySignatureCanvas.style.touchAction = 'none';
+            agencySignatureCtx = agencySignatureCanvas.getContext('2d');
+
+            agencySignatureCanvas.addEventListener('pointerdown', startAgencySignatureStroke);
+            agencySignatureCanvas.addEventListener('pointermove', drawAgencySignatureStroke);
+            agencySignatureCanvas.addEventListener('pointerup', endAgencySignatureStroke);
+            agencySignatureCanvas.addEventListener('pointerleave', endAgencySignatureStroke);
+            window.addEventListener('pointerup', endAgencySignatureStroke);
+            window.addEventListener('pointercancel', endAgencySignatureStroke);
+        }
+
+        function resizeAgencySignatureCanvas() {
+            if (!agencySignatureCanvas || !agencySignatureCtx) {
+                return;
+            }
+
+            const rect = agencySignatureCanvas.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) {
+                return;
+            }
+
+            const ratio = window.devicePixelRatio || 1;
+            agencySignatureCanvas.width = rect.width * ratio;
+            agencySignatureCanvas.height = rect.height * ratio;
+            agencySignatureCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+            agencySignatureCtx.lineWidth = 2;
+            agencySignatureCtx.lineCap = 'round';
+            agencySignatureCtx.lineJoin = 'round';
+            agencySignatureCtx.strokeStyle = '#111827';
+        }
+
+        function getAgencySignaturePoint(event) {
+            if (!agencySignatureCanvas) {
+                return { x: 0, y: 0 };
+            }
+            const rect = agencySignatureCanvas.getBoundingClientRect();
+            return {
+                x: event.clientX - rect.left,
+                y: event.clientY - rect.top
+            };
+        }
+
+        function startAgencySignatureStroke(event) {
+            if (!agencySignatureCtx) {
+                return;
+            }
+            if (event && event.cancelable) {
+                event.preventDefault();
+            }
+            agencySignatureDrawing = true;
+            const point = getAgencySignaturePoint(event);
+            agencySignatureCtx.beginPath();
+            agencySignatureCtx.moveTo(point.x, point.y);
+            agencySignatureHasData = true;
+        }
+
+        function drawAgencySignatureStroke(event) {
+            if (!agencySignatureDrawing || !agencySignatureCtx) {
+                return;
+            }
+            if (event && event.cancelable) {
+                event.preventDefault();
+            }
+            const point = getAgencySignaturePoint(event);
+            agencySignatureCtx.lineTo(point.x, point.y);
+            agencySignatureCtx.stroke();
+        }
+
+        function endAgencySignatureStroke(event) {
+            if (!agencySignatureDrawing || !agencySignatureCtx) {
+                return;
+            }
+            if (event && event.cancelable) {
+                event.preventDefault();
+            }
+            agencySignatureDrawing = false;
+            agencySignatureCtx.closePath();
+        }
+
+        function clearAgencySignature(options = {}) {
+            if (!agencySignatureCanvas || !agencySignatureCtx) {
+                agencySignatureHasData = false;
+                return;
+            }
+            agencySignatureCtx.clearRect(0, 0, agencySignatureCanvas.width, agencySignatureCanvas.height);
+            if (!options.preserveState) {
+                agencySignatureHasData = false;
+            }
+        }
+
+        function renderAgencySignatureFromDataUrl(dataUrl) {
+            if (!agencySignatureCanvas || !agencySignatureCtx || !dataUrl) {
+                clearAgencySignature();
+                return;
+            }
+
+            const image = new Image();
+            image.onload = () => {
+                clearAgencySignature({ preserveState: true });
+                agencySignatureCtx.drawImage(image, 0, 0, agencySignatureCanvas.width, agencySignatureCanvas.height);
+                agencySignatureHasData = true;
+            };
+            image.onerror = () => {
+                clearAgencySignature();
+            };
+            image.src = dataUrl;
         }
 
         function setupCertificateHolderUI() {
@@ -603,6 +1134,7 @@
                         name: option.name
                     }));
                     renderHolderStateOptions();
+                    renderAgencyStateOptions();
                 }
 
                 renderCertificateHolderList(Array.isArray(data.certificate_holders) ? data.certificate_holders : []);
