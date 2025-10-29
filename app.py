@@ -1286,7 +1286,7 @@ def generate_acord25_certificates(account_id):
             SELECT id, account_id, name, master_remarks, address_line1, address_line2,
                    city, state, postal_code, email, phone
             FROM certificate_holders
-            WHERE account_id = %s AND id = ANY(%s)
+            WHERE account_id = %s AND id = ANY(%s::uuid[])
             ORDER BY name ASC, created_at DESC
             ''',
             (normalized_account_id, holder_ids)
