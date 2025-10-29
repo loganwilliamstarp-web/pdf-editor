@@ -259,6 +259,12 @@
                             <button id="agencySignatureClearBtn" type="button" class="font-medium text-indigo-600 hover:text-indigo-500">Clear signature</button>
                         </div>
                     </div>
+                    <div>
+                        <label for="agencySignatureText" class="block text-sm font-medium text-gray-700">Authorized Representative (Signature Text)</label>
+                        <input id="agencySignatureText" name="signature_text" type="text" autocomplete="name"
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                               placeholder="e.g. John Doe, Authorized Representative">
+                    </div>
                     <div class="flex justify-end space-x-3 border-t pt-4">
                         <button id="agencySettingsCancelBtn" type="button"
                                 class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
@@ -583,6 +589,7 @@
             setValue('agencySuite', data.suite);
             setValue('agencyCity', data.city);
             setValue('agencyZip', data.zip);
+            setValue('agencySignatureText', data.signatureText || data.signature_text || '');
 
             const stateEl = document.getElementById('agencyState');
             if (stateEl) {
@@ -624,6 +631,7 @@
                 state: stateValue,
                 stateName,
                 zip: getValue('agencyZip'),
+                signatureText: getValue('agencySignatureText'),
                 signatureDataUrl
             };
 
@@ -705,6 +713,9 @@
                 : 'No signature saved yet.';
 
             const metaParts = [signatureStatus];
+            if (agencySettings.signatureText) {
+                metaParts.push(`Signature Text: ${agencySettings.signatureText}`);
+            }
             const ownerId = getOwnerId();
             if (ownerId) {
                 metaParts.push(`Owner: ${ownerId}`);
