@@ -907,27 +907,6 @@ def list_certificate_holders(account_id):
             ORDER BY name ASC, created_at DESC
         ''', (normalized_account_id,))
         rows = cur.fetchall()
-        if template_id:
-            try:
-                cur.execute(
-                    'SELECT field_values FROM template_data WHERE account_id = %s AND template_id = %s LIMIT 1',
-                    (normalized_account_id, template_id)
-                )
-                template_data_row = cur.fetchone()
-                if template_data_row:
-                    field_values_raw = template_data_row.get('field_values') or {}
-                    if isinstance(field_values_raw, str):
-                        try:
-                            base_field_values = json.loads(field_values_raw)
-                        except json.JSONDecodeError:
-                            base_field_values = {}
-                    elif isinstance(field_values_raw, dict):
-                        base_field_values = field_values_raw
-                    else:
-                        base_field_values = {}
-            except Exception as template_data_error:
-                print(f"Warning: unable to load template field values: {template_data_error}")
-                base_field_values = {}
         holders = [format_certificate_holder(row) for row in rows]
 
         return jsonify({
