@@ -547,20 +547,41 @@ def load_master_template_pdf(template_type="acord25"):
     try:
         conn = get_db()
         cur = conn.cursor()
-        cur.execute(
-            '''
-            SELECT id, template_name, template_type, storage_path, pdf_blob
-            FROM master_templates
-            WHERE LOWER(template_type) = %s
-            ORDER BY updated_at DESC NULLS LAST, created_at DESC
-            LIMIT 1
-            ''',
-            (template_type.lower(),)
-        )
-        template = cur.fetchone()
-        if not template:
-            return None, None, None
+        row = None
+        try:
+            cur.execute(
+                '''
+                SELECT id, template_name, template_type, storage_path, pdf_blob
+                FROM master_templates
+                WHERE LOWER(template_type) = %s
+                ORDER BY updated_at DESC NULLS LAST, created_at DESC
+                LIMIT 1
+                ''',
+                (template_type.lower(),)
+            )
+            row = cur.fetchone()
+        except psycopg2.errors.UndefinedColumn:
+            conn.rollback()
+            cur.execute(
+                '''
+                SELECT id, template_name, template_type, storage_path
+                FROM master_templates
+                WHERE LOWER(template_type) = %s
+                ORDER BY updated_at DESC NULLS LAST, created_at DESC
+                LIMIT 1
+                ''',
+                (template_type.lower(),)
+            )
+            row = cur.fetchone()
+            if row is not None and not isinstance(row, dict):
+                row = dict(row)
+            if row is not None:
+                row['pdf_blob'] = None
 
+        if not row:
+            return None, None, None, None, None
+
+        template = dict(row) if not isinstance(row, dict) else row
         template_id = template.get('id')
         template_name = template.get('template_name') or template_type.upper()
         template_type_value = (template.get('template_type') or template_type).lower()
@@ -576,13 +597,13 @@ def load_master_template_pdf(template_type="acord25"):
 
         if not pdf_content:
             local_file = resolve_local_template_file(template_type_value, storage_path)
-            if local_file:
+            if local_file and local_file.exists():
                 pdf_content = local_file.read_bytes()
 
         return template_id, template_name, pdf_blob, storage_path, pdf_content
     except Exception as error:
         print(f"Error loading master template '{template_type}': {error}")
-        return None, None, None
+        return None, None, None, None, None
     finally:
         if cur:
             cur.close()
