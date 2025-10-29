@@ -11,23 +11,32 @@
 <body>
     <div class="min-h-screen bg-gray-100">
         <header class="bg-white shadow-sm">
-            <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center gap-4">
                 <h1 class="text-2xl font-bold text-gray-900 flex flex-wrap items-baseline gap-2">
                     <span>Certificate Management System</span>
                     <span class="text-sm text-gray-500" id="accountId">Account: Loading...</span>
                     <span class="hidden text-sm text-gray-400" id="ownerId"></span>
                 </h1>
-                <nav class="flex space-x-4">
-                    <button onclick="showTab('master')" id="masterTab" class="px-3 py-2 rounded-md text-sm font-medium bg-indigo-600 text-white">
-                        Master Certificates
+                <div class="flex items-center gap-3">
+                    <nav class="flex space-x-4">
+                        <button onclick="showTab('master')" id="masterTab" class="px-3 py-2 rounded-md text-sm font-medium bg-indigo-600 text-white">
+                            Master Certificates
+                        </button>
+                        <button onclick="showTab('holders')" id="holdersTab" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Certificate Holders
+                        </button>
+                        <button onclick="showTab('generated')" id="generatedTab" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Generated Certificates
+                        </button>
+                    </nav>
+                    <button id="openAgencySettingsBtn" type="button"
+                            class="inline-flex items-center rounded-full border border-transparent bg-white p-2 text-gray-500 shadow-sm hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                            aria-label="Configure agency settings">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M11.983 1.574a1 1 0 0 0-1.966 0l-.217 1.086a1 1 0 0 1-1.371.73l-1.02-.413a1 1 0 0 0-1.258.485l-.983 1.7a1 1 0 0 0 .268 1.274l.873.654a1 1 0 0 1 0 1.606l-.873.654a1 1 0 0 0-.268 1.274l.983 1.7a1 1 0 0 0 1.258.485l1.02-.413a1 1 0 0 1 1.371.73l.217 1.086a1 1 0 0 0 1.966 0l.217-1.086a1 1 0 0 1 1.371-.73l1.02.413a1 1 0 0 0 1.258-.485l.983-1.7a1 1 0 0 0-.268-1.274l-.873-.654a1 1 0 0 1 0-1.606l.873-.654a1 1 0 0 0 .268-1.274l-.983-1.7a1 1 0 0 0-1.258-.485l-1.02.413a1 1 0 0 1-1.371-.73l-.217-1.086ZM13 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd"/>
+                        </svg>
                     </button>
-                    <button onclick="showTab('holders')" id="holdersTab" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        Certificate Holders
-                    </button>
-                    <button onclick="showTab('generated')" id="generatedTab" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        Generated Certificates
-                    </button>
-                </nav>
+                </div>
             </div>
         </header>
 
@@ -69,16 +78,7 @@
 
             <!-- Generated Certificates Tab -->
             <div id="generatedContent" class="bg-white shadow overflow-hidden sm:rounded-lg p-6" style="display: none;">
-                <div class="mb-4 flex items-center justify-between gap-3">
-                    <h2 class="text-xl font-semibold text-gray-900">Generated Certificates</h2>
-                    <button id="openAgencySettingsBtn" type="button"
-                            class="inline-flex items-center rounded-full border border-transparent bg-transparent p-2 text-gray-500 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                            aria-label="Configure agency settings">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                            <path fill-rule="evenodd" d="M11.983 1.574a1 1 0 0 0-1.966 0l-.217 1.086a1 1 0 0 1-1.371.73l-1.02-.413a1 1 0 0 0-1.258.485l-.983 1.7a1 1 0 0 0 .268 1.274l.873.654a1 1 0 0 1 0 1.606l-.873.654a1 1 0 0 0-.268 1.274l.983 1.7a1 1 0 0 0 1.258.485l1.02-.413a1 1 0 0 1 1.371.73l.217 1.086a1 1 0 0 0 1.966 0l.217-1.086a1 1 0 0 1 1.371-.73l1.02.413a1 1 0 0 0 1.258-.485l.983-1.7a1 1 0 0 0-.268-1.274l-.873-.654a1 1 0 0 1 0-1.606l.873-.654a1 1 0 0 0 .268-1.274l-.983-1.7a1 1 0 0 0-1.258-.485l-1.02.413a1 1 0 0 1-1.371-.73l-.217-1.086ZM13 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd"/>
-                        </svg>
-                    </button>
-                </div>
+                <h2 class="mb-4 text-xl font-semibold text-gray-900">Generated Certificates</h2>
                 <p class="text-gray-600">This section will display certificates generated from templates for specific holders. (Coming soon!)</p>
                 <div id="agencySettingsSummary" class="mt-4 rounded-md border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600">
                     <p class="text-sm text-gray-500">No agency details saved yet. Use the gear icon to configure them.</p>
