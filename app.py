@@ -564,32 +564,48 @@ def serve_app():
     except Exception as e:
         return f"<h1>Certificate Management System</h1><p>Frontend not available: {str(e)}</p>"
 
+def _serve_index_for_context(account_id=None, owner_id=None):
+    """Serve the frontend index.html, including fallback context information if needed."""
+    try:
+        return send_from_directory(app.static_folder, 'index.html')
+    except Exception:
+        try:
+            return send_from_directory('.', 'index.html')
+        except Exception as e:
+            owner_row = f"<p>Owner: {owner_id}</p>" if owner_id else ""
+            account_row = f"<p>Account: {account_id}</p>" if account_id else ""
+            return f"""
+            <!DOCTYPE html>
+            <html>
+            <head><title>Certificate Management System</title></head>
+            <body>
+                <h1>Certificate Management System</h1>
+                {account_row}
+                {owner_row}
+                <p>Error: {str(e)}</p>
+                <p><a href="/api/health">Check API Health</a></p>
+            </body>
+            </html>
+            """
+
 @app.route("/<account_id>")
 def serve_account(account_id):
     """Serve the app for a specific Salesforce Account ID"""
     try:
         # Check if this is a Salesforce Account ID (15 or 18 characters starting with 001)
         if len(account_id) >= 15 and account_id.startswith('001'):
-            try:
-                # Try to serve from static folder first
-                return send_from_directory(app.static_folder, 'index.html')
-            except Exception:
-                try:
-                    # Fallback to root directory
-                    return send_from_directory('.', 'index.html')
-                except Exception as e:
-                    return f"""
-                    <!DOCTYPE html>
-                    <html>
-                    <head><title>Certificate Management System</title></head>
-                    <body>
-                        <h1>Certificate Management System</h1>
-                        <p>Account: {account_id}</p>
-                        <p>Error: {str(e)}</p>
-                        <p><a href="/api/health">Check API Health</a></p>
-                    </body>
-                    </html>
-                    """
+            return _serve_index_for_context(account_id=account_id)
+        else:
+            return f"Invalid Account ID format: {account_id}", 400
+    except Exception as e:
+        return f"Error: {str(e)}", 500
+
+@app.route("/<account_id>/<owner_id>")
+def serve_account_owner(account_id, owner_id):
+    """Serve the app for a specific Salesforce Account ID and Owner ID"""
+    try:
+        if len(account_id) >= 15 and account_id.startswith('001'):
+            return _serve_index_for_context(account_id=account_id, owner_id=owner_id)
         else:
             return f"Invalid Account ID format: {account_id}", 400
     except Exception as e:
