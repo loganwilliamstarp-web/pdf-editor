@@ -1255,7 +1255,7 @@ def generate_acord25_certificates(account_id):
         holder_key = str(holder_uuid)
         if holder_key in holder_id_keys:
             continue
-        holder_ids.append(holder_uuid)
+        holder_ids.append(holder_key)
         holder_id_keys.add(holder_key)
 
     if not holder_ids:
@@ -1289,7 +1289,8 @@ def generate_acord25_certificates(account_id):
             WHERE account_id = %s AND id IN ({placeholders})
             ORDER BY name ASC, created_at DESC
         """
-        cur.execute(query, [normalized_account_id, *holder_ids])
+        params = [normalized_account_id] + holder_ids
+        cur.execute(query, params)
         rows = cur.fetchall()
         if template_id and template_blob is None and not template_storage_path:
             try:
