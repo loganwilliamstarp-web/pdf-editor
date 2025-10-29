@@ -283,36 +283,108 @@
         const HOLDER_MODAL_TITLE_DEFAULT = 'Add Certificate Holder';
         const HOLDER_MODAL_TITLE_EDIT = 'Edit Certificate Holder';
         const AGENCY_SETTINGS_STORAGE_PREFIX = 'certificateManager.agencySettings';
+        const SALESFORCE_ID_REGEX = /^[a-zA-Z0-9]{15,18}$/;
+        const ACCOUNT_ID_PREFIXES = new Set(['001']);
+        const OWNER_ID_PREFIXES = new Set(['005']);
+        const DEFAULT_ACCOUNT_ID = '001000000000001';
         let agencySettings = null;
         let agencySignatureCanvas = null;
         let agencySignatureCtx = null;
         let agencySignatureDrawing = false;
         let agencySignatureHasData = false;
 
+        function normalizeSalesforceId(value) {
+            if (!value) {
+                return '';
+            }
+            const trimmed = String(value).trim();
+            if (!SALESFORCE_ID_REGEX.test(trimmed)) {
+                return trimmed;
+            }
+            if (trimmed.length === 15) {
+                return trimmed.toUpperCase();
+            }
+            return trimmed;
+        }
+
+        function classifySalesforceId(value) {
+            if (!value || !SALESFORCE_ID_REGEX.test(value)) {
+                return null;
+            }
+            const prefix = value.slice(0, 3);
+            if (ACCOUNT_ID_PREFIXES.has(prefix)) {
+                return 'account';
+            }
+            if (OWNER_ID_PREFIXES.has(prefix)) {
+                return 'owner';
+            }
+            return 'other';
+        }
+
         function getAccountContext() {
             const pathParts = window.location.pathname.split('/').filter(part => part);
-            const accountId = pathParts[0] || '001000000000001';
-            const ownerId = pathParts[1] || '';
-            return { accountId, ownerId };
+            const params = new URLSearchParams(window.location.search);
+            const explicitAccount = normalizeSalesforceId(params.get('accountId'));
+            const explicitOwner = normalizeSalesforceId(params.get('ownerId'));
+
+            let accountId = explicitAccount || null;
+            let ownerId = explicitOwner || null;
+
+            for (const part of pathParts) {
+                const normalized = normalizeSalesforceId(part);
+                const classification = classifySalesforceId(normalized);
+                if (!accountId && classification === 'account') {
+                    accountId = normalized;
+                    continue;
+                }
+                if (!ownerId && classification === 'owner') {
+                    ownerId = normalized;
+                    continue;
+                }
+            }
+
+            if (!accountId) {
+                const fallback = pathParts.find(part => normalizeSalesforceId(part) !== ownerId) || pathParts[0];
+                accountId = normalizeSalesforceId(fallback) || DEFAULT_ACCOUNT_ID;
+            }
+
+            if (!ownerId) {
+                const fallbackOwner = pathParts.find(part => normalizeSalesforceId(part) !== accountId);
+                if (fallbackOwner && SALESFORCE_ID_REGEX.test(fallbackOwner)) {
+                    ownerId = normalizeSalesforceId(fallbackOwner);
+                }
+            }
+
+            if (ownerId === accountId) {
+                ownerId = '';
+            }
+
+            return {
+                accountId: accountId || DEFAULT_ACCOUNT_ID,
+                ownerId: ownerId || ''
+            };
         }
 
         function getAccountId() {
-            return getAccountContext().accountId;
+            return normalizeSalesforceId(getAccountContext().accountId);
         }
 
         function getOwnerId() {
-            return getAccountContext().ownerId;
+            return normalizeSalesforceId(getAccountContext().ownerId);
         }
 
         function getAgencySettingsStorageKey() {
             const { accountId, ownerId } = getAccountContext();
-            const ownerSegment = ownerId || 'default';
-            return `${AGENCY_SETTINGS_STORAGE_PREFIX}:${accountId}:${ownerSegment}`;
+            const normalizedAccount = normalizeSalesforceId(accountId) || DEFAULT_ACCOUNT_ID;
+            const normalizedOwner = normalizeSalesforceId(ownerId);
+            const ownerSegment = normalizedOwner || 'default';
+            return `${AGENCY_SETTINGS_STORAGE_PREFIX}:${normalizedAccount}:${ownerSegment}`;
         }
 
         function getLegacyAgencySettingsStorageKey() {
             const { accountId } = getAccountContext();
-            return `${AGENCY_SETTINGS_STORAGE_PREFIX}:${accountId}`;
+            const normalizedAccount = normalizeSalesforceId(accountId) || DEFAULT_ACCOUNT_ID;
+            return `${AGENCY_SETTINGS_STORAGE_PREFIX}:${normalizedAccount}`;
         }
 
         // Initialize the app
@@ -519,11 +591,13 @@
                 ? agencySignatureCanvas.toDataURL('image/png')
                 : '';
 
-            const { accountId, ownerId } = getAccountContext();
+            const context = getAccountContext();
+            const normalizedAccountId = normalizeSalesforceId(context.accountId) || DEFAULT_ACCOUNT_ID;
+            const normalizedOwnerId = normalizeSalesforceId(context.ownerId);
 
             agencySettings = {
-                accountId,
-                ownerId,
+                accountId: normalizedAccountId,
+                ownerId: normalizedOwnerId,
                 name: getValue('agencyName'),
                 street: getValue('agencyStreet'),
                 suite: getValue('agencySuite'),
