@@ -250,16 +250,6 @@
                         </div>
                     </div>
                     <div>
-                        <label for="agencySignaturePad" class="block text-sm font-medium text-gray-700">Agent Signature</label>
-                        <div class="mt-2 rounded-md border border-gray-200 bg-white">
-                            <canvas id="agencySignaturePad" class="w-full" style="height: 200px;"></canvas>
-                        </div>
-                        <div class="mt-2 flex items-center justify-between text-xs text-gray-500">
-                            <span>Use your mouse or touch to sign.</span>
-                            <button id="agencySignatureClearBtn" type="button" class="font-medium text-indigo-600 hover:text-indigo-500">Clear signature</button>
-                        </div>
-                    </div>
-                    <div>
                         <label for="agencySignatureText" class="block text-sm font-medium text-gray-700">Authorized Representative (Signature Text)</label>
                         <input id="agencySignatureText" name="signature_text" type="text" autocomplete="name"
                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
@@ -313,10 +303,6 @@
         const OWNER_ID_PREFIXES = new Set(['005']);
         const DEFAULT_ACCOUNT_ID = '001000000000001';
         let agencySettings = null;
-        let agencySignatureCanvas = null;
-        let agencySignatureCtx = null;
-        let agencySignatureDrawing = false;
-        let agencySignatureHasData = false;
 
         function normalizeSalesforceId(value) {
             if (!value) {
@@ -473,14 +459,8 @@
                 form.addEventListener('submit', handleAgencySettingsSubmit);
             }
 
-            const clearBtn = document.getElementById('agencySignatureClearBtn');
-            if (clearBtn) {
-                clearBtn.addEventListener('click', () => clearAgencySignature());
-            }
-
             document.addEventListener('keydown', handleAgencySettingsKeydown);
 
-            setupAgencySignaturePad();
         }
 
         function loadAgencySettingsFromStorage() {
@@ -534,7 +514,6 @@
             requestAnimationFrame(() => {
                 resizeAgencySignatureCanvas();
                 if (agencySettings && agencySettings.signatureDataUrl) {
-                    renderAgencySignatureFromDataUrl(agencySettings.signatureDataUrl);
                 } else {
                     clearAgencySignature();
                 }
@@ -613,9 +592,8 @@
                 stateName = selectedOption ? selectedOption.text.trim() : '';
             }
 
-            const signatureDataUrl = agencySignatureHasData && agencySignatureCanvas
-                ? agencySignatureCanvas.toDataURL('image/png')
-                : '';
+            const previousSettings = agencySettings || {};
+            const signatureDataUrl = previousSettings.signatureDataUrl || '';
 
             const context = getAccountContext();
             const normalizedAccountId = normalizeSalesforceId(context.accountId) || DEFAULT_ACCOUNT_ID;
@@ -708,138 +686,18 @@
                 lines.push(`<p class="mt-1 text-sm text-gray-600">${escapedParts.join('<br>')}</p>`);
             }
 
-            const signatureStatus = agencySettings.signatureDataUrl
-                ? 'Signature saved.'
-                : 'No signature saved yet.';
-
-            const metaParts = [signatureStatus];
-            if (agencySettings.signatureText) {
-                metaParts.push(`Signature Text: ${agencySettings.signatureText}`);
+            const signatureText = agencySettings.signatureText || agencySettings.signature_text || '';
+            if (signatureText) {
+                lines.push(`<p class="mt-2 text-xs text-gray-500">Signature: ${escapeHtml(signatureText)}</p>`);
+            } else {
+                lines.push('<p class="mt-2 text-xs text-gray-500">No signature text saved yet.</p>');
             }
             const ownerId = getOwnerId();
             if (ownerId) {
-                metaParts.push(`Owner: ${ownerId}`);
+                lines.push(`<p class="mt-2 text-xs text-gray-500">Owner: ${escapeHtml(ownerId)}</p>`);
             }
-
-            lines.push(`<p class="mt-2 text-xs text-gray-500">${metaParts.map(part => escapeHtml(part)).join(' · ')}</p>`);
-
             summaryEl.innerHTML = lines.join('');
         }
-
-        function setupAgencySignaturePad() {
-            agencySignatureCanvas = document.getElementById('agencySignaturePad');
-            if (!agencySignatureCanvas) {
-                return;
-            }
-
-            agencySignatureCanvas.style.touchAction = 'none';
-            agencySignatureCtx = agencySignatureCanvas.getContext('2d');
-
-            agencySignatureCanvas.addEventListener('pointerdown', startAgencySignatureStroke);
-            agencySignatureCanvas.addEventListener('pointermove', drawAgencySignatureStroke);
-            agencySignatureCanvas.addEventListener('pointerup', endAgencySignatureStroke);
-            agencySignatureCanvas.addEventListener('pointerleave', endAgencySignatureStroke);
-            window.addEventListener('pointerup', endAgencySignatureStroke);
-            window.addEventListener('pointercancel', endAgencySignatureStroke);
-        }
-
-        function resizeAgencySignatureCanvas() {
-            if (!agencySignatureCanvas || !agencySignatureCtx) {
-                return;
-            }
-
-            const rect = agencySignatureCanvas.getBoundingClientRect();
-            if (rect.width === 0 || rect.height === 0) {
-                return;
-            }
-
-            const ratio = window.devicePixelRatio || 1;
-            agencySignatureCanvas.width = rect.width * ratio;
-            agencySignatureCanvas.height = rect.height * ratio;
-            agencySignatureCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
-            agencySignatureCtx.lineWidth = 2;
-            agencySignatureCtx.lineCap = 'round';
-            agencySignatureCtx.lineJoin = 'round';
-            agencySignatureCtx.strokeStyle = '#111827';
-        }
-
-        function getAgencySignaturePoint(event) {
-            if (!agencySignatureCanvas) {
-                return { x: 0, y: 0 };
-            }
-            const rect = agencySignatureCanvas.getBoundingClientRect();
-            return {
-                x: event.clientX - rect.left,
-                y: event.clientY - rect.top
-            };
-        }
-
-        function startAgencySignatureStroke(event) {
-            if (!agencySignatureCtx) {
-                return;
-            }
-            if (event && event.cancelable) {
-                event.preventDefault();
-            }
-            agencySignatureDrawing = true;
-            const point = getAgencySignaturePoint(event);
-            agencySignatureCtx.beginPath();
-            agencySignatureCtx.moveTo(point.x, point.y);
-            agencySignatureHasData = true;
-        }
-
-        function drawAgencySignatureStroke(event) {
-            if (!agencySignatureDrawing || !agencySignatureCtx) {
-                return;
-            }
-            if (event && event.cancelable) {
-                event.preventDefault();
-            }
-            const point = getAgencySignaturePoint(event);
-            agencySignatureCtx.lineTo(point.x, point.y);
-            agencySignatureCtx.stroke();
-        }
-
-        function endAgencySignatureStroke(event) {
-            if (!agencySignatureDrawing || !agencySignatureCtx) {
-                return;
-            }
-            if (event && event.cancelable) {
-                event.preventDefault();
-            }
-            agencySignatureDrawing = false;
-            agencySignatureCtx.closePath();
-        }
-
-        function clearAgencySignature(options = {}) {
-            if (!agencySignatureCanvas || !agencySignatureCtx) {
-                agencySignatureHasData = false;
-                return;
-            }
-            agencySignatureCtx.clearRect(0, 0, agencySignatureCanvas.width, agencySignatureCanvas.height);
-            if (!options.preserveState) {
-                agencySignatureHasData = false;
-            }
-        }
-
-        function renderAgencySignatureFromDataUrl(dataUrl) {
-            if (!agencySignatureCanvas || !agencySignatureCtx || !dataUrl) {
-                clearAgencySignature();
-                return;
-            }
-
-            const image = new Image();
-            image.onload = () => {
-                clearAgencySignature({ preserveState: true });
-                agencySignatureCtx.drawImage(image, 0, 0, agencySignatureCanvas.width, agencySignatureCanvas.height);
-                agencySignatureHasData = true;
-            };
-            image.onerror = () => {
-                clearAgencySignature();
-            };
-            image.src = dataUrl;
-        }
-
         function setupCertificateHolderUI() {
             const form = document.getElementById('holderForm');
             if (form) {

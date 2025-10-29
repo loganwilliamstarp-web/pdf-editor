@@ -1264,6 +1264,7 @@ def generate_acord25_certificates(account_id):
     agency_settings = payload.get('agency_settings') or {}
     signature_data_url = agency_settings.get('signatureDataUrl') or agency_settings.get('signature_data_url')
     signature_bytes = decode_data_url(signature_data_url) if signature_data_url else None
+    signature_bytes = None  # Use text-based signature representation
 
     template_id, template_name, template_blob, template_storage_path, template_bytes = load_master_template_pdf('acord25')
     if not template_bytes:
@@ -1275,6 +1276,29 @@ def generate_acord25_certificates(account_id):
             return jsonify({'success': False, 'error': 'ACORD 25 template is not available'}), 503
 
     base_field_values = {}
+
+    def is_checkbox_field_name(field_name):
+        if not field_name:
+            return False
+        field_lower = field_name.lower()
+        if field_lower.endswith('text'):
+            return False
+        return any(token in field_lower for token in ['indicator', 'checkbox', 'check', 'box'])
+
+    def normalize_checkbox_value(value):
+        if value is None:
+            return '/Off'
+        normalized = str(value).strip().lower()
+        if normalized in {'/yes', 'yes', 'true', '1', 'on', 'y', 'checked', 'x'}:
+            return '/Yes'
+        if normalized in {'/off', 'no', 'false', '0', 'off', 'n', ''}:
+            return '/Off'
+        return '/Yes'
+
+    def normalize_checkbox_entry(field_name, value):
+        if is_checkbox_field_name(field_name):
+            return normalize_checkbox_value(value)
+        return value
 
     conn = None
     cur = None
@@ -1322,7 +1346,7 @@ def generate_acord25_certificates(account_id):
             for key, value in account_template_values.items():
                 if value is None:
                     continue
-                base_field_values[str(key)] = value
+                base_field_values[str(key)] = normalize_checkbox_entry(str(key), value)
 
         if template_id and template_blob is None and not template_storage_path:
             try:
@@ -1336,7 +1360,8 @@ def generate_acord25_certificates(account_id):
                     for key, value in (metadata_values or {}).items():
                         if value is None:
                             continue
-                        base_field_values.setdefault(str(key), value)
+                        normalized_value = normalize_checkbox_entry(str(key), value)
+                        base_field_values.setdefault(str(key), normalized_value)
             except Exception as template_meta_error:
                 print(f"Warning: unable to load template metadata: {template_meta_error}")
     except Exception as db_error:
@@ -1397,19 +1422,26 @@ def generate_acord25_certificates(account_id):
                 final_field_values[str(key)] = value
 
         for key, value in holder_field_values.items():
+            normalized_value = normalize_checkbox_entry(key, value)
             base_val = final_field_values.get(key)
             if base_val is None or str(base_val).strip() == '':
-                final_field_values[key] = value if value not in (None, '') else ''
-            elif value not in (None, ''):
-                final_field_values[key] = value
+                if normalized_value not in (None, ''):
+                    final_field_values[key] = normalized_value
+            elif normalized_value not in (None, ''):
+                final_field_values[key] = normalized_value
+
+        for key, value in holder_field_values.items():
+            if key not in final_field_values:
+                final_field_values[key] = normalize_checkbox_entry(key, value)
+
+        for key in list(final_field_values.keys()):
+            final_field_values[key] = normalize_checkbox_entry(key, final_field_values[key])
 
         signature_text = (agency_settings.get('signatureText')
                           or agency_settings.get('signature_text')
                           or agency_settings.get('name')
                           or '')
         if signature_text:
-            final_field_values['Producer_AuthorizedRepresentative_Signature_A'] = signature_text
-        if signature_bytes is not None:
             final_field_values['Producer_AuthorizedRepresentative_Signature_A'] = signature_text
 
         try:
