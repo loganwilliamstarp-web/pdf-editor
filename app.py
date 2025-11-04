@@ -27,6 +27,78 @@ LOCAL_TEMPLATE_FILES = {
     "acord140": "acord140.pdf",
 }
 
+CERTIFICATE_HOLDER_FIELD_MAPPINGS = {
+    "acord25": {
+        "name": "CertificateHolder_FullName_A",
+        "address_line1": "CertificateHolder_MailingAddress_LineOne_A",
+        "address_line2": "CertificateHolder_MailingAddress_LineTwo_A",
+        "city": "CertificateHolder_MailingAddress_CityName_A",
+        "state": "CertificateHolder_MailingAddress_StateOrProvinceCode_A",
+        "postal_code": "CertificateHolder_MailingAddress_PostalCode_A",
+        "master_remarks": "CertificateOfLiabilityInsurance_ACORDForm_RemarkText_A",
+    },
+    "acord27": {
+        "name": "AdditionalInterest_FullName_A",
+        "address_line1": "AdditionalInterest_MailingAddress_LineOne_A",
+        "address_line2": "AdditionalInterest_MailingAddress_LineTwo_A",
+        "city": "AdditionalInterest_MailingAddress_CityName_A",
+        "state": "AdditionalInterest_MailingAddress_StateOrProvinceCode_A",
+        "postal_code": "AdditionalInterest_MailingAddress_PostalCode_A",
+        "master_remarks": "EvidenceOfProperty_RemarkText_A",
+    },
+    "acord28": {
+        "name": "AdditionalInterest_FullName_A",
+        "address_line1": "AdditionalInterest_MailingAddress_LineOne_A",
+        "address_line2": "AdditionalInterest_MailingAddress_LineTwo_A",
+        "city": "AdditionalInterest_MailingAddress_CityName_A",
+        "state": "AdditionalInterest_MailingAddress_StateOrProvinceCode_A",
+        "postal_code": "AdditionalInterest_MailingAddress_PostalCode_A",
+        "master_remarks": "CertificateOfLiabilityInsurance_ACORDForm_RemarkText_A",
+    },
+    "acord30": {
+        "name": "F[0].P1[0].CertificateHolder_FullName_A[0]",
+        "address_line1": "F[0].P1[0].CertificateHolder_MailingAddress_LineOne_A[0]",
+        "address_line2": "F[0].P1[0].CertificateHolder_MailingAddress_LineTwo_A[0]",
+        "city": "F[0].P1[0].CertificateHolder_MailingAddress_CityName_A[0]",
+        "state": "F[0].P1[0].CertificateHolder_MailingAddress_StateOrProvinceCode_A[0]",
+        "postal_code": "F[0].P1[0].CertificateHolder_MailingAddress_PostalCode_A[0]",
+        "master_remarks": "F[0].P1[0].CertificateOfLiabilityInsurance_ACORDForm_RemarkText_A[0]",
+    },
+    "acord35": {
+        "name": "F[0].P1[0].CancelNonRenew_Distribution_FullName_A[0]",
+        "address_line1": "F[0].P1[0].CancelNonRenew_DistributionMailingAddress_LineOne_A[0]",
+        "address_line2": "F[0].P1[0].CancelNonRenew_DistributionMailingAddress_LineTwo_A[0]",
+        "city": "F[0].P1[0].CancelNonRenew_DistributionMailingAddress_CityName_A[0]",
+        "state": "F[0].P1[0].CancelNonRenew_DistributionMailingAddress_StateOrProvinceCode_A[0]",
+        "postal_code": "F[0].P1[0].CancelNonRenew_DistributionMailingAddress_PostalCode_A[0]",
+        "master_remarks": "F[0].P1[0].CancelNonRenew_RemarkText_A[0]",
+    },
+    "acord126": {
+        "name": "AdditionalInterest_FullName_A",
+        "address_line1": "AdditionalInterest_MailingAddress_LineOne_A",
+        "address_line2": "AdditionalInterest_MailingAddress_LineTwo_A",
+        "city": "AdditionalInterest_MailingAddress_CityName_A",
+        "state": "AdditionalInterest_MailingAddress_StateOrProvinceCode_A",
+        "postal_code": "AdditionalInterest_MailingAddress_PostalCode_A",
+    },
+    "acord140": {
+        "name": "AdditionalInterest_FullName_A",
+        "address_line1": "AdditionalInterest_MailingAddress_LineOne_A",
+        "address_line2": "AdditionalInterest_MailingAddress_LineTwo_A",
+        "city": "AdditionalInterest_MailingAddress_CityName_A",
+        "state": "AdditionalInterest_MailingAddress_StateOrProvinceCode_A",
+        "postal_code": "AdditionalInterest_MailingAddress_PostalCode_A",
+    },
+}
+
+def get_certificate_holder_field_map(template_type):
+    """Return the field-name mapping for a given template type."""
+    default_map = CERTIFICATE_HOLDER_FIELD_MAPPINGS.get("acord25", {})
+    if not template_type:
+        return default_map
+    key = str(template_type).lower()
+    return CERTIFICATE_HOLDER_FIELD_MAPPINGS.get(key, default_map)
+
 US_STATE_CHOICES = {
     "AL": "Alabama",
     "AK": "Alaska",
@@ -1618,6 +1690,9 @@ def generate_acord25_certificates(account_id):
     generation_date = datetime.utcnow().strftime('%Y-%m-%d')
     generated_files = []
 
+    template_type_key = 'acord25'
+    holder_field_map = get_certificate_holder_field_map(template_type_key)
+
     for holder_key in holder_ids:
         holder_row = holders_by_id.get(holder_key)
         if not holder_row:
@@ -1626,15 +1701,24 @@ def generate_acord25_certificates(account_id):
         if not holder:
             continue
 
-        holder_field_values = {
-            'CertificateHolder_FullName_A': holder.get('name') or '',
-            'CertificateHolder_MailingAddress_LineOne_A': holder.get('address_line1') or '',
-            'CertificateHolder_MailingAddress_LineTwo_A': holder.get('address_line2') or '',
-            'CertificateHolder_MailingAddress_CityName_A': holder.get('city') or '',
-            'CertificateHolder_MailingAddress_StateOrProvinceCode_A': holder.get('state') or '',
-            'CertificateHolder_MailingAddress_PostalCode_A': holder.get('postal_code') or '',
-            'CertificateOfLiabilityInsurance_ACORDForm_RemarkText_A': holder.get('master_remarks') or ''
+        holder_source_values = {
+            'name': holder.get('name') or '',
+            'address_line1': holder.get('address_line1') or '',
+            'address_line2': holder.get('address_line2') or '',
+            'city': holder.get('city') or '',
+            'state': holder.get('state') or '',
+            'postal_code': holder.get('postal_code') or '',
+            'master_remarks': holder.get('master_remarks') or ''
         }
+
+        holder_field_values = {}
+        for source_key, target_field in holder_field_map.items():
+            if not target_field:
+                continue
+            value = holder_source_values.get(source_key)
+            if value is None:
+                continue
+            holder_field_values[target_field] = value
 
         final_field_values = {}
         if isinstance(base_field_values, dict):
