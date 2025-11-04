@@ -641,6 +641,101 @@ def load_master_template_pdf(template_type="acord25"):
             conn.close()
 
 
+def refresh_master_template_from_local(template_type, template_name=None):
+    """Replace stored master template PDF with the local copy."""
+    if not PSYCOPG2_AVAILABLE:
+        raise RuntimeError("psycopg2 not available; cannot refresh master templates.")
+
+    if not template_type:
+        raise ValueError("template_type is required")
+
+    template_type_key = str(template_type).lower()
+    local_filename = LOCAL_TEMPLATE_FILES.get(template_type_key)
+    if not local_filename:
+        raise ValueError(f"No local template mapping found for '{template_type}'")
+
+    local_path = LOCAL_TEMPLATE_DIR / local_filename
+    if not local_path.exists():
+        raise FileNotFoundError(f"Local template file not found: {local_path}")
+
+    pdf_bytes = local_path.read_bytes()
+    file_size = len(pdf_bytes)
+    storage_path = f"local://{local_path.name}"
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+
+        cur.execute(
+            '''
+            SELECT id, template_name
+            FROM master_templates
+            WHERE LOWER(template_type) = %s
+            ORDER BY updated_at DESC NULLS LAST, created_at DESC
+            LIMIT 1
+            ''',
+            (template_type_key,)
+        )
+        existing = cur.fetchone()
+
+        target_template_name = template_name
+        if existing:
+            existing_dict = dict(existing) if not isinstance(existing, dict) else existing
+            target_template_name = target_template_name or existing_dict.get('template_name') or template_type_key.upper()
+            target_id = existing_dict.get('id')
+            cur.execute(
+                '''
+                UPDATE master_templates
+                SET template_name = %s,
+                    storage_path = %s,
+                    file_size = %s,
+                    pdf_blob = %s,
+                    updated_at = NOW()
+                WHERE id = %s
+                ''',
+                (
+                    target_template_name,
+                    storage_path,
+                    file_size,
+                    psycopg2.Binary(pdf_bytes),
+                    target_id,
+                )
+            )
+            updated = cur.rowcount
+        else:
+            target_template_name = target_template_name or template_type_key.upper()
+            cur.execute(
+                '''
+                INSERT INTO master_templates (id, template_name, template_type, storage_path, file_size, pdf_blob, form_fields)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ''',
+                (
+                    str(uuid.uuid4()),
+                    target_template_name,
+                    template_type_key,
+                    storage_path,
+                    file_size,
+                    psycopg2.Binary(pdf_bytes),
+                    Json({}),
+                )
+            )
+            updated = cur.rowcount
+
+        conn.commit()
+        return {'updated_rows': updated, 'file_size': file_size, 'storage_path': storage_path}
+    except Exception:
+        if conn:
+            conn.rollback()
+        raise
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
 def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
     """Fill ACORD 25 PDF fields using PyMuPDF, with checkbox fallbacks via pypdf."""
     if not PYMUPDF_AVAILABLE:
@@ -1057,6 +1152,17 @@ def get_account_templates(account_id):
             template_data = dict(row)
             template_data['form_fields'] = coerce_form_fields_payload(template_data.get('form_fields'))
             template_payloads.append(template_data)
+
+        def template_sort_key(item):
+            name = str(item.get('template_name') or '')
+            template_type_value = str(item.get('template_type') or '')
+            for candidate in (name, template_type_value):
+                match = re.search(r'(\d+)', candidate)
+                if match:
+                    return (int(match.group(1)), name.lower())
+            return (10**6, name.lower())
+
+        template_payloads.sort(key=template_sort_key)
 
         return jsonify({
             'success': True,
