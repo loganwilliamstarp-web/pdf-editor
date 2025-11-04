@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Certificate Management System</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>PDF</text></svg>">
-    <link rel="stylesheet" href="tailwind.css" />
-    <script src="lucide.js" defer></script>
+    <link rel="stylesheet" href="/tailwind.css" />
+    <script src="/lucide.js" defer></script>
 </head>
 <body>
     <div class="min-h-screen bg-gray-100">
@@ -1937,7 +1937,7 @@ function initializePDFEditorPopup(popupWindow, context) {
             const link = doc.createElement('link');
             link.id = 'tailwind-popup-style';
             link.rel = 'stylesheet';
-            link.href = 'tailwind.css';
+            link.href = '/tailwind.css';
             link.onload = () => resolve();
             link.onerror = () => reject(new Error('Tailwind stylesheet failed to load'));
             doc.head.appendChild(link);
