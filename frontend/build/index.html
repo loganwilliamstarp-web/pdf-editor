@@ -60,9 +60,9 @@
                             class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
                         Refresh
                     </button>
-                    <button id="generateAcord25Btn" disabled
+                    <button id="generateCertificatesBtn" disabled
                             class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 opacity-50 cursor-not-allowed">
-                        Generate ACORD 25
+                        Generate Certificates
                     </button>
                     <button id="openHolderModalBtn"
                             class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
@@ -191,6 +191,42 @@
         </div>
     </div>
 
+    <!-- Template Selection Modal -->
+    <div id="templateSelectionModal" class="fixed inset-0 z-50 hidden items-center justify-center">
+        <div id="templateSelectionOverlay" class="absolute inset-0 bg-gray-900 bg-opacity-50"></div>
+        <div class="relative z-10 mx-auto w-full max-w-2xl px-4">
+            <div class="overflow-hidden rounded-lg bg-white shadow-xl">
+                <div class="flex items-center justify-between border-b px-6 py-4">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900">Select Templates</h3>
+                        <p class="text-sm text-gray-500">Choose one or more templates to generate for the selected certificate holders.</p>
+                    </div>
+                    <button id="templateSelectionCloseBtn" type="button"
+                            class="rounded-full p-1 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                        <span class="sr-only">Close</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 0 1 1.414 0L10 8.586l4.293-4.293a1 1 0 0 1 1.414 1.414L11.414 10l4.293 4.293a1 1 0 0 1-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 0 1-1.414-1.414L8.586 10 4.293 5.707a1 1 0 0 1 0-1.414Z" clip-rule="evenodd"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="max-h-80 overflow-y-auto px-6 py-4" id="templateSelectionList">
+                    <p class="text-sm text-gray-500">Loading templates...</p>
+                </div>
+                <div id="templateSelectionError" class="hidden px-6 text-sm text-red-600"></div>
+                <div class="flex justify-end gap-3 border-t px-6 py-4">
+                    <button id="templateSelectionCancelBtn" type="button"
+                            class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Cancel
+                    </button>
+                    <button id="templateSelectionConfirmBtn" type="button"
+                            class="inline-flex items-center rounded-md border border-transparent bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
+                        Generate
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Agency Settings Modal -->
     <div id="agencySettingsModal" class="fixed inset-0 z-50 hidden items-center justify-center">
         <div id="agencySettingsModalOverlay" class="absolute inset-0 bg-gray-900 bg-opacity-50"></div>
@@ -294,6 +330,8 @@
         let certificateHoldersLoaded = false;
         let certificateHolderCache = [];
         let selectedCertificateHolderIds = new Set();
+        let availableTemplates = [];
+        let selectedTemplateTypes = new Set(['acord25']);
         let editingCertificateHolderId = null;
         const HOLDER_MODAL_TITLE_DEFAULT = 'Add Certificate Holder';
         const HOLDER_MODAL_TITLE_EDIT = 'Edit Certificate Holder';
@@ -737,9 +775,29 @@
                 });
             }
 
-            const generateBtn = document.getElementById('generateAcord25Btn');
+            const generateBtn = document.getElementById('generateCertificatesBtn');
             if (generateBtn) {
-                generateBtn.addEventListener('click', generateAcord25Certificates);
+                generateBtn.addEventListener('click', handleGenerateCertificatesClick);
+            }
+
+            const templateConfirmBtn = document.getElementById('templateSelectionConfirmBtn');
+            if (templateConfirmBtn) {
+                templateConfirmBtn.addEventListener('click', handleTemplateSelectionConfirm);
+            }
+
+            const templateCancelBtn = document.getElementById('templateSelectionCancelBtn');
+            if (templateCancelBtn) {
+                templateCancelBtn.addEventListener('click', () => closeTemplateSelectionModal(true));
+            }
+
+            const templateCloseBtn = document.getElementById('templateSelectionCloseBtn');
+            if (templateCloseBtn) {
+                templateCloseBtn.addEventListener('click', () => closeTemplateSelectionModal(true));
+            }
+
+            const templateOverlay = document.getElementById('templateSelectionOverlay');
+            if (templateOverlay) {
+                templateOverlay.addEventListener('click', () => closeTemplateSelectionModal(true));
             }
 
             document.addEventListener('keydown', handleHolderModalKeydown);
@@ -750,7 +808,7 @@
             window.editCertificateHolder = editCertificateHolder;
             updateHolderSelectionSummary();
             closeHolderModal(true); // ensure hidden on load
-            updateGenerateAcord25ButtonState();
+            updateGenerateButtonState();
         }
 
         // Show tab content
@@ -844,14 +902,14 @@
             if (total === 0) {
                 summaryEl.textContent = 'No certificate holders available.';
                 setHolderActionMessage('info', 'Add a certificate holder to generate certificates.');
-                updateGenerateAcord25ButtonState();
+                updateGenerateButtonState();
                 return;
             }
 
             const count = selectedCertificateHolderIds.size;
             if (count === 0) {
                 summaryEl.textContent = 'No certificate holders selected.';
-                setHolderActionMessage('info', 'Select at least one certificate holder to generate ACORD 25 certificates.');
+                setHolderActionMessage('info', 'Select at least one certificate holder to generate certificates.');
             } else if (count === 1) {
                 summaryEl.textContent = '1 certificate holder selected.';
                 setHolderActionMessage('success', 'Ready to generate 1 certificate.');
@@ -860,7 +918,7 @@
                 setHolderActionMessage('success', `Ready to generate ${count} certificates.`);
             }
         }
-        updateGenerateAcord25ButtonState();
+        updateGenerateButtonState();
 
         function setHolderActionMessage(type = null, message = '') {
             const messageEl = document.getElementById('holderActionMessage');
@@ -883,8 +941,8 @@
             messageEl.textContent = message;
         }
 
-        function updateGenerateAcord25ButtonState() {
-            const button = document.getElementById('generateAcord25Btn');
+        function updateGenerateButtonState() {
+            const button = document.getElementById('generateCertificatesBtn');
             if (!button) {
                 return;
             }
@@ -940,7 +998,7 @@
                     }
                     updateHolderSelectAllState(selectAllEl, checkboxEls);
                     updateHolderSelectionSummary(holders.length);
-                    updateGenerateAcord25ButtonState();
+                    updateGenerateButtonState();
                 });
             });
 
@@ -965,12 +1023,12 @@
                     });
                     updateHolderSelectAllState(selectAllEl, checkboxEls);
                     updateHolderSelectionSummary(holders.length);
-                    updateGenerateAcord25ButtonState();
+                    updateGenerateButtonState();
                 });
             }
 
             updateHolderSelectionSummary(holders.length);
-            updateGenerateAcord25ButtonState();
+            updateGenerateButtonState();
         }
 
         function populateHolderForm(holder) {
@@ -1017,6 +1075,11 @@
 
         function isHolderModalOpen() {
             const modal = document.getElementById('holderModal');
+            return modal ? !modal.classList.contains('hidden') : false;
+        }
+
+        function isTemplateSelectionModalOpen() {
+            const modal = document.getElementById('templateSelectionModal');
             return modal ? !modal.classList.contains('hidden') : false;
         }
 
@@ -1084,9 +1147,16 @@
         }
 
         function handleHolderModalKeydown(event) {
-            if (event.key === 'Escape' && isHolderModalOpen()) {
-                event.preventDefault();
-                closeHolderModal(true);
+            if (event.key === 'Escape') {
+                if (isTemplateSelectionModalOpen()) {
+                    event.preventDefault();
+                    closeTemplateSelectionModal(true);
+                    return;
+                }
+                if (isHolderModalOpen()) {
+                    event.preventDefault();
+                    closeHolderModal(true);
+                }
             }
         }
 
@@ -1133,7 +1203,7 @@
             const accountId = getAccountId();
             holderList.innerHTML = '<p class="text-gray-600">Loading certificate holders...</p>';
             setHolderActionMessage('info', 'Loading certificate holders...');
-            updateGenerateAcord25ButtonState();
+            updateGenerateButtonState();
 
             try {
                 const response = await fetch(`/api/account/${accountId}/certificate-holders`);
@@ -1159,7 +1229,7 @@
                 certificateHoldersLoaded = false;
                 updateHolderSelectionSummary();
                 setHolderActionMessage('error', `Error loading certificate holders: ${escapeHtml(error.message)}`);
-                updateGenerateAcord25ButtonState();
+                updateGenerateButtonState();
             }
         }
 
@@ -1178,7 +1248,7 @@
                 selectedCertificateHolderIds.clear();
                 updateHolderSelectionSummary(0);
                 setHolderActionMessage('info', 'Add a certificate holder to generate certificates.');
-                updateGenerateAcord25ButtonState();
+                updateGenerateButtonState();
                 return;
             }
 
@@ -1343,11 +1413,210 @@
             }
         }
 
-        async function generateAcord25Certificates() {
-            const button = document.getElementById('generateAcord25Btn');
+        function handleGenerateCertificatesClick() {
+            const rawSelectedIds = Array.from(selectedCertificateHolderIds)
+                .map(id => (typeof id === 'string' ? id.trim() : String(id).trim()))
+                .filter(id => id.length > 0);
+
+            const selectedIds = Array.from(new Set(rawSelectedIds));
+
+            if (selectedIds.length === 0) {
+                setHolderActionMessage('info', 'Select at least one certificate holder to generate certificates.');
+                updateGenerateButtonState();
+                return;
+            }
+
+            const templatesWithTypes = availableTemplates.filter(template => (template.template_type || '').trim());
+            if (templatesWithTypes.length === 0) {
+                setHolderActionMessage('info', 'No templates are available to generate yet. Upload a template first.');
+                return;
+            }
+
+            openTemplateSelectionModal();
+        }
+
+        function renderTemplateSelectionList() {
+            const listEl = document.getElementById('templateSelectionList');
+            const errorEl = document.getElementById('templateSelectionError');
+            if (errorEl) {
+                errorEl.textContent = '';
+                errorEl.classList.add('hidden');
+            }
+            if (!listEl) {
+                return;
+            }
+
+            const templates = availableTemplates.filter(template => (template.template_type || '').trim());
+            if (templates.length === 0) {
+                listEl.innerHTML = '<p class="text-sm text-gray-500">No templates are available to select.</p>';
+                return;
+            }
+
+            listEl.innerHTML = templates.map(template => {
+                const typeKey = (template.template_type || '').toLowerCase();
+                const checkedAttr = selectedTemplateTypes.has(typeKey) ? 'checked' : '';
+                const friendlyName = template.template_name ? escapeHtml(template.template_name) : typeKey.toUpperCase();
+                const typeLabel = escapeHtml(template.template_type || 'Unknown');
+                return `
+                    <label class="flex items-start gap-3 rounded-md border border-gray-200 px-4 py-3 hover:border-indigo-300">
+                        <input type="checkbox" name="templateSelection" value="${escapeHtml(typeKey)}" class="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" ${checkedAttr}>
+                        <span>
+                            <span class="block text-sm font-medium text-gray-900">${friendlyName}</span>
+                            <span class="block text-xs text-gray-500">Type: ${typeLabel}</span>
+                        </span>
+                    </label>
+                `;
+            }).join('');
+        }
+
+        function openTemplateSelectionModal() {
+            renderTemplateSelectionList();
+            const modal = document.getElementById('templateSelectionModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            }
+        }
+
+        function closeTemplateSelectionModal(clearError = false) {
+            const modal = document.getElementById('templateSelectionModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+            if (clearError) {
+                const errorEl = document.getElementById('templateSelectionError');
+                if (errorEl) {
+                    errorEl.textContent = '';
+                    errorEl.classList.add('hidden');
+                }
+            }
+        }
+
+        function handleTemplateSelectionConfirm() {
+            const checkboxEls = Array.from(document.querySelectorAll('input[name="templateSelection"]:checked'));
+            const selectedTypes = checkboxEls
+                .map(input => (input.value || '').toLowerCase())
+                .filter(value => value.length > 0);
+
+            if (selectedTypes.length === 0) {
+                const errorEl = document.getElementById('templateSelectionError');
+                if (errorEl) {
+                    errorEl.textContent = 'Select at least one template to generate.';
+                    errorEl.classList.remove('hidden');
+                }
+                return;
+            }
+
+            selectedTemplateTypes = new Set(selectedTypes);
+            closeTemplateSelectionModal(true);
+            generateCertificatesForTemplates(selectedTypes);
+        }
+
+        async function generateCertificatesForTemplates(templateTypes) {
+            const button = document.getElementById('generateCertificatesBtn');
             if (!button) {
                 return;
             }
+
+            const rawSelectedIds = Array.from(selectedCertificateHolderIds)
+                .map(id => (typeof id === 'string' ? id.trim() : String(id).trim()))
+                .filter(id => id.length > 0);
+            const selectedIds = Array.from(new Set(rawSelectedIds));
+            if (selectedIds.length === 0) {
+                setHolderActionMessage('info', 'Select at least one certificate holder to generate certificates.');
+                updateGenerateButtonState();
+                return;
+            }
+
+            if (!Array.isArray(templateTypes) || templateTypes.length === 0) {
+                setHolderActionMessage('info', 'Select at least one template to generate.');
+                return;
+            }
+
+            const originalText = button.textContent;
+            button.disabled = true;
+            button.classList.add('cursor-wait');
+            button.textContent = 'Generating...';
+
+            setHolderActionMessage('info', 'Generating certificates...');
+
+            try {
+                loadAgencySettingsFromStorage();
+                const context = getAccountContext();
+                const accountId = context.accountId;
+                const ownerId = context.ownerId;
+
+                const payload = {
+                    holder_ids: selectedIds,
+                    template_types: templateTypes,
+                    owner_id: ownerId || null,
+                    agency_settings: agencySettings || null
+                };
+
+                const response = await fetch(`/api/account/${accountId}/certificate-holders/generated`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    let errorMessage = 'Failed to generate certificates.';
+                    try {
+                        const result = await response.json();
+                        errorMessage = result.error || errorMessage;
+                    } catch (jsonError) {
+                        errorMessage = `${errorMessage} (${response.status})`;
+                    }
+                    setHolderActionMessage('error', escapeHtml(errorMessage));
+                    return;
+                }
+
+                const blob = await response.blob();
+                let filename = 'certificates.pdf';
+                const disposition = response.headers.get('Content-Disposition') || '';
+                const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/);
+                if (match) {
+                    try {
+                        filename = decodeURIComponent(match[1] || match[2] || filename);
+                    } catch (decodeError) {
+                        filename = match[1] || match[2] || filename;
+                    }
+                } else {
+                    const today = new Date().toISOString().slice(0, 10);
+                    const multipleTemplates = templateTypes.length > 1;
+                    const multipleHolders = selectedIds.length > 1;
+                    if (multipleTemplates || multipleHolders) {
+                        filename = `Certificates_${today}.zip`;
+                    } else {
+                        filename = `Certificate_${today}.pdf`;
+                    }
+                }
+
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+
+                const multipleFiles = filename.toLowerCase().endsWith('.zip');
+                setHolderActionMessage(
+                    'success',
+                    multipleFiles ? 'Certificates ZIP downloaded successfully.' : 'Certificate downloaded successfully.'
+                );
+            } catch (error) {
+                setHolderActionMessage('error', `Failed to generate certificates: ${escapeHtml(error.message)}`);
+            } finally {
+                button.classList.remove('cursor-wait');
+                button.disabled = false;
+                button.textContent = originalText || 'Generate Certificates';
+                updateGenerateButtonState();
+            }
+        }
+
 
             const rawSelectedIds = Array.from(selectedCertificateHolderIds)
                 .map(id => (typeof id === 'string' ? id.trim() : String(id).trim()))
@@ -1356,8 +1625,8 @@
             const selectedIds = Array.from(new Set(rawSelectedIds));
 
             if (selectedIds.length === 0) {
-                setHolderActionMessage('info', 'Select at least one certificate holder to generate ACORD 25 certificates.');
-                updateGenerateAcord25ButtonState();
+                setHolderActionMessage('info', 'Select at least one certificate holder to generate certificates.');
+                updateGenerateButtonState();
                 return;
             }
 
@@ -1441,7 +1710,7 @@
                 button.classList.remove('cursor-wait');
                 button.disabled = false;
                 button.textContent = originalText || 'Generate ACORD 25';
-                updateGenerateAcord25ButtonState();
+                updateGenerateButtonState();
             }
         }
 
@@ -1454,11 +1723,25 @@
                 const data = await response.json();
                 console.log('Templates response:', data);
                 
+                availableTemplates = Array.isArray(data.templates) ? [...data.templates] : [];
+                const availableTypes = new Set(
+                    availableTemplates
+                        .map(template => (template.template_type || '').toLowerCase())
+                        .filter(Boolean)
+                );
+                selectedTemplateTypes = new Set(
+                    [...selectedTemplateTypes].filter(type => availableTypes.has(type))
+                );
+                if (!selectedTemplateTypes.size && availableTypes.has('acord25')) {
+                    selectedTemplateTypes.add('acord25');
+                }
+
                 const templatesList = document.getElementById('templatesList');
-                if (data.success && data.templates && data.templates.length > 0) {
-                    templatesList.innerHTML = `
+                if (templatesList) {
+                    if (availableTemplates.length > 0) {
+                        templatesList.innerHTML = `
                         <ul class="divide-y divide-gray-200">
-                            ${data.templates.map(template => `
+                            ${availableTemplates.map(template => `
                                 <li class="py-4 flex items-center justify-between">
                                     <div class="flex items-center">
                                         <div class="w-6 h-6 text-gray-500 mr-3">PDF</div>
@@ -1474,12 +1757,21 @@
                             `).join('')}
                         </ul>
                     `;
-                } else {
-                    templatesList.innerHTML = '<p class="text-gray-600">No templates found.</p>';
+                    } else {
+                        templatesList.innerHTML = '<p class="text-gray-600">No templates found.</p>';
+                    }
+                }
+
+                if (!document.getElementById('templateSelectionModal').classList.contains('hidden')) {
+                    renderTemplateSelectionList();
                 }
             } catch (error) {
                 console.error('Error loading templates:', error);
-                document.getElementById('templatesList').innerHTML = `<p class="text-red-600">Error loading templates: ${error.message}</p>`;
+                const templatesList = document.getElementById('templatesList');
+                if (templatesList) {
+                    templatesList.innerHTML = `<p class="text-red-600">Error loading templates: ${escapeHtml(error.message)}</p>`;
+                }
+                availableTemplates = [];
             }
         }
 
