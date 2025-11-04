@@ -99,6 +99,107 @@ def get_certificate_holder_field_map(template_type):
     key = str(template_type).lower()
     return CERTIFICATE_HOLDER_FIELD_MAPPINGS.get(key, default_map)
 
+
+def build_holder_field_values(holder, holder_field_map):
+    """Map canonical holder fields to template-specific field names."""
+    if not holder or not holder_field_map:
+        return {}
+
+    source_values = {
+        'name': holder.get('name') or '',
+        'address_line1': holder.get('address_line1') or '',
+        'address_line2': holder.get('address_line2') or '',
+        'city': holder.get('city') or '',
+        'state': holder.get('state') or '',
+        'postal_code': holder.get('postal_code') or '',
+        'master_remarks': holder.get('master_remarks') or '',
+        'email': holder.get('email') or '',
+        'phone': holder.get('phone') or '',
+    }
+
+    mapped_values = {}
+    for source_key, target_field in holder_field_map.items():
+        if not target_field:
+            continue
+        value = source_values.get(source_key)
+        if value is None:
+            continue
+        mapped_values[str(target_field)] = value
+    return mapped_values
+
+
+def assemble_base_field_values(conn, normalized_account_id, template_id, template_blob, template_storage_path):
+    """Load persisted template field values for an account and normalize them."""
+    base_field_values = {}
+    if not conn or not template_id:
+        return base_field_values
+
+    template_data_row = None
+    cur = None
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            '''
+            SELECT field_values
+            FROM template_data
+            WHERE account_id = %s AND template_id = %s
+            LIMIT 1
+            ''',
+            (normalized_account_id, template_id)
+        )
+        template_data_row = cur.fetchone()
+    except Exception as template_data_error:
+        print(f"Warning: unable to load template data for account {normalized_account_id}: {template_data_error}")
+    finally:
+        if cur:
+            cur.close()
+
+    account_template_values = {}
+    if template_data_row:
+        if not isinstance(template_data_row, dict):
+            template_data_row = dict(template_data_row)
+        field_values_raw = template_data_row.get('field_values')
+        if isinstance(field_values_raw, str):
+            try:
+                account_template_values = json.loads(field_values_raw) or {}
+            except json.JSONDecodeError:
+                account_template_values = {}
+        elif isinstance(field_values_raw, dict):
+            account_template_values = field_values_raw or {}
+
+    if isinstance(account_template_values, dict):
+        for key, value in account_template_values.items():
+            if value is None:
+                continue
+            base_field_values[str(key)] = normalize_checkbox_entry(str(key), value)
+
+    # Fallback to template metadata if no blob/storage path (legacy templates)
+    if template_id and template_blob is None and not template_storage_path:
+        meta_cur = None
+        try:
+            meta_cur = conn.cursor()
+            meta_cur.execute(
+                'SELECT form_fields FROM master_templates WHERE id = %s LIMIT 1',
+                (template_id,)
+            )
+            simple_template_row = meta_cur.fetchone()
+        except Exception as template_meta_error:
+            print(f"Warning: unable to load template metadata for template {template_id}: {template_meta_error}")
+            simple_template_row = None
+        finally:
+            if meta_cur:
+                meta_cur.close()
+
+        if simple_template_row and simple_template_row.get('form_fields'):
+            metadata_values = coerce_form_fields_payload(simple_template_row['form_fields']).get('field_values') or {}
+            for key, value in (metadata_values or {}).items():
+                if value is None:
+                    continue
+                normalized_value = normalize_checkbox_entry(str(key), value)
+                base_field_values.setdefault(str(key), normalized_value)
+
+    return base_field_values
+
 US_STATE_CHOICES = {
     "AL": "Alabama",
     "AK": "Alaska",
@@ -422,6 +523,13 @@ def normalize_checkbox_value(value):
     if normalized in {'/off', 'no', 'false', '0', 'off', 'n', ''}:
         return '/Off'
     return '/Yes'
+
+
+def normalize_checkbox_entry(field_name, value):
+    """Normalize checkbox-style entries based on their field name."""
+    if is_checkbox_field_name(field_name):
+        return normalize_checkbox_value(value)
+    return value
 
 def is_checkbox_checked(value):
     """Determine if a checkbox value represents 'checked'."""
@@ -808,10 +916,10 @@ def refresh_master_template_from_local(template_type, template_name=None):
             conn.close()
 
 
-def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
-    """Fill ACORD 25 PDF fields using PyMuPDF, with checkbox fallbacks via pypdf."""
+def fill_pdf_fields(pdf_bytes, field_values, signature_bytes=None):
+    """Fill PDF fields using PyMuPDF, with checkbox fallbacks via pypdf."""
     if not PYMUPDF_AVAILABLE:
-        raise RuntimeError("PyMuPDF (fitz) is required to generate ACORD 25 certificates")
+        raise RuntimeError("PyMuPDF (fitz) is required to generate filled certificates")
 
     if not pdf_bytes:
         raise ValueError("Template PDF content is empty")
@@ -949,6 +1057,11 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
         print(f"Checkbox/text fill warnings: {sample}")
 
     return filled_bytes
+
+
+def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
+    """Backward-compatible wrapper for ACORD 25 generation."""
+    return fill_pdf_fields(pdf_bytes, field_values, signature_bytes=signature_bytes)
 
 
 def sanitize_filename_component(value, fallback="document"):
@@ -1516,9 +1629,111 @@ def delete_certificate_holder(account_id, holder_id):
         if conn:
             conn.close()
 
-@app.route("/api/account/<account_id>/certificate-holders/generated/acord25", methods=['POST'])
-def generate_acord25_certificates(account_id):
-    """Generate ACORD 25 certificates for selected holders."""
+
+def fetch_certificate_holders_by_ids(conn, normalized_account_id, holder_ids):
+    """Fetch certificate holder rows for the given account and IDs."""
+    if not holder_ids:
+        return []
+
+    placeholders = ','.join(['%s'] * len(holder_ids))
+    query = f"""
+        SELECT id, account_id, name, master_remarks, address_line1, address_line2,
+               city, state, postal_code, email, phone, created_at, updated_at
+        FROM certificate_holders
+        WHERE account_id = %s AND id IN ({placeholders})
+        ORDER BY name ASC, created_at DESC
+    """
+    params = [normalized_account_id] + holder_ids
+
+    cur = conn.cursor()
+    try:
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        return rows or []
+    finally:
+        cur.close()
+
+
+def generate_documents_for_templates(conn, normalized_account_id, holder_ids, holder_objects, template_types, agency_settings, signature_bytes):
+    """Generate filled PDFs for each requested template and holder."""
+    generated_files = []
+    errors = []
+
+    if not template_types:
+        return generated_files, ['No templates provided for generation.']
+
+    generation_date = datetime.utcnow().strftime('%Y-%m-%d')
+    signature_text = (
+        agency_settings.get('signatureText')
+        or agency_settings.get('signature_text')
+        or agency_settings.get('name')
+        or ''
+    )
+
+    for template_type in template_types:
+        template_type_key = str(template_type or '').strip().lower()
+        if not template_type_key:
+            continue
+
+        holder_field_map = get_certificate_holder_field_map(template_type_key)
+        if not holder_field_map:
+            errors.append(f"No certificate holder field mapping configured for template '{template_type_key}'.")
+            continue
+
+        template_id, template_name, template_blob, template_storage_path, template_bytes = load_master_template_pdf(template_type_key)
+        if not template_bytes:
+            errors.append(f"Template '{template_type_key}' is not available or missing PDF content.")
+            continue
+
+        base_field_values = assemble_base_field_values(conn, normalized_account_id, template_id, template_blob, template_storage_path)
+        template_label = sanitize_filename_component(template_name or template_type_key.upper(), fallback=template_type_key.upper())
+
+        for holder_key in holder_ids:
+            holder = holder_objects.get(holder_key)
+            if not holder:
+                errors.append(f"Certificate holder '{holder_key}' not found for generation.")
+                continue
+
+            holder_field_values = build_holder_field_values(holder, holder_field_map)
+            final_field_values = dict(base_field_values)
+
+            for field_name, value in holder_field_values.items():
+                normalized_value = normalize_checkbox_entry(field_name, value)
+                base_val = final_field_values.get(field_name)
+                if base_val is None or str(base_val).strip() == '':
+                    if normalized_value not in (None, ''):
+                        final_field_values[field_name] = normalized_value
+                elif normalized_value not in (None, ''):
+                    final_field_values[field_name] = normalized_value
+
+            for key in list(final_field_values.keys()):
+                final_field_values[key] = normalize_checkbox_entry(key, final_field_values[key])
+
+            if signature_text:
+                final_field_values['Producer_AuthorizedRepresentative_Signature_A'] = signature_text
+
+            try:
+                filled_pdf = fill_pdf_fields(template_bytes, final_field_values, signature_bytes=signature_bytes)
+            except Exception as fill_error:
+                errors.append(f"Failed to generate {template_type_key.upper()} for '{holder.get('name') or holder_key}': {fill_error}")
+                continue
+
+            holder_component = sanitize_filename_component(holder.get('name'), fallback=f'holder_{holder_key}')
+            filename = f"{template_label}_{holder_component}_{generation_date}.pdf"
+
+            generated_files.append({
+                'filename': filename,
+                'pdf_bytes': filled_pdf,
+                'template_id': template_id,
+                'template_type': template_type_key,
+                'holder_id': holder_key,
+            })
+
+    return generated_files, errors
+
+
+def process_certificate_generation_request(account_id, payload, default_template_types=None):
+    """Shared handler for generating certificates for selected holders and templates."""
     if not PSYCOPG2_AVAILABLE:
         return database_not_configured_response()
 
@@ -1530,11 +1745,7 @@ def generate_acord25_certificates(account_id):
     except ValueError as exc:
         return jsonify({'success': False, 'error': str(exc)}), 400
 
-    try:
-        payload = request.get_json(force=True) or {}
-    except Exception:
-        payload = {}
-
+    payload = payload or {}
     holder_ids_raw = payload.get('holder_ids') or []
     if not isinstance(holder_ids_raw, (list, tuple)):
         return jsonify({'success': False, 'error': 'holder_ids must be a list'}), 400
@@ -1555,285 +1766,168 @@ def generate_acord25_certificates(account_id):
     if not holder_ids:
         return jsonify({'success': False, 'error': 'No certificate holders selected'}), 400
 
+    template_types_raw = payload.get('template_types')
+    if not template_types_raw and default_template_types:
+        template_types_raw = default_template_types
+
+    if isinstance(template_types_raw, str):
+        template_types_raw = [template_types_raw]
+    if not isinstance(template_types_raw, (list, tuple)):
+        return jsonify({'success': False, 'error': 'template_types must be a list of template identifiers'}), 400
+
+    template_types = []
+    template_type_keys = set()
+    for entry in template_types_raw:
+        template_type_value = str(entry or '').strip().lower()
+        if not template_type_value:
+            continue
+        if template_type_value in template_type_keys:
+            continue
+        template_types.append(template_type_value)
+        template_type_keys.add(template_type_value)
+
+    if not template_types:
+        return jsonify({'success': False, 'error': 'Select at least one template to generate.'}), 400
+
     agency_settings = payload.get('agency_settings') or {}
-    signature_data_url = agency_settings.get('signatureDataUrl') or agency_settings.get('signature_data_url')
+    signature_data_url = (
+        agency_settings.get('signatureDataUrl')
+        or agency_settings.get('signature_data_url')
+    )
     signature_bytes = decode_data_url(signature_data_url) if signature_data_url else None
-    signature_bytes = None  # Use text-based signature representation
-
-    template_id, template_name, template_blob, template_storage_path, template_bytes = load_master_template_pdf('acord25')
-    if not template_bytes:
-        # Fallback to bundled template if database does not have binary data
-        local_template = resolve_local_template_file('acord25', None)
-        if local_template and local_template.exists():
-            template_bytes = local_template.read_bytes()
-        else:
-            return jsonify({'success': False, 'error': 'ACORD 25 template is not available'}), 503
-
-    base_field_values = {}
-
-    def is_checkbox_field_name(field_name):
-        if not field_name:
-            return False
-        field_lower = field_name.lower()
-        if field_lower.endswith('text'):
-            return False
-        return any(token in field_lower for token in ['indicator', 'checkbox', 'check', 'box'])
-
-    def normalize_checkbox_value(value):
-        if value is None:
-            return '/Off'
-        normalized = str(value).strip().lower()
-        if normalized in {'/yes', 'yes', 'true', '1', 'on', 'y', 'checked', 'x'}:
-            return '/Yes'
-        if normalized in {'/off', 'no', 'false', '0', 'off', 'n', ''}:
-            return '/Off'
-        return '/Yes'
-
-    def normalize_checkbox_entry(field_name, value):
-        if is_checkbox_field_name(field_name):
-            return normalize_checkbox_value(value)
-        return value
+    # Use text-based signature representation by default
+    signature_bytes = None
 
     conn = None
-    cur = None
     try:
         conn = get_db()
-        cur = conn.cursor()
-        placeholders = ','.join(['%s'] * len(holder_ids))
-        query = f"""
-            SELECT id, account_id, name, master_remarks, address_line1, address_line2,
-                   city, state, postal_code, email, phone
-            FROM certificate_holders
-            WHERE account_id = %s AND id IN ({placeholders})
-            ORDER BY name ASC, created_at DESC
-        """
-        params = [normalized_account_id] + holder_ids
-        cur.execute(query, params)
-        rows = cur.fetchall()
-        account_template_values = {}
-        if template_id:
-            try:
-                cur.execute(
-                    '''
-                    SELECT field_values
-                    FROM template_data
-                    WHERE account_id = %s AND template_id = %s
-                    LIMIT 1
-                    ''',
-                    (normalized_account_id, template_id)
-                )
-                template_data_row = cur.fetchone()
-                if template_data_row:
-                    field_values_raw = template_data_row.get('field_values')
-                    if isinstance(field_values_raw, str):
-                        try:
-                            account_template_values = json.loads(field_values_raw) or {}
-                        except json.JSONDecodeError:
-                            account_template_values = {}
-                    elif isinstance(field_values_raw, dict):
-                        account_template_values = field_values_raw or {}
-            except Exception as template_data_error:
-                print(f"Warning: unable to load template data for account {normalized_account_id}: {template_data_error}")
-                account_template_values = {}
+        holder_rows = fetch_certificate_holders_by_ids(conn, normalized_account_id, holder_ids)
+        if not holder_rows:
+            return jsonify({'success': False, 'error': 'Certificate holders not found'}), 404
 
-        if isinstance(account_template_values, dict):
-            for key, value in account_template_values.items():
-                if value is None:
-                    continue
-                base_field_values[str(key)] = normalize_checkbox_entry(str(key), value)
-
-        if template_id and template_blob is None and not template_storage_path:
-            try:
-                cur.execute(
-                    'SELECT form_fields FROM master_templates WHERE id = %s LIMIT 1',
-                    (template_id,)
-                )
-                simple_template_row = cur.fetchone()
-                if simple_template_row and simple_template_row.get('form_fields'):
-                    metadata_values = coerce_form_fields_payload(simple_template_row['form_fields']).get('field_values') or {}
-                    for key, value in (metadata_values or {}).items():
-                        if value is None:
-                            continue
-                        normalized_value = normalize_checkbox_entry(str(key), value)
-                        base_field_values.setdefault(str(key), normalized_value)
-            except Exception as template_meta_error:
-                print(f"Warning: unable to load template metadata: {template_meta_error}")
-    except Exception as db_error:
-        if conn:
-            conn.rollback()
-        return jsonify({'success': False, 'error': str(db_error)}), 500
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
-
-    if not rows:
-        return jsonify({'success': False, 'error': 'Certificate holders not found'}), 404
-
-    holders_by_id = {}
-    for row in rows:
-        if row is None:
-            continue
-        if not isinstance(row, dict):
-            row = dict(row)
-        raw_id = row.get('id')
-        if not raw_id:
-            continue
-        holder_key = str(raw_id)
-        holders_by_id[holder_key] = row
-
-    missing_ids = [hid for hid in holder_ids if hid not in holders_by_id]
-    if missing_ids:
-        return jsonify({'success': False, 'error': f'Certificate holders not found: {missing_ids}'}), 404
-
-    generation_date = datetime.utcnow().strftime('%Y-%m-%d')
-    generated_files = []
-
-    template_type_key = 'acord25'
-    holder_field_map = get_certificate_holder_field_map(template_type_key)
-
-    for holder_key in holder_ids:
-        holder_row = holders_by_id.get(holder_key)
-        if not holder_row:
-            continue
-        holder = format_certificate_holder(holder_row)
-        if not holder:
-            continue
-
-        holder_source_values = {
-            'name': holder.get('name') or '',
-            'address_line1': holder.get('address_line1') or '',
-            'address_line2': holder.get('address_line2') or '',
-            'city': holder.get('city') or '',
-            'state': holder.get('state') or '',
-            'postal_code': holder.get('postal_code') or '',
-            'master_remarks': holder.get('master_remarks') or ''
-        }
-
-        holder_field_values = {}
-        for source_key, target_field in holder_field_map.items():
-            if not target_field:
+        holders_by_id = {}
+        for row in holder_rows:
+            if not isinstance(row, dict):
+                row = dict(row)
+            raw_id = row.get('id')
+            if not raw_id:
                 continue
-            value = holder_source_values.get(source_key)
-            if value is None:
+            holders_by_id[str(raw_id)] = row
+
+        missing_ids = [hid for hid in holder_ids if hid not in holders_by_id]
+        if missing_ids:
+            return jsonify({'success': False, 'error': f'Certificate holders not found: {missing_ids}'}), 404
+
+        holder_objects = {}
+        for holder_id in holder_ids:
+            row = holders_by_id.get(holder_id)
+            if not row:
                 continue
-            holder_field_values[target_field] = value
+            holder = format_certificate_holder(row)
+            if holder:
+                holder_objects[holder_id] = holder
 
-        final_field_values = {}
-        if isinstance(base_field_values, dict):
-            for key, value in base_field_values.items():
-                if value is None:
-                    continue
-                final_field_values[str(key)] = value
+        generated_files, errors = generate_documents_for_templates(
+            conn,
+            normalized_account_id,
+            holder_ids,
+            holder_objects,
+            template_types,
+            agency_settings,
+            signature_bytes
+        )
 
-        for key, value in holder_field_values.items():
-            normalized_value = normalize_checkbox_entry(key, value)
-            base_val = final_field_values.get(key)
-            if base_val is None or str(base_val).strip() == '':
-                if normalized_value not in (None, ''):
-                    final_field_values[key] = normalized_value
-            elif normalized_value not in (None, ''):
-                final_field_values[key] = normalized_value
+        if not generated_files:
+            error_message = errors[0] if errors else 'No certificates generated'
+            return jsonify({'success': False, 'error': error_message}), 400
 
-        for key, value in holder_field_values.items():
-            if key not in final_field_values:
-                final_field_values[key] = normalize_checkbox_entry(key, value)
+        generation_date = datetime.utcnow().strftime('%Y-%m-%d')
+        response_stream = None
+        response_mimetype = 'application/zip'
+        response_filename = f"Certificates_{sanitize_filename_component(normalized_account_id)}_{generation_date}.zip"
 
-        for key in list(final_field_values.keys()):
-            final_field_values[key] = normalize_checkbox_entry(key, final_field_values[key])
+        if len(generated_files) == 1:
+            single_item = generated_files[0]
+            response_stream = io.BytesIO(single_item['pdf_bytes'])
+            response_stream.seek(0)
+            response_mimetype = 'application/pdf'
+            response_filename = single_item['filename']
+        else:
+            response_stream = io.BytesIO()
+            with zipfile.ZipFile(response_stream, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
+                for item in generated_files:
+                    zip_file.writestr(item['filename'], item['pdf_bytes'])
+            response_stream.seek(0)
 
-        signature_text = (agency_settings.get('signatureText')
-                          or agency_settings.get('signature_text')
-                          or agency_settings.get('name')
-                          or '')
-        if signature_text:
-            final_field_values['Producer_AuthorizedRepresentative_Signature_A'] = signature_text
+        ensure_generated_certificates_table()
 
         try:
-            filled_pdf = fill_acord25_fields(template_bytes, final_field_values, signature_bytes=signature_bytes)
-        except Exception as fill_error:
-            return jsonify({'success': False, 'error': f'Failed to generate PDF for {holder.get("name")}: {fill_error}'}), 500
+            cur = conn.cursor()
+            for item in generated_files:
+                holder_key = item.get('holder_id')
+                local_path = None
+                if LOCAL_TEMPLATE_DIR.exists():
+                    account_dir = LOCAL_TEMPLATE_DIR.parent / 'generated' / sanitize_filename_component(normalized_account_id)
+                    account_dir.mkdir(parents=True, exist_ok=True)
+                    file_path = account_dir / item['filename']
+                    file_path.write_bytes(item['pdf_bytes'])
+                    local_path = str(file_path.relative_to(LOCAL_TEMPLATE_DIR.parent))
 
-        holder_name_component = sanitize_filename_component(holder.get('name'), fallback=f'holder_{holder_key}')
-        filename = f"{holder_name_component}_{generation_date}.pdf"
-        generated_files.append((filename, filled_pdf))
-
-    if not generated_files:
-        return jsonify({'success': False, 'error': 'No certificates generated'}), 500
-
-    response_stream = None
-    response_mimetype = 'application/zip'
-    response_filename = f"ACORD25_{sanitize_filename_component(normalized_account_id)}_{generation_date}.zip"
-
-    if len(generated_files) == 1:
-        single_name, single_bytes = generated_files[0]
-        response_stream = io.BytesIO(single_bytes)
-        response_stream.seek(0)
-        response_mimetype = 'application/pdf'
-        response_filename = single_name
-    else:
-        response_stream = io.BytesIO()
-        with zipfile.ZipFile(response_stream, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
-            for filename, pdf_bytes in generated_files:
-                zip_file.writestr(filename, pdf_bytes)
-        response_stream.seek(0)
-
-    ensure_generated_certificates_table()
-
-    conn = None
-    cur = None
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-
-        for idx, (filename, pdf_bytes) in enumerate(generated_files):
-            holder_key = holder_ids[idx] if idx < len(holder_ids) else None
-            local_path = None
-            if LOCAL_TEMPLATE_DIR.exists():
-                account_dir = LOCAL_TEMPLATE_DIR.parent / 'generated' / sanitize_filename_component(normalized_account_id)
-                account_dir.mkdir(parents=True, exist_ok=True)
-                file_path = account_dir / filename
-                file_path.write_bytes(pdf_bytes)
-                local_path = str(file_path.relative_to(LOCAL_TEMPLATE_DIR.parent))
-
-            cur.execute(
-                '''
-                INSERT INTO generated_certificates (
-                    id, account_id, template_id, certificate_holder_id, filename, storage_path, pdf_blob, generated_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-                RETURNING id
-                ''',
-                (
-                    str(uuid.uuid4()),
-                    normalized_account_id,
-                    template_id,
-                    holder_key,
-                    filename,
-                    local_path,
-                    psycopg2.Binary(pdf_bytes) if PSYCOPG2_AVAILABLE else None
+                cur.execute(
+                    '''
+                    INSERT INTO generated_certificates (
+                        id, account_id, template_id, certificate_holder_id, filename, storage_path, pdf_blob, generated_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                    RETURNING id
+                    ''',
+                    (
+                        str(uuid.uuid4()),
+                        normalized_account_id,
+                        item.get('template_id'),
+                        holder_key,
+                        item['filename'],
+                        local_path,
+                        psycopg2.Binary(item['pdf_bytes']) if PSYCOPG2_AVAILABLE else None,
+                    )
                 )
-            )
-        conn.commit()
-    except Exception as store_error:
-        print(f"Warning: unable to persist generated certificates: {store_error}")
-        if conn:
-            conn.rollback()
-    finally:
-        if cur:
+            conn.commit()
             cur.close()
+        except Exception as store_error:
+            print(f"Warning: unable to persist generated certificates: {store_error}")
+            if conn:
+                conn.rollback()
+
+        return send_file(
+            response_stream,
+            mimetype=response_mimetype,
+            as_attachment=True,
+            download_name=response_filename
+        )
+    except Exception as error:
+        return jsonify({'success': False, 'error': str(error)}), 500
+    finally:
         if conn:
             conn.close()
 
-    response_stream.seek(0)
-    return send_file(
-        response_stream,
-        mimetype=response_mimetype,
-        as_attachment=True,
-        download_name=response_filename
-    )
+
+@app.route("/api/account/<account_id>/certificate-holders/generated/acord25", methods=['POST'])
+def generate_acord25_certificates(account_id):
+    '''Generate ACORD 25 certificates for selected holders (legacy endpoint).'''
+    try:
+        payload = request.get_json(force=True) or {}
+    except Exception:
+        payload = {}
+    return process_certificate_generation_request(account_id, payload, default_template_types=['acord25'])
 
 
+@app.route("/api/account/<account_id>/certificate-holders/generated", methods=['POST'])
+def generate_certificates(account_id):
+    """Generate certificates for selected holders using specified templates."""
+    try:
+        payload = request.get_json(force=True) or {}
+    except Exception:
+        payload = {}
+    return process_certificate_generation_request(account_id, payload)
 
 
 @app.route("/api/provision-pdf", methods=['POST'])
