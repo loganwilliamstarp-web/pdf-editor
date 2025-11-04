@@ -361,7 +361,7 @@
         }
 
         
-        window.generateCertificatesForTemplates = generateCertificatesForTemplates;function classifySalesforceId(value) {
+        function classifySalesforceId(value) {
             if (!value || !SALESFORCE_ID_REGEX.test(value)) {
                 return null;
             }
@@ -440,6 +440,10 @@
             const normalizedAccount = normalizeSalesforceId(accountId) || DEFAULT_ACCOUNT_ID;
             return `${AGENCY_SETTINGS_STORAGE_PREFIX}:${normalizedAccount}`;
         }
+
+        // Placeholder assignments to avoid early reference errors
+        window.loadTemplates = window.loadTemplates || function() {};
+        window.generateCertificatesForTemplates = window.generateCertificatesForTemplates || function() {};
 
         // Initialize the app
         function initApp() {
@@ -1620,67 +1624,11 @@
                 button.textContent = originalText || 'Generate Certificates';
                 updateGenerateButtonState();
             }
-        // Load templates
-        async function loadTemplates() {
-            try {
-                const accountId = getAccountId();
-                console.log('Loading templates for account:', accountId);
-                const response = await fetch(`/api/account/${accountId}/templates`);
-                const data = await response.json();
-                console.log('Templates response:', data);
-                
-                availableTemplates = Array.isArray(data.templates) ? [...data.templates] : [];
-                const availableTypes = new Set(
-                    availableTemplates
-                        .map(template => (template.template_type || '').toLowerCase())
-                        .filter(Boolean)
-                );
-                selectedTemplateTypes = new Set(
-                    [...selectedTemplateTypes].filter(type => availableTypes.has(type))
-                );
-                if (!selectedTemplateTypes.size && availableTypes.has('acord25')) {
-                    selectedTemplateTypes.add('acord25');
-                }
-
-                const templatesList = document.getElementById('templatesList');
-                if (templatesList) {
-                    if (availableTemplates.length > 0) {
-                        templatesList.innerHTML = `
-                        <ul class="divide-y divide-gray-200">
-                            ${availableTemplates.map(template => `
-                                <li class="py-4 flex items-center justify-between">
-                                    <div class="flex items-center">
-                                        <div class="w-6 h-6 text-gray-500 mr-3">PDF</div>
-                                        <div>
-                                            <p class="text-sm font-medium text-gray-900">${template.template_name}</p>
-                                            <p class="text-sm text-gray-500">Type: ${template.template_type}</p>
-                                        </div>
-                                    </div>
-                                    <button onclick="editTemplate('${template.id}')" class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700">
-                                        Edit
-                                    </button>
-                                </li>
-                            `).join('')}
-                        </ul>
-                    `;
-                    } else {
-                        templatesList.innerHTML = '<p class="text-gray-600">No templates found.</p>';
-                    }
-                }
-
-                if (!document.getElementById('templateSelectionModal').classList.contains('hidden')) {
-                    renderTemplateSelectionList();
-                }
-            } catch (error) {
-                console.error('Error loading templates:', error);
-                const templatesList = document.getElementById('templatesList');
-                if (templatesList) {
-                    templatesList.innerHTML = `<p class="text-red-600">Error loading templates: ${escapeHtml(error.message)}</p>`;
-                }
-                availableTemplates = [];
-            }
         }
-
+        
+        
+        
+        
 
         // Edit template with Adobe PDF Editor (Popup Window)
         function editTemplate(templateId) {
@@ -1755,7 +1703,7 @@
 
     popupWindow.focus();
 }
-        window.loadTemplates = loadTemplates;
+        
 
 function initializePDFEditorPopup(popupWindow, context) {
     const { templateId, accountId, appOrigin: forcedOrigin } = context;

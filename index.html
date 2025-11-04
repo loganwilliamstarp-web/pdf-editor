@@ -440,6 +440,10 @@
             return `${AGENCY_SETTINGS_STORAGE_PREFIX}:${normalizedAccount}`;
         }
 
+        // Placeholder assignments to avoid early reference errors
+        window.loadTemplates = window.loadTemplates || function() {};
+        window.generateCertificatesForTemplates = window.generateCertificatesForTemplates || function() {};
+
         // Initialize the app
         function initApp() {
             const accountId = getAccountId();
@@ -1623,7 +1627,7 @@
         window.generateCertificatesForTemplates = generateCertificatesForTemplates;
 
         // Load templates
-async function loadTemplates() {
+        async function loadTemplates() {
             try {
                 const accountId = getAccountId();
                 console.log('Loading templates for account:', accountId);
@@ -1668,11 +1672,11 @@ async function loadTemplates() {
                     } else {
                         templatesList.innerHTML = '<p class="text-gray-600">No templates found.</p>';
                     }
-        }
+                }
 
-        if (!document.getElementById('templateSelectionModal').classList.contains('hidden')) {
-            renderTemplateSelectionList();
-        }
+                if (!document.getElementById('templateSelectionModal').classList.contains('hidden')) {
+                    renderTemplateSelectionList();
+                }
             } catch (error) {
                 console.error('Error loading templates:', error);
                 const templatesList = document.getElementById('templatesList');
@@ -1682,7 +1686,7 @@ async function loadTemplates() {
                 availableTemplates = [];
             }
         }
-
+        window.loadTemplates = loadTemplates;
 
         // Edit template with Adobe PDF Editor (Popup Window)
         function editTemplate(templateId) {
