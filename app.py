@@ -1218,6 +1218,16 @@ def _serve_index_for_context(account_id=None, owner_id=None):
             </html>
             """
 
+@app.route('/tailwind.css')
+def serve_tailwind_css():
+    return send_from_directory(app.static_folder, 'tailwind.css')
+
+
+@app.route('/lucide.js')
+def serve_lucide_js():
+    return send_from_directory(app.static_folder, 'lucide.js')
+
+
 @app.route("/<account_id>")
 def serve_account(account_id):
     """Serve the app for a specific Salesforce Account ID"""
