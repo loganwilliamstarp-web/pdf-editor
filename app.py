@@ -642,7 +642,7 @@ def load_master_template_pdf(template_type="acord25"):
 
 
 def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
-    """Fill ACORD 25 PDF fields using PyMuPDF."""
+    """Fill ACORD 25 PDF fields using PyMuPDF, with checkbox fallbacks via pypdf."""
     if not PYMUPDF_AVAILABLE:
         raise RuntimeError("PyMuPDF (fitz) is required to generate ACORD 25 certificates")
 
@@ -651,6 +651,10 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
 
     pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     signature_applied = False
+    checkbox_updates = {}
+    failed_fields = []
+    filled_count = 0
+    filled_bytes = None
 
     try:
         for page_index in range(len(pdf_doc)):
@@ -663,21 +667,79 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
                     continue
 
                 normalized_name = field_name.strip()
+                value = field_values.get(normalized_name)
+                field_type_lower = (widget.field_type_string or '').lower()
 
-                if normalized_name in field_values and field_values[normalized_name] is not None:
-                    value = field_values[normalized_name]
-                    field_type = (widget.field_type_string or '').lower()
-                    try:
-                        if field_type in {'checkbox', 'button', 'btn'}:
-                            normalized = normalize_checkbox_value(value)
-                            widget.field_value = normalized
-                        elif field_type == 'radiobutton':
-                            widget.field_value = 'On' if str(value).strip().lower() in {'on', 'yes', '/yes', 'true', '1'} else 'Off'
-                        else:
-                            widget.field_value = str(value)
-                        widget.update()
-                    except Exception as fill_error:
-                        print(f"Warning: failed to set field '{normalized_name}': {fill_error}")
+                if value is not None:
+                    is_checkbox_like = field_type_lower in {'checkbox', 'button', 'btn', 'radiobutton'}
+
+                    # Skip empty strings for non-checkbox fields
+                    if not is_checkbox_like and str(value).strip() == '':
+                        pass
+                    else:
+                        try:
+                            handled = False
+
+                            if field_type_lower == 'text':
+                                text_value = str(value)
+                                if text_value.startswith('/') and len(text_value) > 1:
+                                    core = text_value[1:].lower()
+                                    if core in {'yes', 'on', '1', 'true', 'y'}:
+                                        text_value = 'Yes'
+                                    elif core in {'no', 'off', '0', 'false', 'n'}:
+                                        text_value = 'No'
+                                widget.field_value = text_value
+                                widget.update()
+                                filled_count += 1
+                                handled = True
+
+                            elif field_type_lower in {'checkbox', 'button', 'btn'}:
+                                if PYPDF_AVAILABLE:
+                                    checkbox_updates[field_name] = value
+                                else:
+                                    pdf_state, field_state = resolve_checkbox_state(value)
+                                    try:
+                                        widget.field_value = field_state
+                                        widget.update()
+                                        filled_count += 1
+                                    except Exception as checkbox_error:
+                                        fallback_state = pdf_state.lstrip('/') if isinstance(pdf_state, str) else field_state
+                                        try:
+                                            widget.field_value = fallback_state
+                                            widget.update()
+                                            filled_count += 1
+                                        except Exception as fallback_error:
+                                            failed_fields.append((normalized_name, f"checkbox update failed: {fallback_error}"))
+                                            print(f"Warning: checkbox field '{normalized_name}' fallback failed: {fallback_error}")
+                                handled = True
+
+                            elif field_type_lower == 'radiobutton':
+                                normalized = str(value).strip().lower()
+                                is_checked = normalized in {'true', '1', 'yes', 'on', 'checked', 'x', '/yes', '/on', '/1'}
+                                target_states = ['X', 'Yes', '1', 'On'] if is_checked else ['Off', '/Off']
+                                applied = False
+                                for state in target_states:
+                                    try:
+                                        widget.field_value = state
+                                        widget.update()
+                                        filled_count += 1
+                                        applied = True
+                                        break
+                                    except Exception:
+                                        continue
+                                if not applied:
+                                    failed_fields.append((normalized_name, 'radio button state could not be applied'))
+                                    print(f"Warning: radio button '{normalized_name}' could not apply state for value '{value}'")
+                                handled = True
+
+                            if not handled:
+                                widget.field_value = str(value)
+                                widget.update()
+                                filled_count += 1
+
+                        except Exception as fill_error:
+                            failed_fields.append((normalized_name, str(fill_error)))
+                            print(f"Warning: failed to set field '{normalized_name}': {fill_error}")
 
                 if (
                     signature_bytes
@@ -700,9 +762,26 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
                         print(f"Warning: unable to insert signature image: {signature_error}")
 
         filled_bytes = pdf_doc.write()
-        return filled_bytes
     finally:
         pdf_doc.close()
+
+    if filled_bytes is None:
+        raise RuntimeError("Failed to render filled PDF content for ACORD 25 certificate")
+
+    if checkbox_updates and PYPDF_AVAILABLE:
+        filled_bytes, checkbox_successes, checkbox_failures = fill_checkboxes_with_pypdf(filled_bytes, checkbox_updates)
+        if checkbox_failures:
+            for failed_name in checkbox_failures:
+                failed_fields.append((failed_name, 'checkbox update failed via pypdf'))
+            print(f"Warning: pypdf checkbox updates failed for: {checkbox_failures}")
+        if checkbox_successes:
+            print(f"Checkbox states applied via pypdf: {checkbox_successes[:5]} (total {len(checkbox_successes)} successes)")
+
+    if failed_fields:
+        sample = failed_fields[:5]
+        print(f"Checkbox/text fill warnings: {sample}")
+
+    return filled_bytes
 
 
 def sanitize_filename_component(value, fallback="document"):
