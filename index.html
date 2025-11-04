@@ -1857,18 +1857,6 @@ function initializePDFEditorPopup(popupWindow, context) {
         });
     }
 
-        return new Promise((resolve, reject) => {
-            console.log('[PDF Popup] Injecting Tailwind stylesheet');
-            const link = doc.createElement('link');
-            link.id = 'tailwind-popup-style';
-            link.rel = 'stylesheet';
-            link.href = '/tailwind.css';
-            link.onload = () => resolve();
-            link.onerror = () => reject(new Error('Tailwind stylesheet failed to load'));
-            doc.head.appendChild(link);
-        });
-    }
-
     function ensureAdobePDFSDK() {
         if (popupWindow.AdobeDC && popupWindow.AdobeDC.View) {
             console.log('[PDF Popup] Adobe SDK already available');
