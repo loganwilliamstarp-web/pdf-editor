@@ -1517,7 +1517,7 @@
             generateCertificatesForTemplates(selectedTypes);
         }
 
-        async function generateCertificatesForTemplates(templateTypes) {
+        const generateCertificatesForTemplates = async (templateTypes) => {
             const button = document.getElementById('generateCertificatesBtn');
             if (!button) {
                 return;
@@ -1622,7 +1622,7 @@
         }
 
         // Load templates
-        async function loadTemplates() {
+        window.loadTemplates = async function loadTemplates() {
             try {
                 const accountId = getAccountId();
                 console.log('Loading templates for account:', accountId);
@@ -1681,7 +1681,6 @@
                 availableTemplates = [];
             }
         }
-        window.loadTemplates = loadTemplates;
 
         // Edit template with Adobe PDF Editor (Popup Window)
         function editTemplate(templateId) {
