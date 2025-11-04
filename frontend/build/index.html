@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Certificate Management System</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>PDF</text></svg>">
-    <script src="https://cdn.tailwindcss.com" defer></script>
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <script src="tailwindcss.js" defer></script>
+    <script src="lucide.js"></script>
 </head>
 <body>
     <div class="min-h-screen bg-gray-100">
@@ -102,7 +102,7 @@
                     </div>
                     <button id="holderModalCloseBtn" type="button" class="text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 rounded-full p-1">
                         <span class="sr-only">Close</span>
-                        âœ•
+                        &times;
                     </button>
                 </div>
                 <form id="holderForm" class="px-6 py-5 space-y-5">
@@ -1944,7 +1944,7 @@ function initializePDFEditorPopup(popupWindow, context) {
             console.log('[PDF Popup] Injecting Tailwind CDN script');
             const script = doc.createElement('script');
             script.id = 'tailwind-popup-script';
-            script.src = 'https://cdn.tailwindcss.com';
+            script.src = 'tailwindcss.js';
             script.defer = true;
             script.onload = () => resolve();
             script.onerror = () => reject(new Error('Tailwind CDN failed to load'));
