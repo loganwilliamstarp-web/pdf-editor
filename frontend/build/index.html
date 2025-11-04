@@ -360,7 +360,8 @@
             return trimmed;
         }
 
-        function classifySalesforceId(value) {
+        
+        window.generateCertificatesForTemplates = generateCertificatesForTemplates;function classifySalesforceId(value) {
             if (!value || !SALESFORCE_ID_REGEX.test(value)) {
                 return null;
             }
@@ -1620,7 +1621,7 @@
                 updateGenerateButtonState();
             }
         // Load templates
-        window.loadTemplates = async function loadTemplates() {
+        async function loadTemplates() {
             try {
                 const accountId = getAccountId();
                 console.log('Loading templates for account:', accountId);
@@ -1679,6 +1680,7 @@
                 availableTemplates = [];
             }
         }
+
 
         // Edit template with Adobe PDF Editor (Popup Window)
         function editTemplate(templateId) {
@@ -1753,6 +1755,7 @@
 
     popupWindow.focus();
 }
+        window.loadTemplates = loadTemplates;
 
 function initializePDFEditorPopup(popupWindow, context) {
     const { templateId, accountId, appOrigin: forcedOrigin } = context;

@@ -359,7 +359,7 @@
             }
             return trimmed;
         }
-
+        
         function classifySalesforceId(value) {
             if (!value || !SALESFORCE_ID_REGEX.test(value)) {
                 return null;
@@ -1517,7 +1517,7 @@
             generateCertificatesForTemplates(selectedTypes);
         }
 
-        const generateCertificatesForTemplates = async (templateTypes) => {
+        async function generateCertificatesForTemplates(templateTypes) {
             const button = document.getElementById('generateCertificatesBtn');
             if (!button) {
                 return;
@@ -1620,9 +1620,10 @@
                 updateGenerateButtonState();
             }
         }
+        window.generateCertificatesForTemplates = generateCertificatesForTemplates;
 
         // Load templates
-        window.loadTemplates = async function loadTemplates() {
+async function loadTemplates() {
             try {
                 const accountId = getAccountId();
                 console.log('Loading templates for account:', accountId);
@@ -1667,11 +1668,11 @@
                     } else {
                         templatesList.innerHTML = '<p class="text-gray-600">No templates found.</p>';
                     }
-                }
+        }
 
-                if (!document.getElementById('templateSelectionModal').classList.contains('hidden')) {
-                    renderTemplateSelectionList();
-                }
+        if (!document.getElementById('templateSelectionModal').classList.contains('hidden')) {
+            renderTemplateSelectionList();
+        }
             } catch (error) {
                 console.error('Error loading templates:', error);
                 const templatesList = document.getElementById('templatesList');
@@ -1681,6 +1682,7 @@
                 availableTemplates = [];
             }
         }
+
 
         // Edit template with Adobe PDF Editor (Popup Window)
         function editTemplate(templateId) {
@@ -1755,6 +1757,7 @@
 
     popupWindow.focus();
 }
+        window.loadTemplates = loadTemplates;
 
 function initializePDFEditorPopup(popupWindow, context) {
     const { templateId, accountId, appOrigin: forcedOrigin } = context;
