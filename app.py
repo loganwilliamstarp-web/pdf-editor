@@ -2614,277 +2614,287 @@ def serve_pdf_template(template_id):
 
 @app.route('/api/pdf/template/<template_id>/<account_id>')
 def serve_pdf_template_with_fields(template_id, account_id):
-    """Serve PDF template with account-specific field values filled in"""
-    print(f"=== PDF TEMPLATE REQUESTED ===")
-    print(f"Template ID: {template_id}")
+    """Serve PDF template with optional account-specific field values."""
+    template_id_str = str(template_id or '').strip()
+    normalized_template_key = template_id_str.lower()
+    print("=== PDF TEMPLATE REQUESTED ===")
+    print(f"Template ID: {template_id_str}")
     print(f"Account ID: {account_id}")
-    try:
-        conn = get_db()
-        cur = conn.cursor()
-        
-        # Get template and account-specific data
+
+    conn = None
+    cur = None
+    template_row = None
+    template_uuid = None
+    template_name = None
+    template_type = None
+    storage_path = ''
+    pdf_blob = None
+    pdf_content = None
+    form_fields_payload = {'fields': []}
+    field_values = {}
+
+    if PSYCOPG2_AVAILABLE:
         try:
-            cur.execute('''
-                SELECT
-                    mt.template_name, mt.template_type, mt.storage_path, mt.file_size, mt.pdf_blob, mt.form_fields,
-                    td.field_values
-                FROM master_templates mt
-                LEFT JOIN template_data td
-                    ON td.template_id = mt.id AND td.account_id = %s
-                WHERE mt.id = %s
-            ''', (account_id, template_id))
-        except psycopg2.errors.UndefinedColumn:
-            # Fallback if pdf_blob column doesn't exist
-            conn.rollback()
-            cur.execute('''
-                SELECT
-                    mt.template_name, mt.template_type, mt.storage_path, mt.file_size, NULL::BYTEA AS pdf_blob, mt.form_fields,
-                    td.field_values
-                FROM master_templates mt
-                LEFT JOIN template_data td
-                    ON td.template_id = mt.id AND td.account_id = %s
-                WHERE mt.id = %s
-            ''', (account_id, template_id))
-        
-        result = cur.fetchone()
-        if not result:
-            return jsonify({'error': 'Template not found'}), 404
-        
-        template_name = result.get('template_name')
-        template_type = (result.get('template_type') or '').lower()
-        storage_path = result.get('storage_path') or ''
-        pdf_blob = result.get('pdf_blob')
-        form_fields_payload = coerce_form_fields_payload(result.get('form_fields'))
-        field_values_raw = result.get('field_values') or {}
-        
-        # Parse field_values if it's a JSON string
-        if isinstance(field_values_raw, str):
-            try:
-                field_values = json.loads(field_values_raw)
-            except json.JSONDecodeError:
-                field_values = {}
-        else:
-            field_values = field_values_raw or {}
+            conn = get_db()
+            cur = conn.cursor()
 
-        print(f"Serving PDF template with fields: {template_name} (ID: {template_id}, Account: {account_id})")
-        print(f"Field values retrieved: {len(field_values)} fields")
-        if field_values:
-            non_empty_fields = {k: v for k, v in field_values.items() if v and str(v).strip()}
-            print(f"Non-empty field values: {len(non_empty_fields)}")
-            if non_empty_fields:
-                print(f"Sample non-empty fields: {list(non_empty_fields.items())[:3]}")
-        else:
-            print("No field values found in database")
+            is_uuid_identifier = False
+            if template_id_str:
+                try:
+                    uuid.UUID(template_id_str)
+                    is_uuid_identifier = True
+                except ValueError:
+                    is_uuid_identifier = False
 
-        # Get PDF content
-        pdf_content = None
-        if pdf_blob:
-            try:
-                pdf_content = bytes(pdf_blob)
-            except (TypeError, ValueError):
-                pdf_content = pdf_blob
+            result = None
+            if is_uuid_identifier:
+                try:
+                    cur.execute(
+                        '''
+                        SELECT
+                            mt.id,
+                            mt.template_name,
+                            mt.template_type,
+                            mt.storage_path,
+                            mt.file_size,
+                            mt.pdf_blob,
+                            mt.form_fields,
+                            td.field_values
+                        FROM master_templates mt
+                        LEFT JOIN template_data td
+                            ON td.template_id = mt.id AND td.account_id = %s
+                        WHERE mt.id = %s
+                        ''',
+                        (account_id, template_id_str)
+                    )
+                    result = cur.fetchone()
+                except psycopg2.errors.UndefinedColumn:
+                    conn.rollback()
+                    cur.execute(
+                        '''
+                        SELECT
+                            mt.id,
+                            mt.template_name,
+                            mt.template_type,
+                            mt.storage_path,
+                            mt.file_size,
+                            NULL::BYTEA AS pdf_blob,
+                            mt.form_fields,
+                            td.field_values
+                        FROM master_templates mt
+                        LEFT JOIN template_data td
+                            ON td.template_id = mt.id AND td.account_id = %s
+                        WHERE mt.id = %s
+                        ''',
+                        (account_id, template_id_str)
+                    )
+                    result = cur.fetchone()
 
-        if not pdf_content:
-            local_file = resolve_local_template_file(template_type, storage_path)
-            if local_file:
-                pdf_content = local_file.read_bytes()
+            if not result and normalized_template_key:
+                cur.execute(
+                    '''
+                    SELECT
+                        mt.id,
+                        mt.template_name,
+                        mt.template_type,
+                        mt.storage_path,
+                        mt.file_size,
+                        mt.pdf_blob,
+                        mt.form_fields,
+                        td.field_values
+                    FROM master_templates mt
+                    LEFT JOIN template_data td
+                        ON td.template_id = mt.id AND td.account_id = %s
+                    WHERE LOWER(mt.template_type) = %s
+                    ORDER BY mt.updated_at DESC NULLS LAST, mt.created_at DESC
+                    LIMIT 1
+                    ''',
+                    (account_id, normalized_template_key)
+                )
+                result = cur.fetchone()
 
-        if not pdf_content:
-            # Fallback to generated PDF if no stored asset is available
-            pdf_content = create_pdf_with_form_fields(template_name, form_fields_payload)
+            if not result and normalized_template_key in MASTER_TEMPLATE_CONFIG:
+                try:
+                    refresh_master_template_from_local(
+                        normalized_template_key,
+                        template_name=MASTER_TEMPLATE_CONFIG[normalized_template_key].get('display_name')
+                    )
+                    cur.execute(
+                        '''
+                        SELECT
+                            mt.id,
+                            mt.template_name,
+                            mt.template_type,
+                            mt.storage_path,
+                            mt.file_size,
+                            mt.pdf_blob,
+                            mt.form_fields,
+                            td.field_values
+                        FROM master_templates mt
+                        LEFT JOIN template_data td
+                            ON td.template_id = mt.id AND td.account_id = %s
+                        WHERE LOWER(mt.template_type) = %s
+                        ORDER BY mt.updated_at DESC NULLS LAST, mt.created_at DESC
+                        LIMIT 1
+                        ''',
+                        (account_id, normalized_template_key)
+                    )
+                    result = cur.fetchone()
+                except Exception as refresh_error:
+                    print(f"Refresh from local failed for '{normalized_template_key}': {refresh_error}")
 
-        # If no field values saved, create initial template data for this account
-        if not field_values:
-            print("No field values found, creating initial template data for account")
-            print("Field values type:", type(field_values), "Content:", field_values)
-            
-            # Create initial template_data record with empty field values
-            try:
-                cur.execute('''
-                    INSERT INTO template_data (account_id, template_id, field_values)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (account_id, template_id) DO NOTHING
-                ''', (account_id, template_id, json.dumps({})))
-                conn.commit()
-                print(f"Created initial template data for account {account_id}")
-            except Exception as init_error:
-                print(f"Warning: Could not create initial template data: {init_error}")
+            if result:
+                template_row = result
+                template_uuid = template_row.get('id')
+                template_name = template_row.get('template_name')
+                template_type = (template_row.get('template_type') or '').lower()
+                storage_path = template_row.get('storage_path') or ''
+                pdf_blob = template_row.get('pdf_blob')
+                form_fields_payload = coerce_form_fields_payload(template_row.get('form_fields'))
+                raw_field_values = template_row.get('field_values') or {}
+                if isinstance(raw_field_values, str):
+                    try:
+                        field_values = json.loads(raw_field_values)
+                    except json.JSONDecodeError:
+                        field_values = {}
+                else:
+                    field_values = raw_field_values or {}
+                print(f"Database template located: {template_name} ({template_uuid})")
+            else:
+                print(f"No database record found for template '{template_id_str}'. Falling back to local storage.")
+        except Exception as db_error:
+            print(f"Database unavailable for template '{template_id_str}': {db_error}")
+            template_row = None
+            if conn:
                 conn.rollback()
-            
-            # Return original template
-            from flask import Response
-            return Response(
-                pdf_content,
-                mimetype='application/pdf',
-                headers={
-                    'Content-Disposition': f'inline; filename="{template_name}.pdf"',
-                    'Access-Control-Allow-Origin': '*',
-                    'Cache-Control': 'no-cache'
-                }
-            )
-        
-        # Pre-fill PDF with saved field values using PyMuPDF (fitz)
-        print(f"Pre-filling PDF with {len(field_values)} saved field values")
 
+    if not template_name and normalized_template_key in MASTER_TEMPLATE_CONFIG:
+        config = MASTER_TEMPLATE_CONFIG[normalized_template_key]
+        template_name = config.get('display_name') or normalized_template_key.upper()
+        template_type = normalized_template_key
+        storage_path = f"local://{config.get('filename')}" if config.get('filename') else ''
+        form_fields_payload = {'fields': []}
+
+    if pdf_blob:
         try:
-            if PYMUPDF_AVAILABLE and field_values:
-                # Load PDF with PyMuPDF
-                pdf_doc = fitz.open(stream=pdf_content, filetype="pdf")
+            pdf_content = bytes(pdf_blob)
+        except (TypeError, ValueError):
+            pdf_content = pdf_blob
 
+    if not pdf_content:
+        lookup_type = template_type or normalized_template_key
+        local_file = resolve_local_template_file(lookup_type, storage_path)
+        if local_file and local_file.exists():
+            pdf_content = local_file.read_bytes()
+            print(f"Loaded local PDF for template '{lookup_type}' from {local_file}")
+
+    if not pdf_content and template_name:
+        pdf_content = create_pdf_with_form_fields(template_name, form_fields_payload)
+
+    if not pdf_content:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+        return jsonify({'error': 'Template not available'}), 404
+
+    if cur and conn and template_uuid and not field_values:
+        try:
+            cur.execute(
+                '''
+                INSERT INTO template_data (account_id, template_id, field_values)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (account_id, template_id) DO NOTHING
+                ''',
+                (account_id, template_uuid, json.dumps({}))
+            )
+            conn.commit()
+            print(f"Initialized template_data for account {account_id} / template {template_uuid}")
+        except Exception as init_error:
+            print(f"Warning: unable to initialize template_data: {init_error}")
+            conn.rollback()
+
+    if field_values:
+        print(f"Pre-filling PDF with {len(field_values)} saved field values")
+        try:
+            if PYMUPDF_AVAILABLE:
+                pdf_doc = fitz.open(stream=pdf_content, filetype="pdf")
                 filled_count = 0
-                failed_fields = []
                 checkbox_updates = {}
 
-                # Simple approach: iterate through all pages and widgets
-                for page_num in range(len(pdf_doc)):
-                    page = pdf_doc[page_num]
-
-                    # Get all widgets on this page
-                    widgets = list(page.widgets())
-
-                    for widget in widgets:
+                for page in pdf_doc:
+                    for widget in page.widgets() or []:
                         field_name = widget.field_name
+                        if field_name not in field_values:
+                            continue
 
-                        # Check if we have a saved value for this field
-                        if field_name in field_values:
-                            saved_value = field_values[field_name]
+                        saved_value = field_values[field_name]
+                        field_type = (widget.field_type_string or '').lower()
+                        is_checkbox = field_type in {'checkbox', 'button', 'btn', 'radiobutton'}
 
-                            # Skip empty values for text fields only
-                            # For checkboxes, we need to process /Off values too
-                            field_type = widget.field_type_string
-                            field_type_lower = (field_type or '').lower()
-                            is_checkbox_like = field_type_lower in {'checkbox', 'button', 'btn', 'radiobutton'}
+                        if not is_checkbox and (saved_value in (None, '', [])):
+                            continue
 
-                            if not is_checkbox_like and (not saved_value or saved_value == ''):
-                                continue
-
-                            try:
-                                if field_type_lower == 'text':
-                                    text_value = str(saved_value)
-                                    if text_value.startswith('/') and len(text_value) > 1:
-                                        core = text_value[1:].lower()
-                                        if core in {'yes', 'on', '1', 'true', 'y'}:
-                                            text_value = 'Yes'
-                                        elif core in {'no', 'off', '0', 'false', 'n'}:
-                                            text_value = 'No'
-                                    widget.field_value = text_value
-                                    widget.update()
-                                    filled_count += 1
-
-                                elif field_type_lower in {'checkbox', 'button', 'btn'}:
-                                    if PYPDF_AVAILABLE:
-                                        checkbox_updates[field_name] = saved_value
-                                        continue
-
-                                    pdf_state, field_state = resolve_checkbox_state(saved_value)
-                                    try:
-                                        widget.field_value = field_state
-                                        widget.update()
-                                        filled_count += 1
-                                    except Exception as widget_error:
-                                        failed_fields.append((field_name, str(widget_error)))
-                                        print(f"Checkbox '{field_name}' fallback update failed: {widget_error}")
-                                    continue
-                                elif field_type_lower == 'radiobutton':
-                                    if saved_value in [True, 'true', 'True', '1', 'Yes', 'yes', 'On', 'X']:
-                                        widget.field_value = 'X'
-                                    else:
-                                        widget.field_value = 'Off'
-                                    widget.update()
-                                    filled_count += 1
-                                    print(f"[radio] Set radio button '{field_name}' to: {widget.field_value}")
-
+                        try:
+                            if field_type == 'text':
+                                widget.field_value = str(saved_value)
+                                widget.update()
+                                filled_count += 1
+                            elif field_type in {'checkbox', 'button', 'btn'}:
+                                if PYPDF_AVAILABLE:
+                                    checkbox_updates[field_name] = saved_value
                                 else:
-                                    widget.field_value = str(saved_value)
+                                    pdf_state, field_state = resolve_checkbox_state(saved_value)
+                                    widget.field_value = field_state
                                     widget.update()
                                     filled_count += 1
-                                    print(f"[generic] Filled field '{field_name}': '{saved_value}'")
+                            elif field_type == 'radiobutton':
+                                widget.field_value = 'X' if str(saved_value).lower() in {'true', '1', 'yes', 'y', 'x'} else 'Off'
+                                widget.update()
+                                filled_count += 1
+                            else:
+                                widget.field_value = str(saved_value)
+                                widget.update()
+                                filled_count += 1
+                        except Exception as widget_error:
+                            print(f"Failed to fill '{field_name}': {widget_error}")
 
-                            except Exception as field_error:
-                                failed_fields.append((field_name, str(field_error)))
-                                print(f"? Failed to fill '{field_name}': {field_error}")
-
-                # Generate PDF bytes from PyMuPDF result
                 filled_pdf_content = pdf_doc.write()
                 pdf_doc.close()
 
-                checkbox_successes = []
-                checkbox_failures = []
                 if checkbox_updates and PYPDF_AVAILABLE:
-                    filled_pdf_content, checkbox_successes, checkbox_failures = fill_checkboxes_with_pypdf(
+                    filled_pdf_content, successes, failures = fill_checkboxes_with_pypdf(
                         filled_pdf_content,
                         checkbox_updates,
                     )
-                    filled_count += len(checkbox_successes)
-                    summary_msg = f"Checkbox states applied via pypdf: {checkbox_successes[:5]} (total {len(checkbox_successes)} successes, {len(checkbox_failures)} failures)"
-                    print(summary_msg)
-                    if checkbox_failures:
-                        for failed_name in checkbox_failures:
-                            failed_fields.append((failed_name, 'checkbox update failed'))
-                        print(f"Checkbox updates failed for: {checkbox_failures}")
-                elif checkbox_updates:
-                    print(f"PyPDF unavailable; {len(checkbox_updates)} checkboxes filled via PyMuPDF fallback appearance.")
+                    filled_count += len(successes)
+                    if failures:
+                        print(f"Checkbox updates failed for: {failures}")
 
-                print(f"=== PRE-FILL COMPLETE ===")
-                print(f"Successfully filled: {filled_count} fields")
-                print(f"Failed fields: {len(failed_fields)}")
-                if failed_fields:
-                    print(f"Failures: {failed_fields[:5]}")  # Show first 5
-
-                from flask import Response
-                return Response(
-                    filled_pdf_content,
-                    mimetype='application/pdf',
-                    headers={
-                        'Content-Disposition': f'inline; filename="{template_name}_filled.pdf"',
-                        'Access-Control-Allow-Origin': '*',
-                        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-                        'Pragma': 'no-cache',
-                        'Expires': '0'
-                    }
-                )
+                pdf_content = filled_pdf_content
+                print(f"PDF prefill complete. Fields filled: {filled_count}")
             else:
-                if not PYMUPDF_AVAILABLE:
-                    print("PyMuPDF not available, returning original template")
-                if not field_values:
-                    print("No field values to fill, returning original template")
-
-                from flask import Response
-                return Response(
-                    pdf_content,
-                    mimetype='application/pdf',
-                    headers={
-                        'Content-Disposition': f'inline; filename="{template_name}.pdf"',
-                        'Access-Control-Allow-Origin': '*',
-                        'Cache-Control': 'no-cache'
-                    }
-                )
-
+                print("PyMuPDF not available; skipping PDF prefill.")
         except Exception as fill_error:
-            print(f"Error filling PDF fields: {fill_error}")
-            import traceback
-            traceback.print_exc()
-            # Return original template if filling fails
-            from flask import Response
-            return Response(
-                pdf_content,
-                mimetype='application/pdf',
-                headers={
-                    'Content-Disposition': f'inline; filename="{template_name}.pdf"',
-                    'Access-Control-Allow-Origin': '*',
-                    'Cache-Control': 'no-cache'
-                }
-            )
+            print(f"Error pre-filling PDF: {fill_error}")
 
+    from flask import Response
+    response = Response(
+        pdf_content,
+        mimetype='application/pdf',
+        headers={
+            'Content-Disposition': f'inline; filename="{template_name or "ACORD_TEMPLATE"}.pdf"',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'no-cache'
+        }
+    )
 
-    except Exception as e:
-        print(f"Error serving PDF template with fields: {e}")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        if 'conn' in locals():
-            cur.close()
-            conn.close()
+    if cur:
+        cur.close()
+    if conn:
+        conn.close()
 
+    return response
 
 @app.route('/api/debug/pymupdf-test/<template_id>/<account_id>')
 def debug_pymupdf_test(template_id, account_id):
