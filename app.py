@@ -2500,16 +2500,26 @@ def fetch_template_row(cur, template_identifier, account_id=None, include_field_
             return dict(row)
         return row
 
+    def execute_with_pdf_blob(sql, params):
+        try:
+            cur.execute(sql, params)
+            return cur.fetchone()
+        except psycopg2.errors.UndefinedColumn:
+            cur.connection.rollback()
+            sql_no_blob = sql.replace('mt.pdf_blob,', 'NULL::BYTEA AS pdf_blob,').replace('mt.pdf_blob', 'NULL::BYTEA AS pdf_blob')
+            cur.execute(sql_no_blob, params)
+            return cur.fetchone()
+
     row = None
     if is_uuid_identifier:
-        cur.execute(
+        row = execute_with_pdf_blob(
             select_clause + ' WHERE mt.id = %s',
             join_params + [template_id_str]
         )
-        row = as_dict(cur.fetchone())
+        row = as_dict(row)
 
     if not row and normalized_key:
-        cur.execute(
+        row = execute_with_pdf_blob(
             select_clause + '''
             WHERE LOWER(mt.template_type) = %s
             ORDER BY mt.updated_at DESC NULLS LAST, mt.created_at DESC
@@ -2517,7 +2527,7 @@ def fetch_template_row(cur, template_identifier, account_id=None, include_field_
             ''',
             join_params + [normalized_key]
         )
-        row = as_dict(cur.fetchone())
+        row = as_dict(row)
 
     if not row and allow_refresh and normalized_key in MASTER_TEMPLATE_CONFIG:
         config = MASTER_TEMPLATE_CONFIG.get(normalized_key, {})
@@ -2526,7 +2536,7 @@ def fetch_template_row(cur, template_identifier, account_id=None, include_field_
                 normalized_key,
                 template_name=config.get('display_name')
             )
-            cur.execute(
+            row = execute_with_pdf_blob(
                 select_clause + '''
                 WHERE LOWER(mt.template_type) = %s
                 ORDER BY mt.updated_at DESC NULLS LAST, mt.created_at DESC
@@ -2534,7 +2544,7 @@ def fetch_template_row(cur, template_identifier, account_id=None, include_field_
                 ''',
                 join_params + [normalized_key]
             )
-            row = as_dict(cur.fetchone())
+            row = as_dict(row)
         except Exception as refresh_error:
             print(f"Refresh attempt failed for template '{normalized_key}': {refresh_error}")
 
