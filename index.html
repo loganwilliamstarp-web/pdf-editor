@@ -2017,34 +2017,6 @@ function initializePDFEditorPopup(popupWindow, context) {
         if (!raw) {
             return {};
         }
-        const unwrapValue = (value) => {
-            if (value === undefined || value === null) {
-                return '';
-            }
-            if (typeof value === 'object') {
-                if ('value' in value) {
-                    return unwrapValue(value.value);
-                }
-                if ('defaultValue' in value) {
-                    return unwrapValue(value.defaultValue);
-                }
-                if ('displayValue' in value) {
-                    return unwrapValue(value.displayValue);
-                }
-                if ('rawValue' in value) {
-                    return unwrapValue(value.rawValue);
-                }
-                if ('name' in value && 'value' in value) {
-                    return unwrapValue(value.value);
-                }
-                try {
-                    return JSON.stringify(value);
-                } catch (e) {
-                    return String(value);
-                }
-            }
-            return String(value);
-        };
 
         if (Array.isArray(raw)) {
             return raw.reduce((acc, entry) => {
@@ -2057,7 +2029,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                 }
                 const value = entry.value !== undefined ? entry.value
                     : (entry.fieldValue !== undefined ? entry.fieldValue : (entry.defaultValue !== undefined ? entry.defaultValue : ''));
-                acc[key] = unwrapValue(value);
+                acc[key] = value;
                 return acc;
             }, {});
         }
@@ -2072,11 +2044,7 @@ function initializePDFEditorPopup(popupWindow, context) {
 
             return Object.keys(raw).reduce((acc, key) => {
                 const entry = raw[key];
-                if (entry && typeof entry === 'object' && entry.value !== undefined) {
-                    acc[key] = unwrapValue(entry.value);
-                } else {
-                    acc[key] = unwrapValue(entry);
-                }
+                acc[key] = (entry && typeof entry === 'object' && entry.value !== undefined) ? entry.value : entry;
                 return acc;
             }, {});
         }
@@ -2260,45 +2228,32 @@ function initializePDFEditorPopup(popupWindow, context) {
                         try {
                             // Convert PDF content to blob
                             const blob = new Blob([new Uint8Array(content)], { type: 'application/pdf' });
-                console.log('[PDF Popup] Blob created, size:', blob.size, 'type:', blob.type);
-
-                // Convert blob to base64 for server processing
-                const reader = new FileReader();
-                reader.onload = async () => {
-                    const base64Content = reader.result;
-                    console.log('[PDF Popup] Base64 content length:', base64Content.length);
-
-                    console.log('[PDF Popup] Gathering field values prior to save...');
-                    let collectedValues = {};
-                    try {
-                        const collected = await collectPdfFieldData();
-                        if (collected && collected.values && typeof collected.values === 'object') {
-                            collectedValues = collected.values;
-                            console.log('[PDF Popup] Collected field value keys:', Object.keys(collectedValues));
-                        }
-                    } catch (collectError) {
-                        console.warn('[PDF Popup] Could not collect field values via Adobe APIs', collectError);
-                        collectedValues = {};
-                    }
-
-                    console.log('[PDF Popup] Sending PDF to server for extraction...');
-
-                    // Send PDF content to server for extraction and saving
-                    const response = await fetch(appOrigin + '/api/pdf/save-fields', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            template_id: templateId,
-                            account_id: accountId,
-                            pdf_content: base64Content,
-                            field_values: collectedValues
-                        })
-                    });
-
-                    const result = await response.json();
-                    console.log('[PDF Popup] Save result:', result);
+                            console.log('[PDF Popup] Blob created, size:', blob.size, 'type:', blob.type);
+                            
+                            // Convert blob to base64 for server processing
+                            const reader = new FileReader();
+                            reader.onload = async () => {
+                                const base64Content = reader.result;
+                                console.log('[PDF Popup] Base64 content length:', base64Content.length);
+                                
+                                console.log('[PDF Popup] Sending PDF to server for extraction...');
+                                
+                                // Send PDF content to server for extraction and saving
+                                const response = await fetch(appOrigin + '/api/pdf/save-fields', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify({
+                                        template_id: templateId,
+                                        account_id: accountId,
+                                        pdf_content: base64Content,
+                                        field_values: {} // Will be extracted from PDF
+                                    })
+                                });
+                                
+                                const result = await response.json();
+                                console.log('[PDF Popup] Save result:', result);
                                 
                                 if (result.success) {
                                     setSaveStatus('success', `Saved ${result.field_count} field values from PDF`);
@@ -2353,14 +2308,9 @@ function initializePDFEditorPopup(popupWindow, context) {
                 if (!container) {
                     throw new Error('Adobe PDF container not found');
                 }
-
+                
                 console.log('[PDF Popup] Initializing Adobe PDF viewer with container:', container);
-
-                const existingValuesPromise = loadExistingFieldValues(localTemplateId).catch(error => {
-                    console.warn('[PDF Popup] Unable to load existing field values before initialization', error);
-                    return null;
-                });
-
+                
                 const adobeDCView = new popupWindow.AdobeDC.View({
                     clientId: 'f19373e4703e4d9c98f6d9db1db9a1cb',
                     divId: 'adobe-dc-view',
@@ -2396,35 +2346,23 @@ function initializePDFEditorPopup(popupWindow, context) {
                     
                     // Register save callback
                     registerSaveCallback(adobeDCView);
-
+                    
                     currentPDFViewer.getAPIs().then(async apis => {
                         currentPDFAPIs = apis;
                         popupWindow.PDF_DEBUG.apis = currentPDFAPIs;
-
+                        
                         console.log('[PDF Popup] Adobe APIs loaded, PDF ready for editing');
                         console.log('[PDF Popup] Available API methods:', Object.keys(apis || {}));
-                        try {
-                            const existingValues = savedFieldValues || await existingValuesPromise;
-                            await applySavedFieldValues(existingValues);
-                        } catch (applyError) {
-                            console.warn('[PDF Popup] Unable to apply saved values using Adobe APIs', applyError);
-                        }
                         setSaveStatus('success', 'PDF loaded with pre-filled values. Click on fields to edit, then press Ctrl+S to save.');
                     }).catch(async apiError => {
                         console.warn('[PDF Popup] Unable to access Adobe viewer APIs', apiError);
                         currentPDFAPIs = null;
                         popupWindow.PDF_DEBUG.apis = null;
-
+                        
                         console.log('[PDF Popup] PDF loaded without Adobe APIs');
-                        try {
-                            const existingValues = savedFieldValues || await existingValuesPromise;
-                            await applySavedFieldValues(existingValues);
-                        } catch (applyError) {
-                            console.warn('[PDF Popup] Unable to apply saved values without Adobe APIs', applyError);
-                        }
                         setSaveStatus('info', 'PDF loaded with pre-filled values. Use Ctrl+S to save changes.');
                     });
-
+                    
                 }).catch(error => {
                     console.error('[PDF Popup] Error loading PDF', error);
                     showPDFError(localTemplateId, error.message || 'The PDF could not be loaded.');

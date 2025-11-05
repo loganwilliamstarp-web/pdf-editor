@@ -3369,7 +3369,6 @@ def save_pdf_fields():
 
         # If PDF content is provided, extract fields from it
         extracted_fields = {}
-        pymupdf_fields = {}
         if pdf_content:
             try:
                 # Decode base64 PDF content
@@ -3377,30 +3376,6 @@ def save_pdf_fields():
                     pdf_content = pdf_content.split(',')[1]
                 pdf_bytes = base64.b64decode(pdf_content)
                 
-                if PYMUPDF_AVAILABLE:
-                    try:
-                        pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-                        for page in pdf_doc:
-                            for widget in page.widgets() or []:
-                                field_name = widget.field_name
-                                if not field_name:
-                                    continue
-                                value = widget.field_value
-                                if value is None:
-                                    value = ''
-                                if isinstance(value, bytes):
-                                    try:
-                                        value = value.decode('utf-8')
-                                    except Exception:
-                                        value = str(value)
-                                pymupdf_fields[field_name] = value
-                        pdf_doc.close()
-                        if pymupdf_fields:
-                            print(f"PyMuPDF extracted {len(pymupdf_fields)} fields from PDF content")
-                            print(f"PyMuPDF sample: {list(pymupdf_fields.items())[:5]}")
-                    except Exception as pymupdf_error:
-                        print(f"PyMuPDF field extraction failed: {pymupdf_error}")
-
                 # Extract fields using pypdf
                 if PYPDF_AVAILABLE:
                     pdf_reader = PdfReader(io.BytesIO(pdf_bytes))
@@ -3496,16 +3471,16 @@ def save_pdf_fields():
                     # Use extracted fields if they have values, otherwise use provided field_values
                     if extracted_fields:
                         # Merge extracted fields with provided field_values (extracted takes precedence)
-                        final_field_values = {**field_values, **pymupdf_fields, **extracted_fields}
+                        final_field_values = {**field_values, **extracted_fields}
                     else:
-                        final_field_values = {**field_values, **pymupdf_fields}
+                        final_field_values = field_values
                 else:
-                    print("pypdf not available, using provided field values with PyMuPDF fallback")
-                    final_field_values = {**field_values, **pymupdf_fields}
-
+                    print("pypdf not available, using provided field values")
+                    final_field_values = field_values
+                    
             except Exception as extract_error:
                 print(f"Error extracting fields from PDF: {extract_error}")
-                final_field_values = {**field_values, **pymupdf_fields}
+                final_field_values = field_values
         else:
             final_field_values = field_values
 
@@ -3672,7 +3647,6 @@ def save_pdf_fields():
             'account_id': account_id,
             'field_count': len(merged_field_values),
             'extracted_fields_count': len(extracted_fields),
-            'pymupdf_fields_count': len(pymupdf_fields),
             'form_fields_updated': template_fields_updated,
             'form_fields': form_fields_payload['fields'] if form_fields_payload else None
         })
