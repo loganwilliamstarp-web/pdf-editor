@@ -51,22 +51,27 @@ def rename_templates():
         print("\nRenaming templates...")
         
         renamed_count = 0
-        for old_name, new_name in TEMPLATE_RENAMES.items():
+        for template_type, new_name in TEMPLATE_RENAMES.items():
             try:
-                # Update template name
+                # Update template name based on template type
                 cur.execute(
-                    "UPDATE master_templates SET template_name = %s WHERE template_name = %s",
-                    (new_name, old_name)
+                    """
+                    UPDATE master_templates
+                    SET template_name = %s,
+                        updated_at = NOW()
+                    WHERE LOWER(template_type) = %s
+                    """,
+                    (new_name, template_type.lower())
                 )
                 
                 if cur.rowcount > 0:
-                    print(f"SUCCESS: Renamed '{old_name}' to '{new_name}'")
+                    print(f"SUCCESS: Template type '{template_type}' renamed to '{new_name}'")
                     renamed_count += 1
                 else:
-                    print(f"WARNING: No template found with name: '{old_name}'")
+                    print(f"WARNING: No template found for type: '{template_type}'")
                     
             except Exception as e:
-                print(f"FAILED: Could not rename '{old_name}': {e}")
+                print(f"FAILED: Could not rename template type '{template_type}': {e}")
         
         # Commit changes
         conn.commit()
