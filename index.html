@@ -2268,24 +2268,6 @@ function initializePDFEditorPopup(popupWindow, context) {
                     const base64Content = reader.result;
                     console.log('[PDF Popup] Base64 content length:', base64Content.length);
 
-                    console.log('[PDF Popup] Collecting field definitions/values before save...');
-                    let collectedDefinitions = [];
-                    let collectedValues = {};
-                    try {
-                        const collected = await collectPdfFieldData();
-                        if (collected && typeof collected === 'object') {
-                            collectedDefinitions = Array.isArray(collected.definitions) ? collected.definitions : [];
-                            collectedValues = collected.values && typeof collected.values === 'object'
-                                ? collected.values
-                                : {};
-                            console.log('[PDF Popup] Collected definitions:', collectedDefinitions.length, 'values:', Object.keys(collectedValues).length);
-                        }
-                    } catch (collectError) {
-                        console.warn('[PDF Popup] collectPdfFieldData failed, proceeding without client values', collectError);
-                        collectedDefinitions = [];
-                        collectedValues = {};
-                    }
-
                     console.log('[PDF Popup] Sending PDF to server for extraction...');
 
                     // Send PDF content to server for extraction and saving
@@ -2298,8 +2280,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                             template_id: templateId,
                             account_id: accountId,
                             pdf_content: base64Content,
-                            field_values: collectedValues,
-                            form_fields: collectedDefinitions.length ? { fields: collectedDefinitions } : undefined
+                            field_values: {} // Server performs extraction from PDF content
                         })
                     });
 
