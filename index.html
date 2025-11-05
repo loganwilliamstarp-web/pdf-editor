@@ -2268,6 +2268,19 @@ function initializePDFEditorPopup(popupWindow, context) {
                     const base64Content = reader.result;
                     console.log('[PDF Popup] Base64 content length:', base64Content.length);
 
+                    console.log('[PDF Popup] Gathering field values prior to save...');
+                    let collectedValues = {};
+                    try {
+                        const collected = await collectPdfFieldData();
+                        if (collected && collected.values && typeof collected.values === 'object') {
+                            collectedValues = collected.values;
+                            console.log('[PDF Popup] Collected field value keys:', Object.keys(collectedValues));
+                        }
+                    } catch (collectError) {
+                        console.warn('[PDF Popup] Could not collect field values via Adobe APIs', collectError);
+                        collectedValues = {};
+                    }
+
                     console.log('[PDF Popup] Sending PDF to server for extraction...');
 
                     // Send PDF content to server for extraction and saving
@@ -2280,7 +2293,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                             template_id: templateId,
                             account_id: accountId,
                             pdf_content: base64Content,
-                            field_values: {} // Server performs extraction from PDF content
+                            field_values: collectedValues
                         })
                     });
 
