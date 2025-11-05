@@ -1389,10 +1389,34 @@ def get_account_templates(account_id):
             templates = fetch_templates()
 
         template_payloads = []
+        final_types = set()
         for row in templates:
             template_data = dict(row)
             template_data['form_fields'] = coerce_form_fields_payload(template_data.get('form_fields'))
+            template_type_value = (template_data.get('template_type') or '').strip().lower()
+            if template_type_value:
+                final_types.add(template_type_value)
             template_payloads.append(template_data)
+
+        remaining_missing_types = [
+            template_key
+            for template_key in MASTER_TEMPLATE_CONFIG.keys()
+            if template_key not in final_types
+        ]
+
+        for template_key in remaining_missing_types:
+            config = MASTER_TEMPLATE_CONFIG.get(template_key, {})
+            placeholder = {
+                'id': None,
+                'template_name': config.get('display_name') or template_key.upper(),
+                'template_type': template_key,
+                'form_fields': {'fields': []},
+                'created_at': None,
+                'storage_path': f"local://{config.get('filename')}" if config.get('filename') else None,
+                'metadata_source': 'local',
+                'missing': True,
+            }
+            template_payloads.append(placeholder)
 
         def template_sort_key(item):
             name = str(item.get('template_name') or '')
