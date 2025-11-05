@@ -54,7 +54,7 @@ def main():
         'acord30.pdf': 'ACORD 30 - Evidence of Commercial Crime Insurance',
         'acord35.pdf': 'ACORD 35 - Evidence of Commercial Inland Marine Insurance',
         'acord36.pdf': 'ACORD 36 - Evidence of Commercial Auto Insurance',
-        'acord37.pdf': 'ACORD 37 - Evidence of Commercial Auto Insurance',
+        'acord37.pdf': 'Statement of No Loss',
         'acord125.pdf': 'ACORD 125 - Certificate of Liability Insurance',
         'acord126.pdf': 'ACORD 126 - Certificate of Liability Insurance',
         'acord130.pdf': 'ACORD 130 - Evidence of Commercial Property Insurance',

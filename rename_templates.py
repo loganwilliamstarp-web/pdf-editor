@@ -20,7 +20,7 @@ TEMPLATE_RENAMES = {
     "acord30": "ACORD 30 - Evidence of Property Insurance",
     "acord35": "ACORD 35 - Evidence of Commercial Property Insurance",
     "acord36": "ACORD 36 - Evidence of Commercial Property Insurance (Broad Form)",
-    "acord37": "ACORD 37 - Evidence of Commercial Property Insurance (Special Form)"
+    "acord37": "Statement of No Loss"
 }
 
 def rename_templates():

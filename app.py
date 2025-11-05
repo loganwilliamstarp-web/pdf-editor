@@ -13,19 +13,53 @@ import zipfile
 # Optional imports with fallbacks
 
 LOCAL_TEMPLATE_DIR = Path(__file__).resolve().parent / "database" / "templates"
-LOCAL_TEMPLATE_FILES = {
-    "acord25": "acord25.pdf",
-    "acord27": "acord27.pdf",
-    "acord28": "acord28.pdf",
-    "acord30": "acord30.pdf",
-    "acord35": "acord35.pdf",
-    "acord36": "acord36.pdf",
-    "acord37": "acord37.pdf",
-    "acord125": "acord125.pdf",
-    "acord126": "acord126.pdf",
-    "acord130": "acord130.pdf",
-    "acord140": "acord140.pdf",
+MASTER_TEMPLATE_CONFIG = {
+    "acord25": {
+        "filename": "acord25.pdf",
+        "display_name": "ACORD 25 - Certificate of Liability Insurance",
+    },
+    "acord27": {
+        "filename": "acord27.pdf",
+        "display_name": "ACORD 27 - Evidence of Property Insurance",
+    },
+    "acord28": {
+        "filename": "acord28.pdf",
+        "display_name": "ACORD 28 - Evidence of Commercial Property Insurance",
+    },
+    "acord30": {
+        "filename": "acord30.pdf",
+        "display_name": "ACORD 30 - Evidence of Commercial Crime Insurance",
+    },
+    "acord35": {
+        "filename": "acord35.pdf",
+        "display_name": "ACORD 35 - Evidence of Commercial Inland Marine Insurance",
+    },
+    "acord36": {
+        "filename": "acord36.pdf",
+        "display_name": "ACORD 36 - Evidence of Commercial Auto Insurance",
+    },
+    "acord37": {
+        "filename": "acord37.pdf",
+        "display_name": "Statement of No Loss",
+    },
+    "acord125": {
+        "filename": "acord125.pdf",
+        "display_name": "ACORD 125 - Certificate of Liability Insurance",
+    },
+    "acord126": {
+        "filename": "acord126.pdf",
+        "display_name": "ACORD 126 - Certificate of Liability Insurance",
+    },
+    "acord130": {
+        "filename": "acord130.pdf",
+        "display_name": "ACORD 130 - Evidence of Commercial Property Insurance",
+    },
+    "acord140": {
+        "filename": "acord140.pdf",
+        "display_name": "ACORD 140 - Evidence of Commercial Property Insurance",
+    },
 }
+LOCAL_TEMPLATE_FILES = {key: value["filename"] for key, value in MASTER_TEMPLATE_CONFIG.items()}
 
 CERTIFICATE_HOLDER_FIELD_MAPPINGS = {
     "acord25": {
@@ -713,7 +747,7 @@ def load_master_template_pdf(template_type="acord25"):
             conn.close()
 
 
-def refresh_master_template_from_local(template_type, template_name=None):
+def refresh_master_template_from_local(template_type, template_name=None, force=False):
     """Replace stored master template PDF with the local copy."""
     if not PSYCOPG2_AVAILABLE:
         raise RuntimeError("psycopg2 not available; cannot refresh master templates.")
@@ -722,7 +756,8 @@ def refresh_master_template_from_local(template_type, template_name=None):
         raise ValueError("template_type is required")
 
     template_type_key = str(template_type).lower()
-    local_filename = LOCAL_TEMPLATE_FILES.get(template_type_key)
+    template_config = MASTER_TEMPLATE_CONFIG.get(template_type_key, {})
+    local_filename = template_config.get('filename') or LOCAL_TEMPLATE_FILES.get(template_type_key)
     if not local_filename:
         raise ValueError(f"No local template mapping found for '{template_type}'")
 
@@ -733,16 +768,16 @@ def refresh_master_template_from_local(template_type, template_name=None):
     pdf_bytes = local_path.read_bytes()
     file_size = len(pdf_bytes)
     storage_path = f"local://{local_path.name}"
+    default_template_name = template_config.get('display_name')
 
     conn = None
     cur = None
     try:
         conn = get_db()
         cur = conn.cursor()
-
         cur.execute(
             '''
-            SELECT id, template_name
+            SELECT id, template_name, template_type, storage_path, file_size, pdf_blob
             FROM master_templates
             WHERE LOWER(template_type) = %s
             ORDER BY updated_at DESC NULLS LAST, created_at DESC
@@ -752,11 +787,33 @@ def refresh_master_template_from_local(template_type, template_name=None):
         )
         existing = cur.fetchone()
 
-        target_template_name = template_name
+        target_template_name = template_name or default_template_name or template_type_key.upper()
+        target_id = None
+        operation = 'inserted'
         if existing:
             existing_dict = dict(existing) if not isinstance(existing, dict) else existing
-            target_template_name = target_template_name or existing_dict.get('template_name') or template_type_key.upper()
             target_id = existing_dict.get('id')
+            existing_name = existing_dict.get('template_name')
+            existing_size = existing_dict.get('file_size')
+            existing_blob = existing_dict.get('pdf_blob')
+            existing_bytes = None
+            if existing_blob is not None:
+                try:
+                    existing_bytes = bytes(existing_blob)
+                except (TypeError, ValueError):
+                    existing_bytes = existing_blob
+
+            if not force and existing_bytes == pdf_bytes and existing_name == target_template_name and existing_size == file_size:
+                return {
+                    'updated_rows': 0,
+                    'skipped': True,
+                    'template_id': target_id,
+                    'template_type': template_type_key,
+                    'template_name': target_template_name,
+                    'file_size': file_size,
+                    'storage_path': storage_path
+                }
+
             cur.execute(
                 '''
                 UPDATE master_templates
@@ -776,15 +833,16 @@ def refresh_master_template_from_local(template_type, template_name=None):
                 )
             )
             updated = cur.rowcount
+            operation = 'updated'
         else:
-            target_template_name = target_template_name or template_type_key.upper()
+            target_id = str(uuid.uuid4())
             cur.execute(
                 '''
                 INSERT INTO master_templates (id, template_name, template_type, storage_path, file_size, pdf_blob, form_fields)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ''',
                 (
-                    str(uuid.uuid4()),
+                    target_id,
                     target_template_name,
                     template_type_key,
                     storage_path,
@@ -794,9 +852,19 @@ def refresh_master_template_from_local(template_type, template_name=None):
                 )
             )
             updated = cur.rowcount
+            operation = 'inserted'
 
         conn.commit()
-        return {'updated_rows': updated, 'file_size': file_size, 'storage_path': storage_path}
+        return {
+            'updated_rows': updated,
+            'skipped': False,
+            'operation': operation,
+            'template_id': target_id,
+            'template_type': template_type_key,
+            'template_name': target_template_name,
+            'file_size': file_size,
+            'storage_path': storage_path
+        }
     except Exception:
         if conn:
             conn.rollback()
@@ -806,6 +874,31 @@ def refresh_master_template_from_local(template_type, template_name=None):
             cur.close()
         if conn:
             conn.close()
+
+
+def refresh_all_templates_from_local(force=False, template_types=None):
+    """Refresh every known template from local storage into the database."""
+    results = {}
+    errors = {}
+
+    allowed_types = set(t.lower() for t in template_types) if template_types else None
+
+    for template_type, config in MASTER_TEMPLATE_CONFIG.items():
+        if allowed_types and template_type not in allowed_types:
+            continue
+
+        display_name = config.get('display_name')
+        try:
+            refresh_result = refresh_master_template_from_local(
+                template_type,
+                template_name=display_name,
+                force=force
+            )
+            results[template_type] = refresh_result
+        except Exception as exc:
+            errors[template_type] = str(exc)
+
+    return results, errors
 
 
 def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
@@ -1192,6 +1285,47 @@ def setup_system():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/api/admin/templates/refresh", methods=['POST'])
+def refresh_templates_endpoint():
+    """Refresh master template PDFs from local storage."""
+    if not PSYCOPG2_AVAILABLE:
+        return database_not_configured_response()
+
+    payload = request.get_json(silent=True) if request.is_json else None
+    force = False
+    requested_templates = None
+    missing_templates = []
+
+    if isinstance(payload, dict):
+        force = bool(payload.get('force', False))
+        requested = payload.get('templates')
+        if requested:
+            requested_templates = []
+            for entry in requested:
+                if entry is None:
+                    continue
+                key = str(entry).lower()
+                if key in MASTER_TEMPLATE_CONFIG:
+                    requested_templates.append(key)
+                else:
+                    missing_templates.append(key)
+
+    results, errors = refresh_all_templates_from_local(force=force, template_types=requested_templates)
+    refreshed_count = sum(1 for data in results.values() if not data.get('skipped'))
+    status_code = 200 if not errors else 207
+
+    return jsonify({
+        'success': len(errors) == 0,
+        'force': force,
+        'refreshed_count': refreshed_count,
+        'requested_templates': requested_templates,
+        'missing_templates': missing_templates,
+        'results': results,
+        'errors': errors
+    }), status_code
+
 
 @app.route("/api/account/<account_id>")
 def get_account_info(account_id):

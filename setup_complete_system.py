@@ -36,7 +36,7 @@ def upload_templates():
         "acord30.pdf": "ACORD 30 - Evidence of Insurance",
         "acord35.pdf": "ACORD 35 - Evidence of Property Insurance",
         "acord36.pdf": "ACORD 36 - Evidence of Insurance",
-        "acord37.pdf": "ACORD 37 - Evidence of Insurance",
+        "acord37.pdf": "Statement of No Loss",
         "acord125.pdf": "ACORD 125 - Evidence of Insurance",
         "acord126.pdf": "ACORD 126 - Evidence of Insurance",
         "acord130.pdf": "ACORD 130 - Evidence of Insurance",
