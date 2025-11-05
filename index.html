@@ -2359,9 +2359,14 @@ function initializePDFEditorPopup(popupWindow, context) {
                 if (!container) {
                     throw new Error('Adobe PDF container not found');
                 }
-                
+
                 console.log('[PDF Popup] Initializing Adobe PDF viewer with container:', container);
-                
+
+                const existingValuesPromise = loadExistingFieldValues(localTemplateId).catch(error => {
+                    console.warn('[PDF Popup] Unable to load existing field values before initialization', error);
+                    return null;
+                });
+
                 const adobeDCView = new popupWindow.AdobeDC.View({
                     clientId: 'f19373e4703e4d9c98f6d9db1db9a1cb',
                     divId: 'adobe-dc-view',
@@ -2397,23 +2402,35 @@ function initializePDFEditorPopup(popupWindow, context) {
                     
                     // Register save callback
                     registerSaveCallback(adobeDCView);
-                    
+
                     currentPDFViewer.getAPIs().then(async apis => {
                         currentPDFAPIs = apis;
                         popupWindow.PDF_DEBUG.apis = currentPDFAPIs;
-                        
+
                         console.log('[PDF Popup] Adobe APIs loaded, PDF ready for editing');
                         console.log('[PDF Popup] Available API methods:', Object.keys(apis || {}));
+                        try {
+                            const existingValues = savedFieldValues || await existingValuesPromise;
+                            await applySavedFieldValues(existingValues);
+                        } catch (applyError) {
+                            console.warn('[PDF Popup] Unable to apply saved values using Adobe APIs', applyError);
+                        }
                         setSaveStatus('success', 'PDF loaded with pre-filled values. Click on fields to edit, then press Ctrl+S to save.');
                     }).catch(async apiError => {
                         console.warn('[PDF Popup] Unable to access Adobe viewer APIs', apiError);
                         currentPDFAPIs = null;
                         popupWindow.PDF_DEBUG.apis = null;
-                        
+
                         console.log('[PDF Popup] PDF loaded without Adobe APIs');
+                        try {
+                            const existingValues = savedFieldValues || await existingValuesPromise;
+                            await applySavedFieldValues(existingValues);
+                        } catch (applyError) {
+                            console.warn('[PDF Popup] Unable to apply saved values without Adobe APIs', applyError);
+                        }
                         setSaveStatus('info', 'PDF loaded with pre-filled values. Use Ctrl+S to save changes.');
                     });
-                    
+
                 }).catch(error => {
                     console.error('[PDF Popup] Error loading PDF', error);
                     showPDFError(localTemplateId, error.message || 'The PDF could not be loaded.');
