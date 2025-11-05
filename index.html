@@ -2228,32 +2228,51 @@ function initializePDFEditorPopup(popupWindow, context) {
                         try {
                             // Convert PDF content to blob
                             const blob = new Blob([new Uint8Array(content)], { type: 'application/pdf' });
-                            console.log('[PDF Popup] Blob created, size:', blob.size, 'type:', blob.type);
-                            
-                            // Convert blob to base64 for server processing
-                            const reader = new FileReader();
-                            reader.onload = async () => {
-                                const base64Content = reader.result;
-                                console.log('[PDF Popup] Base64 content length:', base64Content.length);
-                                
-                                console.log('[PDF Popup] Sending PDF to server for extraction...');
-                                
-                                // Send PDF content to server for extraction and saving
-                                const response = await fetch(appOrigin + '/api/pdf/save-fields', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                    },
-                                    body: JSON.stringify({
-                                        template_id: templateId,
-                                        account_id: accountId,
-                                        pdf_content: base64Content,
-                                        field_values: {} // Will be extracted from PDF
-                                    })
-                                });
-                                
-                                const result = await response.json();
-                                console.log('[PDF Popup] Save result:', result);
+                console.log('[PDF Popup] Blob created, size:', blob.size, 'type:', blob.type);
+
+                // Convert blob to base64 for server processing
+                const reader = new FileReader();
+                reader.onload = async () => {
+                    const base64Content = reader.result;
+                    console.log('[PDF Popup] Base64 content length:', base64Content.length);
+
+                    console.log('[PDF Popup] Collecting field definitions/values before save...');
+                    let collectedDefinitions = [];
+                    let collectedValues = {};
+                    try {
+                        const collected = await collectPdfFieldData();
+                        if (collected && typeof collected === 'object') {
+                            collectedDefinitions = Array.isArray(collected.definitions) ? collected.definitions : [];
+                            collectedValues = collected.values && typeof collected.values === 'object'
+                                ? collected.values
+                                : {};
+                            console.log('[PDF Popup] Collected definitions:', collectedDefinitions.length, 'values:', Object.keys(collectedValues).length);
+                        }
+                    } catch (collectError) {
+                        console.warn('[PDF Popup] collectPdfFieldData failed, proceeding without client values', collectError);
+                        collectedDefinitions = [];
+                        collectedValues = {};
+                    }
+
+                    console.log('[PDF Popup] Sending PDF to server for extraction...');
+
+                    // Send PDF content to server for extraction and saving
+                    const response = await fetch(appOrigin + '/api/pdf/save-fields', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            template_id: templateId,
+                            account_id: accountId,
+                            pdf_content: base64Content,
+                            field_values: collectedValues,
+                            form_fields: collectedDefinitions.length ? { fields: collectedDefinitions } : undefined
+                        })
+                    });
+
+                    const result = await response.json();
+                    console.log('[PDF Popup] Save result:', result);
                                 
                                 if (result.success) {
                                     setSaveStatus('success', `Saved ${result.field_count} field values from PDF`);
