@@ -36,11 +36,11 @@ MASTER_TEMPLATE_CONFIG = {
     },
     "acord36": {
         "filename": "acord36.pdf",
-        "display_name": "ACORD 36 - Evidence of Commercial Auto Insurance",
+        "display_name": "ACORD 36 - Agent of Record Change",
     },
     "acord37": {
         "filename": "acord37.pdf",
-        "display_name": "Statement of No Loss",
+        "display_name": "ACORD 37 - Statement of No Loss",
     },
     "acord125": {
         "filename": "acord125.pdf",
