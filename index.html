@@ -2236,6 +2236,59 @@ function initializePDFEditorPopup(popupWindow, context) {
                                 const base64Content = reader.result;
                                 console.log('[PDF Popup] Base64 content length:', base64Content.length);
                                 
+                                console.log('[PDF Popup] Gathering field values prior to save...');
+                                let collectedValues = {};
+                                try {
+                                    const collected = await collectPdfFieldData();
+                                    if (collected && collected.values && typeof collected.values === 'object') {
+                                        const sanitized = {};
+                                        Object.entries(collected.values).forEach(([key, value]) => {
+                                            if (!key) {
+                                                return;
+                                            }
+                                            const normalizeValue = (input) => {
+                                                if (input === undefined || input === null) {
+                                                    return '';
+                                                }
+                                                if (Array.isArray(input)) {
+                                                    return input.map(normalizeValue).join(', ');
+                                                }
+                                                if (typeof input === 'object') {
+                                                    if ('value' in input) {
+                                                        return normalizeValue(input.value);
+                                                    }
+                                                    if ('defaultValue' in input) {
+                                                        return normalizeValue(input.defaultValue);
+                                                    }
+                                                    if ('displayValue' in input) {
+                                                        return normalizeValue(input.displayValue);
+                                                    }
+                                                    try {
+                                                        return JSON.stringify(input);
+                                                    } catch (serializationError) {
+                                                        return String(input);
+                                                    }
+                                                }
+                                                if (typeof input === 'boolean') {
+                                                    return input ? 'true' : 'false';
+                                                }
+                                                return String(input);
+                                            };
+                                            sanitized[key] = normalizeValue(value);
+                                        });
+                                        collectedValues = sanitized;
+                                        console.log('[PDF Popup] Collected field value keys:', Object.keys(collectedValues));
+                                    }
+
+                                    if (!collectedValues || Object.keys(collectedValues).length === 0) {
+                                        console.log('[PDF Popup] Falling back to DOM field collection for values');
+                                        collectedValues = collectFieldsFromDOM();
+                                    }
+                                } catch (collectError) {
+                                    console.warn('[PDF Popup] Could not collect field values via Adobe APIs', collectError);
+                                    collectedValues = collectFieldsFromDOM();
+                                }
+
                                 console.log('[PDF Popup] Sending PDF to server for extraction...');
                                 
                                 // Send PDF content to server for extraction and saving
@@ -2248,7 +2301,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                                         template_id: templateId,
                                         account_id: accountId,
                                         pdf_content: base64Content,
-                                        field_values: {} // Will be extracted from PDF
+                                        field_values: collectedValues
                                     })
                                 });
                                 

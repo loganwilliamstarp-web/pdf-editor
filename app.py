@@ -2540,6 +2540,46 @@ def fetch_template_row(cur, template_identifier, account_id=None, include_field_
 
     return row
 
+
+def normalize_incoming_field_values(raw_values):
+    """Normalize incoming field values from the client into a flat string dictionary."""
+    if not isinstance(raw_values, dict):
+        return {}
+
+    normalized = {}
+
+    for key, value in raw_values.items():
+        if key is None:
+            continue
+
+        key_str = str(key)
+
+        def coerce(val):
+            if val is None:
+                return ''
+            if isinstance(val, bool):
+                return 'true' if val else 'false'
+            if isinstance(val, (int, float)):
+                return str(val)
+            if isinstance(val, list):
+                return ', '.join(coerce(item) for item in val)
+            if isinstance(val, dict):
+                if 'value' in val:
+                    return coerce(val['value'])
+                if 'defaultValue' in val:
+                    return coerce(val['defaultValue'])
+                if 'displayValue' in val:
+                    return coerce(val['displayValue'])
+                try:
+                    return json.dumps(val)
+                except (TypeError, ValueError):
+                    return str(val)
+            return str(val)
+
+        normalized[key_str] = coerce(value)
+
+    return normalized
+
 @app.route('/api/pdf/template/<template_id>')
 def serve_pdf_template(template_id):
     """Serve PDF template file for Adobe Embed API"""
@@ -3335,6 +3375,8 @@ def save_pdf_fields():
         template_id = data.get('template_id')
         account_id = data.get('account_id')
         field_values = data.get('field_values', {})
+        incoming_field_values = normalize_incoming_field_values(field_values)
+        field_values = incoming_field_values
         pdf_content = data.get('pdf_content')  # Base64 encoded PDF content
         form_fields_payload = None
 
@@ -3471,18 +3513,18 @@ def save_pdf_fields():
                     # Use extracted fields if they have values, otherwise use provided field_values
                     if extracted_fields:
                         # Merge extracted fields with provided field_values (extracted takes precedence)
-                        final_field_values = {**field_values, **extracted_fields}
+                        final_field_values = {**incoming_field_values, **extracted_fields}
                     else:
-                        final_field_values = field_values
+                        final_field_values = incoming_field_values
                 else:
                     print("pypdf not available, using provided field values")
-                    final_field_values = field_values
+                    final_field_values = incoming_field_values
                     
             except Exception as extract_error:
                 print(f"Error extracting fields from PDF: {extract_error}")
-                final_field_values = field_values
+                final_field_values = incoming_field_values
         else:
-            final_field_values = field_values
+            final_field_values = incoming_field_values
 
         # Check if template data already exists for this account
         cur.execute('''
@@ -3782,7 +3824,6 @@ def get_pdf_fields(template_id, account_id):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-
 
 
 
