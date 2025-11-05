@@ -1348,18 +1348,45 @@ def get_account_info(account_id):
 def get_account_templates(account_id):
     """Get all master templates available for the account"""
     try:
-        conn = get_db()
-        cur = conn.cursor()
-        
-        cur.execute('''
+        query = '''
             SELECT id, template_name, template_type, form_fields, created_at
             FROM master_templates
             ORDER BY template_name
-        ''')
-        
-        templates = cur.fetchall()
-        cur.close()
-        conn.close()
+        '''
+
+        def fetch_templates():
+            connection = None
+            cursor = None
+            try:
+                connection = get_db()
+                cursor = connection.cursor()
+                cursor.execute(query)
+                return cursor.fetchall()
+            finally:
+                if cursor:
+                    cursor.close()
+                if connection:
+                    connection.close()
+
+        templates = fetch_templates()
+
+        existing_types = set()
+        for row in templates:
+            if not row:
+                continue
+            template_type_value = (row.get('template_type') or '').strip().lower()
+            if template_type_value:
+                existing_types.add(template_type_value)
+
+        missing_types = [
+            template_key
+            for template_key in MASTER_TEMPLATE_CONFIG.keys()
+            if template_key not in existing_types
+        ]
+
+        if missing_types:
+            refresh_all_templates_from_local(force=False, template_types=missing_types)
+            templates = fetch_templates()
 
         template_payloads = []
         for row in templates:
