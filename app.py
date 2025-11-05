@@ -2447,6 +2447,99 @@ def resolve_local_template_file(template_type, storage_path):
 
     return None
 
+
+def fetch_template_row(cur, template_identifier, account_id=None, include_field_values=False, allow_refresh=True):
+    """
+    Retrieve a master template row given either a UUID identifier or a template key (e.g., 'acord24').
+    Optionally joins template_data for the provided account to include saved field values.
+    """
+    if not template_identifier:
+        return None
+
+    template_id_str = str(template_identifier).strip()
+    normalized_key = template_id_str.lower()
+    is_uuid_identifier = False
+    try:
+        uuid.UUID(template_id_str)
+        is_uuid_identifier = True
+    except (ValueError, TypeError):
+        is_uuid_identifier = False
+
+    if include_field_values and account_id:
+        select_clause = '''
+            SELECT
+                mt.id,
+                mt.template_name,
+                mt.template_type,
+                mt.storage_path,
+                mt.file_size,
+                mt.pdf_blob,
+                mt.form_fields,
+                td.field_values
+            FROM master_templates mt
+            LEFT JOIN template_data td
+                ON td.template_id = mt.id AND td.account_id = %s
+        '''
+        join_params = [account_id]
+    else:
+        select_clause = '''
+            SELECT
+                mt.id,
+                mt.template_name,
+                mt.template_type,
+                mt.storage_path,
+                mt.file_size,
+                mt.pdf_blob,
+                mt.form_fields
+            FROM master_templates mt
+        '''
+        join_params = []
+
+    def as_dict(row):
+        if row and not isinstance(row, dict):
+            return dict(row)
+        return row
+
+    row = None
+    if is_uuid_identifier:
+        cur.execute(
+            select_clause + ' WHERE mt.id = %s',
+            join_params + [template_id_str]
+        )
+        row = as_dict(cur.fetchone())
+
+    if not row and normalized_key:
+        cur.execute(
+            select_clause + '''
+            WHERE LOWER(mt.template_type) = %s
+            ORDER BY mt.updated_at DESC NULLS LAST, mt.created_at DESC
+            LIMIT 1
+            ''',
+            join_params + [normalized_key]
+        )
+        row = as_dict(cur.fetchone())
+
+    if not row and allow_refresh and normalized_key in MASTER_TEMPLATE_CONFIG:
+        config = MASTER_TEMPLATE_CONFIG.get(normalized_key, {})
+        try:
+            refresh_master_template_from_local(
+                normalized_key,
+                template_name=config.get('display_name')
+            )
+            cur.execute(
+                select_clause + '''
+                WHERE LOWER(mt.template_type) = %s
+                ORDER BY mt.updated_at DESC NULLS LAST, mt.created_at DESC
+                LIMIT 1
+                ''',
+                join_params + [normalized_key]
+            )
+            row = as_dict(cur.fetchone())
+        except Exception as refresh_error:
+            print(f"Refresh attempt failed for template '{normalized_key}': {refresh_error}")
+
+    return row
+
 @app.route('/api/pdf/template/<template_id>')
 def serve_pdf_template(template_id):
     """Serve PDF template file for Adobe Embed API"""
@@ -3254,6 +3347,26 @@ def save_pdf_fields():
         conn = get_db()
         cur = conn.cursor()
 
+        resolved_template_row = fetch_template_row(
+            cur,
+            template_id,
+            account_id=account_id,
+            include_field_values=True
+        )
+
+        if not resolved_template_row:
+            return jsonify({'success': False, 'error': 'Template not found'}), 404
+
+        resolved_template_id = resolved_template_row.get('id')
+        if not resolved_template_id:
+            return jsonify({'success': False, 'error': 'Template identifier unavailable'}), 404
+
+        resolved_template_id_str = str(resolved_template_id)
+        resolved_template_type = (resolved_template_row.get('template_type') or '').lower()
+
+        if form_fields_payload is None:
+            form_fields_payload = coerce_form_fields_payload(resolved_template_row.get('form_fields'))
+
         # If PDF content is provided, extract fields from it
         extracted_fields = {}
         if pdf_content:
@@ -3373,9 +3486,9 @@ def save_pdf_fields():
 
         # Check if template data already exists for this account
         cur.execute('''
-            SELECT id, field_values FROM template_data 
+            SELECT id, field_values FROM template_data
             WHERE account_id = %s AND template_id = %s
-        ''', (account_id, template_id))
+        ''', (account_id, resolved_template_id_str))
 
         existing_data = cur.fetchone()
 
@@ -3465,8 +3578,8 @@ def save_pdf_fields():
         print(f"Final merged fields: {len(merged_field_values)}")
         print(f"=== END MERGE DEBUG ===\n")
 
-        print("Saving field values for template {0}, account {1}: {2} fields (merged from {3} current + {4} existing)".format(
-            template_id, account_id, len(merged_field_values), len(final_field_values), len(existing_field_values)))
+        print("Saving field values for template {0} (resolved id: {1}), account {2}: {3} fields (merged from {4} current + {5} existing)".format(
+            template_id, resolved_template_id_str, account_id, len(merged_field_values), len(final_field_values), len(existing_field_values)))
         
         if merged_field_values:
             print("Merged field sample:", list(merged_field_values.items())[:5])
@@ -3478,41 +3591,41 @@ def save_pdf_fields():
             print("WARNING: No field values to save!")
 
         if existing_data:
-            print(f"Updating existing template_data record for account {account_id}, template {template_id}")
+            print(f"Updating existing template_data record for account {account_id}, template {resolved_template_id_str}")
             cur.execute('''
-                UPDATE template_data 
+                UPDATE template_data
                 SET field_values = %s, updated_at = NOW(), version = version + 1
                 WHERE account_id = %s AND template_id = %s
-            ''', (json.dumps(merged_field_values), account_id, template_id))
+            ''', (json.dumps(merged_field_values), account_id, resolved_template_id_str))
             print(f"UPDATE query executed, affected rows: {cur.rowcount}")
         else:
-            print(f"Inserting new template_data record for account {account_id}, template {template_id}")
+            print(f"Inserting new template_data record for account {account_id}, template {resolved_template_id_str}")
             cur.execute('''
                 INSERT INTO template_data (account_id, template_id, field_values)
                 VALUES (%s, %s, %s)
-            ''', (account_id, template_id, json.dumps(merged_field_values)))
+            ''', (account_id, resolved_template_id_str, json.dumps(merged_field_values)))
             print(f"INSERT query executed, affected rows: {cur.rowcount}")
 
         template_fields_updated = False
         if form_fields_payload is not None:
-            cur.execute('SELECT form_fields FROM master_templates WHERE id = %s', (template_id,))
+            cur.execute('SELECT form_fields FROM master_templates WHERE id = %s', (resolved_template_id_str,))
             template_row = cur.fetchone()
             existing_fields = coerce_form_fields_payload(template_row.get('form_fields')) if template_row else {'fields': []}
             if existing_fields != form_fields_payload:
                 cur.execute(
                     'UPDATE master_templates SET form_fields = %s, updated_at = NOW() WHERE id = %s',
-                    (Json(form_fields_payload), template_id)
+                    (Json(form_fields_payload), resolved_template_id_str)
                 )
                 template_fields_updated = True
 
         conn.commit()
-        print(f"Database commit successful for account {account_id}, template {template_id}")
+        print(f"Database commit successful for account {account_id}, template {resolved_template_id_str}")
 
         # Verify the data was actually saved by querying it back
         cur.execute('''
-            SELECT field_values FROM template_data 
+            SELECT field_values FROM template_data
             WHERE account_id = %s AND template_id = %s
-        ''', (account_id, template_id))
+        ''', (account_id, resolved_template_id_str))
         verification_result = cur.fetchone()
         if verification_result:
             saved_field_values = verification_result.get('field_values') or {}
@@ -3529,6 +3642,8 @@ def save_pdf_fields():
             'success': True,
             'message': 'Field values saved successfully',
             'template_id': template_id,
+            'resolved_template_id': resolved_template_id_str,
+            'template_type': resolved_template_type,
             'account_id': account_id,
             'field_count': len(merged_field_values),
             'extracted_fields_count': len(extracted_fields),
@@ -3603,27 +3718,21 @@ def get_pdf_fields(template_id, account_id):
         conn = get_db()
         cur = conn.cursor()
 
-        cur.execute('''
-            SELECT
-                td.field_values,
-                mt.form_fields
-            FROM master_templates mt
-            LEFT JOIN template_data td
-                ON td.template_id = mt.id AND td.account_id = %s
-            WHERE mt.id = %s
-        ''', (account_id, template_id))
+        template_row = fetch_template_row(
+            cur,
+            template_id,
+            account_id=account_id,
+            include_field_values=True
+        )
 
-        data = cur.fetchone()
-
-        if not data:
+        if not template_row:
             return jsonify({'success': False, 'error': 'Template not found'}), 404
 
-        if isinstance(data, dict):
-            field_values_raw = data.get('field_values')
-            form_fields_raw = data.get('form_fields')
-        else:
-            field_values_raw = data[0] if len(data) > 0 else None
-            form_fields_raw = data[1] if len(data) > 1 else None
+        resolved_template_id = template_row.get('id')
+        resolved_template_id_str = str(resolved_template_id) if resolved_template_id else None
+
+        field_values_raw = template_row.get('field_values')
+        form_fields_raw = template_row.get('form_fields')
 
         if isinstance(field_values_raw, str):
             try:
@@ -3652,6 +3761,8 @@ def get_pdf_fields(template_id, account_id):
         return jsonify({
             'success': True,
             'template_id': template_id,
+            'resolved_template_id': resolved_template_id_str,
+            'template_type': (template_row.get('template_type') or '').lower(),
             'account_id': account_id,
             'field_values': field_values_payload,
             'form_fields': form_fields_payload['fields'],
