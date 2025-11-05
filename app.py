@@ -14,6 +14,10 @@ import zipfile
 
 LOCAL_TEMPLATE_DIR = Path(__file__).resolve().parent / "database" / "templates"
 MASTER_TEMPLATE_CONFIG = {
+    "acord24": {
+        "filename": "acord24.pdf",
+        "display_name": "ACORD 24 - Certificate of Property Insurance",
+    },
     "acord25": {
         "filename": "acord25.pdf",
         "display_name": "ACORD 25 - Certificate of Liability Insurance",
@@ -44,15 +48,19 @@ MASTER_TEMPLATE_CONFIG = {
     },
     "acord125": {
         "filename": "acord125.pdf",
-        "display_name": "ACORD 125 - Certificate of Liability Insurance",
+        "display_name": "ACORD 125 - Commercial Insurance Application",
     },
     "acord126": {
         "filename": "acord126.pdf",
-        "display_name": "ACORD 126 - Certificate of Liability Insurance",
+        "display_name": "ACORD 126 - Commercial General Liability Application",
     },
     "acord130": {
         "filename": "acord130.pdf",
         "display_name": "ACORD 130 - Evidence of Commercial Property Insurance",
+    },
+    "acord131": {
+        "filename": "acord131.pdf",
+        "display_name": "ACORD 131 - Umbrella Application",
     },
     "acord140": {
         "filename": "acord140.pdf",

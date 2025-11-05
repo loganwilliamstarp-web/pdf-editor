@@ -21,6 +21,7 @@ except ImportError:
 
 TEMPLATES_DIR = Path('database/templates')
 TEMPLATE_MAPPING = {
+    'acord24.pdf': ('ACORD 24 - Certificate of Property Insurance', 'acord24'),
     'acord25.pdf': ('ACORD 25 - Certificate of Liability Insurance', 'acord25'),
     'acord27.pdf': ('ACORD 27 - Evidence of Property Insurance', 'acord27'),
     'acord28.pdf': ('ACORD 28 - Evidence of Commercial Property Insurance', 'acord28'),
@@ -28,9 +29,10 @@ TEMPLATE_MAPPING = {
     'acord35.pdf': ('ACORD 35 - Evidence of Commercial Inland Marine Insurance', 'acord35'),
     'acord36.pdf': ('ACORD 36 - Agent of Record Change', 'acord36'),
     'acord37.pdf': ('ACORD 37 - Statement of No Loss', 'acord37'),
-    'acord125.pdf': ('ACORD 125 - Certificate of Liability Insurance', 'acord125'),
-    'acord126.pdf': ('ACORD 126 - Certificate of Liability Insurance', 'acord126'),
+    'acord125.pdf': ('ACORD 125 - Commercial Insurance Application', 'acord125'),
+    'acord126.pdf': ('ACORD 126 - Commercial General Liability Application', 'acord126'),
     'acord130.pdf': ('ACORD 130 - Evidence of Commercial Property Insurance', 'acord130'),
+    'acord131.pdf': ('ACORD 131 - Umbrella Application', 'acord131'),
     'acord140.pdf': ('ACORD 140 - Evidence of Commercial Property Insurance', 'acord140'),
 }
 

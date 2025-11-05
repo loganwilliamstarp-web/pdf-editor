@@ -15,12 +15,19 @@ DB_PASSWORD = "pd700ef90b356bf40cd4d8a555b7976ca7cef9f67c0176e82a6659199bb174ff2
 
 # Template rename mappings
 TEMPLATE_RENAMES = {
-    "acord130": "ACORD 130 - Evidence of Commercial Property Insurance",
-    "acord140": "ACORD 140 - Evidence of Commercial Property Insurance (Broad Form)",
+    "acord24": "ACORD 24 - Certificate of Property Insurance",
+    "acord25": "ACORD 25 - Certificate of Liability Insurance",
+    "acord27": "ACORD 27 - Evidence of Property Insurance",
+    "acord28": "ACORD 28 - Evidence of Commercial Property Insurance",
     "acord30": "ACORD 30 - Evidence of Property Insurance",
     "acord35": "ACORD 35 - Evidence of Commercial Property Insurance",
     "acord36": "ACORD 36 - Agent of Record Change",
-    "acord37": "ACORD 37 - Statement of No Loss"
+    "acord37": "ACORD 37 - Statement of No Loss",
+    "acord125": "ACORD 125 - Commercial Insurance Application",
+    "acord126": "ACORD 126 - Commercial General Liability Application",
+    "acord130": "ACORD 130 - Evidence of Commercial Property Insurance",
+    "acord131": "ACORD 131 - Umbrella Application",
+    "acord140": "ACORD 140 - Evidence of Commercial Property Insurance (Broad Form)",
 }
 
 def rename_templates():

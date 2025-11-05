@@ -1,4 +1,4 @@
-﻿import requests
+import requests
 import os
 from pathlib import Path
 
@@ -30,6 +30,7 @@ def upload_templates():
     print(f"Found {len(pdf_files)} PDF templates")
     
     acord_names = {
+        "acord24.pdf": "ACORD 24 - Certificate of Property Insurance",
         "acord25.pdf": "ACORD 25 - Certificate of Liability Insurance",
         "acord27.pdf": "ACORD 27 - Evidence of Property Insurance",
         "acord28.pdf": "ACORD 28 - Evidence of Commercial Property Insurance",
@@ -37,9 +38,10 @@ def upload_templates():
         "acord35.pdf": "ACORD 35 - Evidence of Property Insurance",
         "acord36.pdf": "ACORD 36 - Agent of Record Change",
         "acord37.pdf": "ACORD 37 - Statement of No Loss",
-        "acord125.pdf": "ACORD 125 - Evidence of Insurance",
-        "acord126.pdf": "ACORD 126 - Evidence of Insurance",
+        "acord125.pdf": "ACORD 125 - Commercial Insurance Application",
+        "acord126.pdf": "ACORD 126 - Commercial General Liability Application",
         "acord130.pdf": "ACORD 130 - Evidence of Insurance",
+        "acord131.pdf": "ACORD 131 - Umbrella Application",
         "acord140.pdf": "ACORD 140 - Evidence of Insurance"
     }
     

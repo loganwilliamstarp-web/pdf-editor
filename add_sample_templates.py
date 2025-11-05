@@ -38,7 +38,7 @@ def add_sample_templates():
             },
             {
                 'id': str(uuid.uuid4()),
-                'template_name': 'ACORD 125 - Certificate of Liability Insurance (Short Form)',
+                'template_name': 'ACORD 125 - Commercial Insurance Application',
                 'template_type': 'liability_insurance',
                 'storage_path': 'demo_templates/acord_125.pdf',
                 'file_size': 0,

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Template Upload via Web Interface
 Creates a script to upload templates through the Heroku app's web interface
 """
@@ -48,6 +48,7 @@ def main():
     
     # Template mapping
     template_mapping = {
+        'acord24.pdf': 'ACORD 24 - Certificate of Property Insurance',
         'acord25.pdf': 'ACORD 25 - Certificate of Liability Insurance',
         'acord27.pdf': 'ACORD 27 - Evidence of Property Insurance',
         'acord28.pdf': 'ACORD 28 - Evidence of Commercial Property Insurance',
@@ -55,9 +56,10 @@ def main():
         'acord35.pdf': 'ACORD 35 - Evidence of Commercial Inland Marine Insurance',
         'acord36.pdf': 'ACORD 36 - Agent of Record Change',
         'acord37.pdf': 'ACORD 37 - Statement of No Loss',
-        'acord125.pdf': 'ACORD 125 - Certificate of Liability Insurance',
-        'acord126.pdf': 'ACORD 126 - Certificate of Liability Insurance',
+        'acord125.pdf': 'ACORD 125 - Commercial Insurance Application',
+        'acord126.pdf': 'ACORD 126 - Commercial General Liability Application',
         'acord130.pdf': 'ACORD 130 - Evidence of Commercial Property Insurance',
+        'acord131.pdf': 'ACORD 131 - Umbrella Application',
         'acord140.pdf': 'ACORD 140 - Evidence of Commercial Property Insurance'
     }
     

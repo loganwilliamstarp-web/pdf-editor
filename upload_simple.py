@@ -58,8 +58,8 @@ def main():
         'acord25.pdf': 'ACORD 25 - Certificate of Liability Insurance',
         'acord27.pdf': 'ACORD 27 - Evidence of Property Insurance', 
         'acord28.pdf': 'ACORD 28 - Evidence of Commercial Property Insurance',
-        'acord125.pdf': 'ACORD 125 - Certificate of Liability Insurance (Short Form)',
-        'acord126.pdf': 'ACORD 126 - Certificate of Liability Insurance (Long Form)'
+        'acord125.pdf': 'ACORD 125 - Commercial Insurance Application',
+        'acord126.pdf': 'ACORD 126 - Commercial General Liability Application'
     }
     
     uploaded_count = 0
