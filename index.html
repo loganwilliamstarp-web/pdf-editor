@@ -2017,6 +2017,34 @@ function initializePDFEditorPopup(popupWindow, context) {
         if (!raw) {
             return {};
         }
+        const unwrapValue = (value) => {
+            if (value === undefined || value === null) {
+                return '';
+            }
+            if (typeof value === 'object') {
+                if ('value' in value) {
+                    return unwrapValue(value.value);
+                }
+                if ('defaultValue' in value) {
+                    return unwrapValue(value.defaultValue);
+                }
+                if ('displayValue' in value) {
+                    return unwrapValue(value.displayValue);
+                }
+                if ('rawValue' in value) {
+                    return unwrapValue(value.rawValue);
+                }
+                if ('name' in value && 'value' in value) {
+                    return unwrapValue(value.value);
+                }
+                try {
+                    return JSON.stringify(value);
+                } catch (e) {
+                    return String(value);
+                }
+            }
+            return String(value);
+        };
 
         if (Array.isArray(raw)) {
             return raw.reduce((acc, entry) => {
@@ -2029,7 +2057,7 @@ function initializePDFEditorPopup(popupWindow, context) {
                 }
                 const value = entry.value !== undefined ? entry.value
                     : (entry.fieldValue !== undefined ? entry.fieldValue : (entry.defaultValue !== undefined ? entry.defaultValue : ''));
-                acc[key] = value;
+                acc[key] = unwrapValue(value);
                 return acc;
             }, {});
         }
@@ -2044,7 +2072,11 @@ function initializePDFEditorPopup(popupWindow, context) {
 
             return Object.keys(raw).reduce((acc, key) => {
                 const entry = raw[key];
-                acc[key] = (entry && typeof entry === 'object' && entry.value !== undefined) ? entry.value : entry;
+                if (entry && typeof entry === 'object' && entry.value !== undefined) {
+                    acc[key] = unwrapValue(entry.value);
+                } else {
+                    acc[key] = unwrapValue(entry);
+                }
                 return acc;
             }, {});
         }
