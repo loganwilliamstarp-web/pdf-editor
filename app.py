@@ -1422,7 +1422,7 @@ def get_account_templates(account_id):
         for template_key in remaining_missing_types:
             config = MASTER_TEMPLATE_CONFIG.get(template_key, {})
             placeholder = {
-                'id': None,
+                'id': template_key,
                 'template_name': config.get('display_name') or template_key.upper(),
                 'template_type': template_key,
                 'form_fields': {'fields': []},
@@ -2450,30 +2450,85 @@ def resolve_local_template_file(template_type, storage_path):
 @app.route('/api/pdf/template/<template_id>')
 def serve_pdf_template(template_id):
     """Serve PDF template file for Adobe Embed API"""
+    template_id_str = str(template_id or '').strip()
+    normalized_template_key = template_id_str.lower()
+    conn = None
+    cur = None
+    template = None
+    template_name = None
+    template_type = None
+    storage_path = ''
+    pdf_blob = None
+    pdf_content = None
+    form_fields_payload = {'fields': []}
+    template_id_for_update = template_id_str
+
     try:
-        conn = get_db()
-        cur = conn.cursor()
-        
-        # Get template from database
-        try:
-            cur.execute('SELECT template_name, template_type, storage_path, file_size, pdf_blob, form_fields FROM master_templates WHERE id = %s', (template_id,))
-        except psycopg2.errors.UndefinedColumn:
-            conn.rollback()
-            cur.execute('SELECT template_name, template_type, storage_path, file_size, NULL::BYTEA AS pdf_blob, form_fields FROM master_templates WHERE id = %s', (template_id,))
-        template = cur.fetchone()
-        
-        if not template:
-            return jsonify({'error': 'Template not found'}), 404
-        
-        template_name = template.get('template_name')
-        template_type = (template.get('template_type') or '').lower()
-        storage_path = template.get('storage_path') or ''
-        pdf_blob = template.get('pdf_blob')
-        form_fields_payload = coerce_form_fields_payload(template.get('form_fields'))
+        db_lookup_id = (
+            PSYCOPG2_AVAILABLE
+            and template_id_str
+            and normalized_template_key not in ('null', 'none')
+        )
 
-        print(f"Serving PDF template: {template_name} (ID: {template_id})")
+        is_uuid_id = False
+        if db_lookup_id:
+            try:
+                uuid.UUID(template_id_str)
+                is_uuid_id = True
+            except ValueError:
+                is_uuid_id = False
 
-        pdf_content = None
+        if db_lookup_id:
+            try:
+                conn = get_db()
+                cur = conn.cursor()
+                if is_uuid_id:
+                    try:
+                        cur.execute(
+                            '''
+                            SELECT id, template_name, template_type, storage_path, file_size, pdf_blob, form_fields
+                            FROM master_templates
+                            WHERE id = %s
+                            ''',
+                            (template_id_str,)
+                        )
+                    except psycopg2.errors.UndefinedColumn:
+                        conn.rollback()
+                        cur.execute(
+                            '''
+                            SELECT id, template_name, template_type, storage_path, file_size, NULL::BYTEA AS pdf_blob, form_fields
+                            FROM master_templates
+                            WHERE id = %s
+                            ''',
+                            (template_id_str,)
+                        )
+                    template = cur.fetchone()
+
+                if (not template) and normalized_template_key:
+                    cur.execute(
+                        '''
+                        SELECT id, template_name, template_type, storage_path, file_size, pdf_blob, form_fields
+                        FROM master_templates
+                        WHERE LOWER(template_type) = %s
+                        ORDER BY updated_at DESC NULLS LAST, created_at DESC
+                        LIMIT 1
+                        ''',
+                        (normalized_template_key,)
+                    )
+                    template = cur.fetchone()
+            except Exception as db_error:
+                print(f"Database fetch for template '{template_id_str}' failed: {db_error}")
+                template = None
+
+        if template:
+            template_id_for_update = template.get('id') or template_id_for_update
+            template_name = template.get('template_name')
+            template_type = (template.get('template_type') or '').lower()
+            storage_path = template.get('storage_path') or ''
+            pdf_blob = template.get('pdf_blob')
+            form_fields_payload = coerce_form_fields_payload(template.get('form_fields'))
+            print(f"Serving PDF template: {template_name} (ID: {template_id_str})")
+
         if pdf_blob:
             try:
                 pdf_content = bytes(pdf_blob)
@@ -2481,26 +2536,57 @@ def serve_pdf_template(template_id):
                 pdf_content = pdf_blob
 
         if not pdf_content:
-            local_file = resolve_local_template_file(template_type, storage_path)
-            if local_file:
-                pdf_content = local_file.read_bytes()
+            # Try to resolve from local storage using known template type or ID fallback
+            lookup_template_type = template_type or normalized_template_key
+            lookup_storage_path = storage_path
 
-        if not pdf_content:
-            # Fallback to generated PDF if no stored asset is available
+            if not lookup_template_type and normalized_template_key in MASTER_TEMPLATE_CONFIG:
+                lookup_template_type = normalized_template_key
+
+            if lookup_template_type:
+                local_file = resolve_local_template_file(lookup_template_type, lookup_storage_path)
+                if local_file:
+                    pdf_content = local_file.read_bytes()
+                    if not template_name:
+                        config = MASTER_TEMPLATE_CONFIG.get(lookup_template_type, {})
+                        template_name = config.get('display_name') or lookup_template_type.upper()
+                        storage_path = f"local://{local_file.name}"
+                        form_fields_payload = form_fields_payload or {'fields': []}
+                        template_type = lookup_template_type
+
+        if not pdf_content and template_name:
             pdf_content = create_pdf_with_form_fields(template_name, form_fields_payload)
 
-        # Attempt to extract and persist form field metadata if missing
-        if not form_fields_payload.get('fields') and pdf_content:
+        if not pdf_content:
+            # As a final fallback try using the template_id as a key into the configuration
+            config = MASTER_TEMPLATE_CONFIG.get(normalized_template_key)
+            if config:
+                template_name = config.get('display_name') or normalized_template_key.upper()
+                storage_path = f"local://{config.get('filename')}" if config.get('filename') else ''
+                local_file = resolve_local_template_file(normalized_template_key, storage_path)
+                if local_file:
+                    pdf_content = local_file.read_bytes()
+                    template_type = normalized_template_key
+                    form_fields_payload = {'fields': []}
+
+        if not pdf_content:
+            return jsonify({'error': 'Template not available'}), 404
+
+        if not template_name:
+            template_name = template_type.upper() if template_type else 'ACORD_TEMPLATE'
+
+        # Attempt to extract and persist form field metadata if missing and DB is available
+        if cur and conn and template and not form_fields_payload.get('fields') and pdf_content:
             extracted_fields = extract_form_fields_from_pdf_bytes(pdf_content)
             if extracted_fields:
                 try:
                     form_fields_payload = enrich_form_fields_payload({'fields': extracted_fields}, method='pypdf-auto')
                     cur.execute(
                         'UPDATE master_templates SET form_fields = %s, updated_at = NOW() WHERE id = %s',
-                        (Json(form_fields_payload), template_id)
+                        (Json(form_fields_payload), template_id_for_update)
                     )
                     conn.commit()
-                    print(f"Extracted and stored {len(extracted_fields)} form fields for template {template_id}")
+                    print(f"Extracted and stored {len(extracted_fields)} form fields for template {template_id_str}")
                 except Exception as extraction_store_error:
                     print(f"Warning: unable to store extracted form fields ({extraction_store_error})")
                     conn.rollback()
@@ -2515,13 +2601,14 @@ def serve_pdf_template(template_id):
                 'Cache-Control': 'no-cache'
             }
         )
-        
+
     except Exception as e:
         print(f"Error serving PDF template: {e}")
         return jsonify({'error': str(e)}), 500
     finally:
-        if 'conn' in locals():
+        if cur:
             cur.close()
+        if conn:
             conn.close()
 
 
