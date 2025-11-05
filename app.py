@@ -777,6 +777,7 @@ def refresh_master_template_from_local(template_type, template_name=None, force=
     file_size = len(pdf_bytes)
     storage_path = f"local://{local_path.name}"
     default_template_name = template_config.get('display_name')
+    target_template_name = template_name or default_template_name or template_type_key.upper()
 
     conn = None
     cur = None
@@ -795,7 +796,19 @@ def refresh_master_template_from_local(template_type, template_name=None, force=
         )
         existing = cur.fetchone()
 
-        target_template_name = template_name or default_template_name or template_type_key.upper()
+        if not existing and target_template_name:
+            cur.execute(
+                '''
+                SELECT id, template_name, template_type, storage_path, file_size, pdf_blob
+                FROM master_templates
+                WHERE LOWER(template_name) = %s
+                ORDER BY updated_at DESC NULLS LAST, created_at DESC
+                LIMIT 1
+                ''',
+                (target_template_name.lower(),)
+            )
+            existing = cur.fetchone()
+
         target_id = None
         operation = 'inserted'
         if existing:
@@ -826,6 +839,7 @@ def refresh_master_template_from_local(template_type, template_name=None, force=
                 '''
                 UPDATE master_templates
                 SET template_name = %s,
+                    template_type = %s,
                     storage_path = %s,
                     file_size = %s,
                     pdf_blob = %s,
@@ -834,6 +848,7 @@ def refresh_master_template_from_local(template_type, template_name=None, force=
                 ''',
                 (
                     target_template_name,
+                    template_type_key,
                     storage_path,
                     file_size,
                     psycopg2.Binary(pdf_bytes),
