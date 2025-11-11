@@ -2448,6 +2448,34 @@ def resolve_local_template_file(template_type, storage_path):
     return None
 
 
+def execute_with_optional_pdf_blob(cur, sql, params=None):
+    """
+    Execute a query that might reference mt.pdf_blob, even if the column is missing.
+    Rewrites the query to return a NULL placeholder when the column does not exist.
+    """
+    if cur is None:
+        return None
+
+    if params is None:
+        params = []
+
+    if not PSYCOPG2_AVAILABLE:
+        cur.execute(sql, params)
+        return cur.fetchone()
+
+    try:
+        cur.execute(sql, params)
+        return cur.fetchone()
+    except psycopg2.errors.UndefinedColumn:
+        cur.connection.rollback()
+        safe_sql = (
+            sql.replace('mt.pdf_blob,', 'NULL::BYTEA AS pdf_blob,')
+               .replace('mt.pdf_blob', 'NULL::BYTEA AS pdf_blob')
+        )
+        cur.execute(safe_sql, params)
+        return cur.fetchone()
+
+
 def fetch_template_row(cur, template_identifier, account_id=None, include_field_values=False, allow_refresh=True):
     """
     Retrieve a master template row given either a UUID identifier or a template key (e.g., 'acord24').
@@ -2500,26 +2528,16 @@ def fetch_template_row(cur, template_identifier, account_id=None, include_field_
             return dict(row)
         return row
 
-    def execute_with_pdf_blob(sql, params):
-        try:
-            cur.execute(sql, params)
-            return cur.fetchone()
-        except psycopg2.errors.UndefinedColumn:
-            cur.connection.rollback()
-            sql_no_blob = sql.replace('mt.pdf_blob,', 'NULL::BYTEA AS pdf_blob,').replace('mt.pdf_blob', 'NULL::BYTEA AS pdf_blob')
-            cur.execute(sql_no_blob, params)
-            return cur.fetchone()
-
     row = None
     if is_uuid_identifier:
-        row = execute_with_pdf_blob(
+        row = execute_with_optional_pdf_blob(
             select_clause + ' WHERE mt.id = %s',
             join_params + [template_id_str]
         )
         row = as_dict(row)
 
     if not row and normalized_key:
-        row = execute_with_pdf_blob(
+        row = execute_with_optional_pdf_blob(
             select_clause + '''
             WHERE LOWER(mt.template_type) = %s
             ORDER BY mt.updated_at DESC NULLS LAST, mt.created_at DESC
@@ -2536,7 +2554,7 @@ def fetch_template_row(cur, template_identifier, account_id=None, include_field_
                 normalized_key,
                 template_name=config.get('display_name')
             )
-            row = execute_with_pdf_blob(
+            row = execute_with_optional_pdf_blob(
                 select_clause + '''
                 WHERE LOWER(mt.template_type) = %s
                 ORDER BY mt.updated_at DESC NULLS LAST, mt.created_at DESC
@@ -2791,50 +2809,29 @@ def serve_pdf_template_with_fields(template_id, account_id):
 
             result = None
             if is_uuid_identifier:
-                try:
-                    cur.execute(
-                        '''
-                        SELECT
-                            mt.id,
-                            mt.template_name,
-                            mt.template_type,
-                            mt.storage_path,
-                            mt.file_size,
-                            mt.pdf_blob,
-                            mt.form_fields,
-                            td.field_values
-                        FROM master_templates mt
-                        LEFT JOIN template_data td
-                            ON td.template_id = mt.id AND td.account_id = %s
-                        WHERE mt.id = %s
-                        ''',
-                        (account_id, template_id_str)
-                    )
-                    result = cur.fetchone()
-                except psycopg2.errors.UndefinedColumn:
-                    conn.rollback()
-                    cur.execute(
-                        '''
-                        SELECT
-                            mt.id,
-                            mt.template_name,
-                            mt.template_type,
-                            mt.storage_path,
-                            mt.file_size,
-                            NULL::BYTEA AS pdf_blob,
-                            mt.form_fields,
-                            td.field_values
-                        FROM master_templates mt
-                        LEFT JOIN template_data td
-                            ON td.template_id = mt.id AND td.account_id = %s
-                        WHERE mt.id = %s
-                        ''',
-                        (account_id, template_id_str)
-                    )
-                    result = cur.fetchone()
+                result = execute_with_optional_pdf_blob(
+                    cur,
+                    '''
+                    SELECT
+                        mt.id,
+                        mt.template_name,
+                        mt.template_type,
+                        mt.storage_path,
+                        mt.file_size,
+                        mt.pdf_blob,
+                        mt.form_fields,
+                        td.field_values
+                    FROM master_templates mt
+                    LEFT JOIN template_data td
+                        ON td.template_id = mt.id AND td.account_id = %s
+                    WHERE mt.id = %s
+                    ''',
+                    (account_id, template_id_str)
+                )
 
             if not result and normalized_template_key:
-                cur.execute(
+                result = execute_with_optional_pdf_blob(
+                    cur,
                     '''
                     SELECT
                         mt.id,
@@ -2854,7 +2851,6 @@ def serve_pdf_template_with_fields(template_id, account_id):
                     ''',
                     (account_id, normalized_template_key)
                 )
-                result = cur.fetchone()
 
             if not result and normalized_template_key in MASTER_TEMPLATE_CONFIG:
                 try:
@@ -2862,7 +2858,8 @@ def serve_pdf_template_with_fields(template_id, account_id):
                         normalized_template_key,
                         template_name=MASTER_TEMPLATE_CONFIG[normalized_template_key].get('display_name')
                     )
-                    cur.execute(
+                    result = execute_with_optional_pdf_blob(
+                        cur,
                         '''
                         SELECT
                             mt.id,
@@ -2882,7 +2879,6 @@ def serve_pdf_template_with_fields(template_id, account_id):
                         ''',
                         (account_id, normalized_template_key)
                     )
-                    result = cur.fetchone()
                 except Exception as refresh_error:
                     print(f"Refresh from local failed for '{normalized_template_key}': {refresh_error}")
 
