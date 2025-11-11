@@ -134,13 +134,133 @@ CERTIFICATE_HOLDER_FIELD_MAPPINGS = {
     },
 }
 
+FIELD_MAPPING_SCOPES = {'certificate_holder', 'agency'}
+
+DEFAULT_AGENCY_FIELD_MAPPING = {
+    "name": "Producer_FullName_A",
+    "street": "Producer_MailingAddress_LineOne_A",
+    "suite": "Producer_MailingAddress_LineTwo_A",
+    "city": "Producer_MailingAddress_CityName_A",
+    "state": "Producer_MailingAddress_StateOrProvinceCode_A",
+    "zip": "Producer_MailingAddress_PostalCode_A",
+    "phone": "Producer_ContactPerson_PhoneNumber_A",
+    "fax": "Producer_FaxNumber_A",
+    "email": "Producer_ContactPerson_EmailAddress_A"
+}
+
 def get_certificate_holder_field_map(template_type):
     """Return the field-name mapping for a given template type."""
+    mapping = resolve_field_mapping(template_type, 'certificate_holder')
+    if mapping:
+        return mapping
     default_map = CERTIFICATE_HOLDER_FIELD_MAPPINGS.get("acord25", {})
-    if not template_type:
-        return default_map
-    key = str(template_type).lower()
-    return CERTIFICATE_HOLDER_FIELD_MAPPINGS.get(key, default_map)
+    return default_map
+
+
+def normalize_template_key(template_key):
+    if not template_key:
+        return 'default'
+    return str(template_key).strip().lower() or 'default'
+
+
+def get_default_field_mapping(template_key, scope):
+    normalized_key = normalize_template_key(template_key)
+    if scope == 'certificate_holder':
+        default_map = CERTIFICATE_HOLDER_FIELD_MAPPINGS.get(normalized_key)
+        if default_map:
+            return dict(default_map)
+        fallback = CERTIFICATE_HOLDER_FIELD_MAPPINGS.get('acord25', {})
+        return dict(fallback)
+    if scope == 'agency':
+        return dict(DEFAULT_AGENCY_FIELD_MAPPING)
+    return {}
+
+
+def fetch_field_mapping_from_db(template_key, scope, cur=None):
+    if not PSYCOPG2_AVAILABLE:
+        return None
+    normalized_key = normalize_template_key(template_key)
+    own_connection = False
+    conn = None
+    cursor = cur
+    try:
+        if cursor is None:
+            conn = get_db()
+            cursor = conn.cursor()
+            own_connection = True
+        cursor.execute(
+            '''
+            SELECT fields
+            FROM field_mappings
+            WHERE template_key = %s AND mapping_scope = %s
+            ''',
+            (normalized_key, scope)
+        )
+        row = cursor.fetchone()
+        if row and row.get('fields'):
+            return dict(row['fields'])
+        if normalized_key != 'default':
+            cursor.execute(
+                '''
+                SELECT fields
+                FROM field_mappings
+                WHERE template_key = %s AND mapping_scope = %s
+                ''',
+                ('default', scope)
+            )
+            fallback = cursor.fetchone()
+            if fallback and fallback.get('fields'):
+                return dict(fallback['fields'])
+    except Exception as db_error:
+        print(f"Field mapping lookup failed for template '{template_key}' ({scope}): {db_error}")
+        return None
+    finally:
+        if own_connection:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+    return None
+
+
+def resolve_field_mapping(template_key, scope, cur=None, include_source=False):
+    mapping = fetch_field_mapping_from_db(template_key, scope, cur=cur)
+    source = 'database'
+    if not mapping:
+        mapping = get_default_field_mapping(template_key, scope)
+        source = 'default'
+    if include_source:
+        return mapping, source
+    return mapping
+
+
+def save_field_mapping_to_db(template_key, scope, fields, updated_by=None):
+    if not PSYCOPG2_AVAILABLE:
+        raise RuntimeError("Database is not available for storing mappings.")
+    normalized_key = normalize_template_key(template_key)
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            '''
+            INSERT INTO field_mappings (template_key, mapping_scope, fields, updated_by, updated_at)
+            VALUES (%s, %s, %s, %s, NOW())
+            ON CONFLICT (template_key, mapping_scope)
+            DO UPDATE SET
+                fields = EXCLUDED.fields,
+                updated_by = EXCLUDED.updated_by,
+                updated_at = NOW()
+            ''',
+            (normalized_key, scope, Json(fields), updated_by)
+        )
+        conn.commit()
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 US_STATE_CHOICES = {
     "AL": "Alabama",
@@ -396,6 +516,19 @@ def create_database_schema():
                 updated_at TIMESTAMP DEFAULT NOW(),
                 version INTEGER DEFAULT 1,
                 UNIQUE(account_id, template_id)
+            );
+        ''')
+
+        # Field mappings editable via admin UI
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS field_mappings (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                template_key VARCHAR(100) NOT NULL,
+                mapping_scope VARCHAR(50) NOT NULL,
+                fields JSONB NOT NULL DEFAULT '{}'::JSONB,
+                updated_by VARCHAR(100),
+                updated_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(template_key, mapping_scope)
             );
         ''')
         
@@ -1553,6 +1686,96 @@ def get_account_templates(account_id):
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/templates', methods=['GET'])
+def list_admin_templates():
+    """Return the list of known templates and supported mapping scopes."""
+    template_entries = [
+        {
+            'key': key,
+            'name': config.get('display_name') or key.upper()
+        }
+        for key, config in MASTER_TEMPLATE_CONFIG.items()
+    ]
+    template_entries.sort(key=lambda item: item['name'])
+    return jsonify({
+        'success': True,
+        'templates': template_entries,
+        'scopes': sorted(FIELD_MAPPING_SCOPES)
+    })
+
+
+@app.route('/admin/mappings')
+def admin_mappings_page():
+    """Serve the admin UI for editing field mappings."""
+    try:
+        return send_from_directory('.', 'admin_mappings.html')
+    except Exception as e:
+        return f"<h1>Field Mapping Admin</h1><p>Unable to load admin UI: {str(e)}</p>", 500
+
+
+@app.route('/api/admin/field-mappings', methods=['GET', 'PUT'])
+def admin_field_mappings():
+    """Allow admins to view or edit field mappings for agency/certificate holder scopes."""
+    if request.method == 'GET':
+        template_key = normalize_template_key(request.args.get('template_key'))
+        scope = (request.args.get('scope') or '').strip().lower()
+        use_defaults = (request.args.get('use_defaults') or '').lower() in {'1', 'true', 'yes'}
+        if scope not in FIELD_MAPPING_SCOPES:
+            return jsonify({'success': False, 'error': 'Invalid mapping scope'}), 400
+        if use_defaults:
+            fields = get_default_field_mapping(template_key, scope)
+            return jsonify({
+                'success': True,
+                'template_key': template_key,
+                'scope': scope,
+                'fields': fields,
+                'source': 'default'
+            })
+        mapping, source = resolve_field_mapping(template_key, scope, include_source=True)
+        return jsonify({
+            'success': True,
+            'template_key': template_key,
+            'scope': scope,
+            'fields': mapping or {},
+            'source': source
+        })
+
+    if not PSYCOPG2_AVAILABLE:
+        return database_not_configured_response()
+
+    data = request.get_json() or {}
+    template_key = normalize_template_key(data.get('template_key'))
+    scope = (data.get('scope') or '').strip().lower()
+    if scope not in FIELD_MAPPING_SCOPES:
+        return jsonify({'success': False, 'error': 'Invalid mapping scope'}), 400
+    fields = data.get('fields')
+    if not isinstance(fields, dict):
+        return jsonify({'success': False, 'error': 'fields must be an object map'}), 400
+
+    normalized_fields = {}
+    for key, value in fields.items():
+        if key is None:
+            continue
+        key_str = str(key).strip()
+        if not key_str:
+            continue
+        normalized_fields[key_str] = '' if value is None else str(value)
+
+    save_field_mapping_to_db(
+        template_key,
+        scope,
+        normalized_fields,
+        data.get('updated_by')
+    )
+    return jsonify({
+        'success': True,
+        'template_key': template_key,
+        'scope': scope,
+        'fields': normalized_fields,
+        'source': 'database'
+    })
 
 
 @app.route("/api/account/<account_id>/certificate-holders", methods=['GET'])
