@@ -234,6 +234,9 @@ except ImportError:
     print("Warning: psycopg2 not available. Database functionality will be limited.")
     PSYCOPG2_AVAILABLE = False
 
+# Tracks whether the master_templates table includes the pdf_blob column.
+PDF_BLOB_COLUMN_AVAILABLE = None
+
 app = Flask(__name__, static_folder='frontend/build', static_url_path='')
 CORS(app)
 
@@ -267,6 +270,54 @@ def get_db():
         cursor_factory=RealDictCursor,
         sslmode='require'
     )
+
+
+def ensure_pdf_blob_column(cur=None):
+    """
+    Detect whether the master_templates table has a pdf_blob column.
+    Caches the result globally to avoid repeated introspection.
+    """
+    global PDF_BLOB_COLUMN_AVAILABLE
+    if PDF_BLOB_COLUMN_AVAILABLE is not None:
+        return PDF_BLOB_COLUMN_AVAILABLE
+
+    if not PSYCOPG2_AVAILABLE:
+        PDF_BLOB_COLUMN_AVAILABLE = False
+        return PDF_BLOB_COLUMN_AVAILABLE
+
+    close_conn = False
+    conn = None
+    cursor = cur
+    try:
+        if cursor is None:
+            conn = get_db()
+            cursor = conn.cursor()
+            close_conn = True
+
+        cursor.execute(
+            '''
+            SELECT 1
+            FROM information_schema.columns
+            WHERE LOWER(table_name) = 'master_templates'
+              AND column_name = 'pdf_blob'
+            LIMIT 1
+            '''
+        )
+        PDF_BLOB_COLUMN_AVAILABLE = cursor.fetchone() is not None
+        if not PDF_BLOB_COLUMN_AVAILABLE:
+            print("master_templates.pdf_blob column missing; operating without DB-stored PDFs.")
+    except Exception as detection_error:
+        if cursor and cursor.connection:
+            cursor.connection.rollback()
+        print(f"Warning: Unable to determine master_templates.pdf_blob availability: {detection_error}")
+        PDF_BLOB_COLUMN_AVAILABLE = False
+    finally:
+        if close_conn and cursor:
+            cursor.close()
+        if close_conn and conn:
+            conn.close()
+
+    return PDF_BLOB_COLUMN_AVAILABLE
 
 def setup_supabase_storage():
     """Setup Supabase storage using default bucket"""
@@ -302,6 +353,7 @@ def create_database_schema():
     try:
         conn = get_db()
         cur = conn.cursor()
+        pdf_blob_supported = ensure_pdf_blob_column(cur)
         
         # Enable UUID extension
         cur.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";')
@@ -784,29 +836,32 @@ def refresh_master_template_from_local(template_type, template_name=None, force=
     try:
         conn = get_db()
         cur = conn.cursor()
-        cur.execute(
-            '''
-            SELECT id, template_name, template_type, storage_path, file_size, pdf_blob
+        select_columns = (
+            'id, template_name, template_type, storage_path, file_size, pdf_blob'
+            if pdf_blob_supported
+            else 'id, template_name, template_type, storage_path, file_size, NULL::BYTEA AS pdf_blob'
+        )
+
+        base_select_sql = f''' 
+            SELECT {select_columns}
             FROM master_templates
             WHERE LOWER(template_type) = %s
             ORDER BY updated_at DESC NULLS LAST, created_at DESC
             LIMIT 1
-            ''',
-            (template_type_key,)
-        )
+        '''
+
+        cur.execute(base_select_sql, (template_type_key,))
         existing = cur.fetchone()
 
         if not existing and target_template_name:
-            cur.execute(
-                '''
-                SELECT id, template_name, template_type, storage_path, file_size, pdf_blob
+            select_by_name = f'''
+                SELECT {select_columns}
                 FROM master_templates
                 WHERE LOWER(template_name) = %s
                 ORDER BY updated_at DESC NULLS LAST, created_at DESC
                 LIMIT 1
-                ''',
-                (target_template_name.lower(),)
-            )
+            '''
+            cur.execute(select_by_name, (target_template_name.lower(),))
             existing = cur.fetchone()
 
         target_id = None
@@ -816,15 +871,17 @@ def refresh_master_template_from_local(template_type, template_name=None, force=
             target_id = existing_dict.get('id')
             existing_name = existing_dict.get('template_name')
             existing_size = existing_dict.get('file_size')
-            existing_blob = existing_dict.get('pdf_blob')
+            existing_blob = existing_dict.get('pdf_blob') if pdf_blob_supported else None
             existing_bytes = None
-            if existing_blob is not None:
+            if pdf_blob_supported and existing_blob is not None:
                 try:
                     existing_bytes = bytes(existing_blob)
                 except (TypeError, ValueError):
                     existing_bytes = existing_blob
 
-            if not force and existing_bytes == pdf_bytes and existing_name == target_template_name and existing_size == file_size:
+            same_pdf_bytes = pdf_blob_supported and existing_bytes == pdf_bytes
+
+            if not force and same_pdf_bytes and existing_name == target_template_name and existing_size == file_size:
                 return {
                     'updated_rows': 0,
                     'skipped': True,
@@ -835,18 +892,18 @@ def refresh_master_template_from_local(template_type, template_name=None, force=
                     'storage_path': storage_path
                 }
 
-            cur.execute(
+            if pdf_blob_supported:
+                update_sql = '''
+                    UPDATE master_templates
+                    SET template_name = %s,
+                        template_type = %s,
+                        storage_path = %s,
+                        file_size = %s,
+                        pdf_blob = %s,
+                        updated_at = NOW()
+                    WHERE id = %s
                 '''
-                UPDATE master_templates
-                SET template_name = %s,
-                    template_type = %s,
-                    storage_path = %s,
-                    file_size = %s,
-                    pdf_blob = %s,
-                    updated_at = NOW()
-                WHERE id = %s
-                ''',
-                (
+                update_params = (
                     target_template_name,
                     template_type_key,
                     storage_path,
@@ -854,17 +911,35 @@ def refresh_master_template_from_local(template_type, template_name=None, force=
                     psycopg2.Binary(pdf_bytes),
                     target_id,
                 )
-            )
+            else:
+                update_sql = '''
+                    UPDATE master_templates
+                    SET template_name = %s,
+                        template_type = %s,
+                        storage_path = %s,
+                        file_size = %s,
+                        updated_at = NOW()
+                    WHERE id = %s
+                '''
+                update_params = (
+                    target_template_name,
+                    template_type_key,
+                    storage_path,
+                    file_size,
+                    target_id,
+                )
+
+            cur.execute(update_sql, update_params)
             updated = cur.rowcount
             operation = 'updated'
         else:
             target_id = str(uuid.uuid4())
-            cur.execute(
+            if pdf_blob_supported:
+                insert_sql = '''
+                    INSERT INTO master_templates (id, template_name, template_type, storage_path, file_size, pdf_blob, form_fields)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                 '''
-                INSERT INTO master_templates (id, template_name, template_type, storage_path, file_size, pdf_blob, form_fields)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                ''',
-                (
+                insert_params = (
                     target_id,
                     target_template_name,
                     template_type_key,
@@ -873,7 +948,21 @@ def refresh_master_template_from_local(template_type, template_name=None, force=
                     psycopg2.Binary(pdf_bytes),
                     Json({}),
                 )
-            )
+            else:
+                insert_sql = '''
+                    INSERT INTO master_templates (id, template_name, template_type, storage_path, file_size, form_fields)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                '''
+                insert_params = (
+                    target_id,
+                    target_template_name,
+                    template_type_key,
+                    storage_path,
+                    file_size,
+                    Json({}),
+                )
+
+            cur.execute(insert_sql, insert_params)
             updated = cur.rowcount
             operation = 'inserted'
 
@@ -2448,11 +2537,18 @@ def resolve_local_template_file(template_type, storage_path):
     return None
 
 
+def _replace_pdf_blob_column(sql):
+    placeholder = '__PDF_BLOB_PLACEHOLDER__'
+    temp = sql.replace('mt.pdf_blob', placeholder).replace('pdf_blob', placeholder)
+    return temp.replace(placeholder, 'NULL::BYTEA AS pdf_blob')
+
+
 def execute_with_optional_pdf_blob(cur, sql, params=None):
     """
     Execute a query that might reference mt.pdf_blob, even if the column is missing.
     Rewrites the query to return a NULL placeholder when the column does not exist.
     """
+    global PDF_BLOB_COLUMN_AVAILABLE
     if cur is None:
         return None
 
@@ -2463,15 +2559,20 @@ def execute_with_optional_pdf_blob(cur, sql, params=None):
         cur.execute(sql, params)
         return cur.fetchone()
 
+    if PDF_BLOB_COLUMN_AVAILABLE is False:
+        safe_sql = _replace_pdf_blob_column(sql)
+        cur.execute(safe_sql, params)
+        return cur.fetchone()
+
     try:
         cur.execute(sql, params)
+        if PDF_BLOB_COLUMN_AVAILABLE is None:
+            PDF_BLOB_COLUMN_AVAILABLE = True
         return cur.fetchone()
     except psycopg2.errors.UndefinedColumn:
         cur.connection.rollback()
-        safe_sql = (
-            sql.replace('mt.pdf_blob,', 'NULL::BYTEA AS pdf_blob,')
-               .replace('mt.pdf_blob', 'NULL::BYTEA AS pdf_blob')
-        )
+        PDF_BLOB_COLUMN_AVAILABLE = False
+        safe_sql = _replace_pdf_blob_column(sql)
         cur.execute(safe_sql, params)
         return cur.fetchone()
 
