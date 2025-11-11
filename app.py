@@ -145,7 +145,11 @@ DEFAULT_AGENCY_FIELD_MAPPING = {
     "zip": "Producer_MailingAddress_PostalCode_A",
     "phone": "Producer_ContactPerson_PhoneNumber_A",
     "fax": "Producer_FaxNumber_A",
-    "email": "Producer_ContactPerson_EmailAddress_A"
+    "email": "Producer_ContactPerson_EmailAddress_A",
+    "producerName": "Producer_ContactPerson_FullName_A",
+    "producerPhone": "Producer_ContactPerson_PhoneNumber_A",
+    "producerEmail": "Producer_ContactPerson_EmailAddress_A",
+    "producerFax": "Producer_ContactPerson_FaxNumber_A"
 }
 
 def get_certificate_holder_field_map(template_type):
@@ -2092,6 +2096,7 @@ def generate_acord25_certificates(account_id):
     signature_data_url = agency_settings.get('signatureDataUrl') or agency_settings.get('signature_data_url')
     signature_bytes = decode_data_url(signature_data_url) if signature_data_url else None
     signature_bytes = None  # Use text-based signature representation
+    agency_field_map = resolve_field_mapping('acord25', 'agency')
 
     template_id, template_name, template_blob, template_storage_path, template_bytes = load_master_template_pdf('acord25')
     if not template_bytes:
@@ -2272,6 +2277,18 @@ def generate_acord25_certificates(account_id):
         for key, value in holder_field_values.items():
             if key not in final_field_values:
                 final_field_values[key] = normalize_checkbox_entry(key, value)
+
+        if agency_field_map and isinstance(agency_settings, dict):
+            for source_key, target_field in agency_field_map.items():
+                if not target_field:
+                    continue
+                agency_value = agency_settings.get(source_key)
+                if agency_value in (None, ''):
+                    continue
+                normalized_agency_value = normalize_checkbox_entry(target_field, agency_value)
+                existing = final_field_values.get(target_field)
+                if existing is None or str(existing).strip() == '':
+                    final_field_values[target_field] = normalized_agency_value
 
         for key in list(final_field_values.keys()):
             final_field_values[key] = normalize_checkbox_entry(key, final_field_values[key])
