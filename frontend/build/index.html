@@ -249,6 +249,36 @@
                                    placeholder="30301">
                         </div>
                     </div>
+                    <div class="border-t pt-4">
+                        <h3 class="text-sm font-medium text-gray-900">Producer Contact</h3>
+                        <p class="text-xs text-gray-500 mb-3">These values populate the producer contact fields on generated certificates.</p>
+                        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div class="md:col-span-2">
+                                <label for="producerName" class="block text-sm font-medium text-gray-700">Producer Name</label>
+                                <input id="producerName" name="producer_name" type="text" autocomplete="name"
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                       placeholder="e.g. Jane Agent">
+                            </div>
+                            <div>
+                                <label for="producerPhone" class="block text-sm font-medium text-gray-700">Producer Phone Number</label>
+                                <input id="producerPhone" name="producer_phone" type="tel" autocomplete="tel"
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                       placeholder="(555) 555-1234">
+                            </div>
+                            <div>
+                                <label for="producerEmail" class="block text-sm font-medium text-gray-700">Producer Email</label>
+                                <input id="producerEmail" name="producer_email" type="email" autocomplete="email"
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                       placeholder="producer@example.com">
+                            </div>
+                            <div>
+                                <label for="producerFax" class="block text-sm font-medium text-gray-700">Producer Fax</label>
+                                <input id="producerFax" name="producer_fax" type="text"
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                       placeholder="(555) 555-9876">
+                            </div>
+                        </div>
+                    </div>
                     <div>
                         <label for="agencySignatureText" class="block text-sm font-medium text-gray-700">Authorized Representative (Signature Text)</label>
                         <input id="agencySignatureText" name="signature_text" type="text" autocomplete="name"
@@ -569,6 +599,10 @@
             setValue('agencyCity', data.city);
             setValue('agencyZip', data.zip);
             setValue('agencySignatureText', data.signatureText || data.signature_text || '');
+            setValue('producerName', data.producerName || data.producer_name || '');
+            setValue('producerPhone', data.producerPhone || data.producer_phone || '');
+            setValue('producerEmail', data.producerEmail || data.producer_email || '');
+            setValue('producerFax', data.producerFax || data.producer_fax || '');
 
             const stateEl = document.getElementById('agencyState');
             if (stateEl) {
@@ -610,6 +644,10 @@
                 stateName,
                 zip: getValue('agencyZip'),
                 signatureText: getValue('agencySignatureText'),
+                producerName: getValue('producerName'),
+                producerPhone: getValue('producerPhone'),
+                producerEmail: getValue('producerEmail'),
+                producerFax: getValue('producerFax'),
                 signatureDataUrl
             };
 
@@ -684,6 +722,26 @@
             if (addressParts.length > 0) {
                 const escapedParts = addressParts.map(part => escapeHtml(part));
                 lines.push(`<p class="mt-1 text-sm text-gray-600">${escapedParts.join('<br>')}</p>`);
+            }
+
+            const producerLines = [];
+            if (agencySettings.producerName) {
+                producerLines.push(`<p class="text-sm text-gray-900">${escapeHtml(agencySettings.producerName)}</p>`);
+            }
+            if (agencySettings.producerPhone) {
+                producerLines.push(`<p class="text-xs text-gray-600">Phone: ${escapeHtml(agencySettings.producerPhone)}</p>`);
+            }
+            if (agencySettings.producerEmail) {
+                producerLines.push(`<p class="text-xs text-gray-600">Email: ${escapeHtml(agencySettings.producerEmail)}</p>`);
+            }
+            if (agencySettings.producerFax) {
+                producerLines.push(`<p class="text-xs text-gray-600">Fax: ${escapeHtml(agencySettings.producerFax)}</p>`);
+            }
+            if (producerLines.length > 0) {
+                lines.push('<div class="mt-3 border-t border-dashed border-gray-200 pt-3 text-xs text-gray-600">');
+                lines.push('<p class="mb-1 font-semibold text-gray-700">Producer Contact</p>');
+                lines.push(producerLines.join(''));
+                lines.push('</div>');
             }
 
             const signatureText = agencySettings.signatureText || agencySettings.signature_text || '';
