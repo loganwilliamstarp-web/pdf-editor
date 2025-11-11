@@ -836,6 +836,7 @@ def refresh_master_template_from_local(template_type, template_name=None, force=
     try:
         conn = get_db()
         cur = conn.cursor()
+        pdf_blob_supported = ensure_pdf_blob_column(cur)
         select_columns = (
             'id, template_name, template_type, storage_path, file_size, pdf_blob'
             if pdf_blob_supported
