@@ -2645,6 +2645,7 @@ def fetch_template_row(cur, template_identifier, account_id=None, include_field_
     row = None
     if is_uuid_identifier:
         row = execute_with_optional_pdf_blob(
+            cur,
             select_clause + ' WHERE mt.id = %s',
             join_params + [template_id_str]
         )
@@ -2652,6 +2653,7 @@ def fetch_template_row(cur, template_identifier, account_id=None, include_field_
 
     if not row and normalized_key:
         row = execute_with_optional_pdf_blob(
+            cur,
             select_clause + '''
             WHERE LOWER(mt.template_type) = %s
             ORDER BY mt.updated_at DESC NULLS LAST, mt.created_at DESC
@@ -2669,6 +2671,7 @@ def fetch_template_row(cur, template_identifier, account_id=None, include_field_
                 template_name=config.get('display_name')
             )
             row = execute_with_optional_pdf_blob(
+                cur,
                 select_clause + '''
                 WHERE LOWER(mt.template_type) = %s
                 ORDER BY mt.updated_at DESC NULLS LAST, mt.created_at DESC
