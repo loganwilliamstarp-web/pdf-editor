@@ -105,8 +105,7 @@
         let currentFields = {};
         let lastLoadedFields = {};
         let lastSource = 'default';
-
-        const truthy = new Set(['true', '1', 'yes']);
+        let defaultsCache = {};
 
         function setStatus(type, message) {
             statusMessage.textContent = message || '';
@@ -141,25 +140,60 @@
             }
         }
 
-        function addRow(key = '', value = '') {
+        function addRow(key = '', value = '', readOnlyKey = false, suggestion = '') {
             const fragment = rowTemplate.content.cloneNode(true);
             const row = fragment.querySelector('tr');
             row.querySelector('.field-key').value = key;
             row.querySelector('.field-value').value = value;
-            row.querySelector('.remove-row').addEventListener('click', () => {
-                row.remove();
-            });
+            const keyInput = row.querySelector('.field-key');
+            const valueInput = row.querySelector('.field-value');
+            const removeBtn = row.querySelector('.remove-row');
+
+            if (readOnlyKey && key) {
+                keyInput.readOnly = true;
+                keyInput.classList.add('bg-gray-50', 'text-gray-600', 'cursor-not-allowed');
+                removeBtn.classList.add('text-gray-300', 'cursor-not-allowed');
+                removeBtn.disabled = true;
+            } else {
+                removeBtn.addEventListener('click', () => {
+                    row.remove();
+                });
+            }
+
+            if (suggestion && !value) {
+                valueInput.placeholder = `Default: ${suggestion}`;
+            } else if (!suggestion) {
+                valueInput.placeholder = 'PDF field name';
+            }
+
             mappingTableBody.appendChild(fragment);
         }
 
         function renderMappingTable(fields) {
             mappingTableBody.innerHTML = '';
-            const entries = Object.entries(fields || {});
-            if (!entries.length) {
+            const orderedKeys = [];
+            Object.keys(defaultsCache || {}).forEach(key => {
+                if (!orderedKeys.includes(key)) {
+                    orderedKeys.push(key);
+                }
+            });
+            Object.keys(fields || {}).forEach(key => {
+                if (!orderedKeys.includes(key)) {
+                    orderedKeys.push(key);
+                }
+            });
+
+            if (!orderedKeys.length) {
                 addRow();
                 return;
             }
-            entries.forEach(([key, value]) => addRow(key, value));
+
+            orderedKeys.forEach(key => {
+                const isDefaultKey = Object.prototype.hasOwnProperty.call(defaultsCache || {}, key);
+                const suggestion = (defaultsCache && defaultsCache[key]) || '';
+                const value = fields && Object.prototype.hasOwnProperty.call(fields, key) ? fields[key] : '';
+                addRow(key, value, isDefaultKey, suggestion);
+            });
         }
 
         function getFieldsFromTable() {
@@ -181,26 +215,45 @@
             return collected;
         }
 
+        async function fetchMapping(template, scope, defaults = false) {
+            const params = new URLSearchParams({ template_key: template, scope });
+            if (defaults) {
+                params.set('use_defaults', 'true');
+            }
+            const response = await fetch(`/api/admin/field-mappings?${params.toString()}`);
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.error || 'Unable to load mapping');
+            }
+            return data;
+        }
+
         async function loadMapping(useDefaults = false) {
             const template = templateSelect.value || 'default';
             const scope = scopeSelect.value;
-            const params = new URLSearchParams({ template_key: template, scope });
-            if (useDefaults) {
-                params.set('use_defaults', 'true');
-            }
             try {
                 setStatus('info', 'Loading mapping...');
-                const response = await fetch(`/api/admin/field-mappings?${params.toString()}`);
-                const data = await response.json();
-                if (!data.success) {
-                    throw new Error(data.error || 'Unable to load mapping');
+                if (useDefaults) {
+                    const defaultsData = await fetchMapping(template, scope, true);
+                    defaultsCache = defaultsData.fields || {};
+                    currentFields = { ...defaultsCache };
+                    lastLoadedFields = { ...currentFields };
+                    lastSource = 'default';
+                } else {
+                    const [actualData, defaultsData] = await Promise.all([
+                        fetchMapping(template, scope, false),
+                        fetchMapping(template, scope, true)
+                    ]);
+                    defaultsCache = defaultsData.fields || {};
+                    currentFields = actualData.fields || {};
+                    lastLoadedFields = { ...currentFields };
+                    lastSource = actualData.source || 'database';
                 }
-                currentFields = data.fields || {};
-                lastLoadedFields = { ...currentFields };
-                lastSource = data.source || (useDefaults ? 'default' : 'database');
-                sourceIndicator.textContent = `Source: ${lastSource === 'database' ? 'Database' : 'Default configuration'}`;
+                sourceIndicator.textContent = lastSource === 'database'
+                    ? 'Source: Database (leave PDF field blank to skip mapping)'
+                    : 'Source: Default configuration (leave PDF field blank to skip mapping)';
                 renderMappingTable(currentFields);
-                setStatus('success', `Loaded ${Object.keys(currentFields).length} fields (${lastSource}).`);
+                setStatus('success', `Loaded ${Object.keys(currentFields).length} mapped fields (${lastSource}).`);
             } catch (error) {
                 setStatus('error', `Failed to load mapping: ${error.message}`);
                 mappingTableBody.innerHTML = '<tr><td colspan="3" class="px-4 py-4 text-sm text-red-600">Unable to load mappings.</td></tr>';
