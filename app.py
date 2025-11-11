@@ -9,6 +9,7 @@ from datetime import datetime
 import base64
 import re
 import zipfile
+import traceback
 
 # Optional imports with fallbacks
 
@@ -830,6 +831,11 @@ def refresh_master_template_from_local(template_type, template_name=None, force=
     storage_path = f"local://{local_path.name}"
     default_template_name = template_config.get('display_name')
     target_template_name = template_name or default_template_name or template_type_key.upper()
+    extracted_fields = extract_form_fields_from_pdf_bytes(pdf_bytes)
+    form_fields_payload = enrich_form_fields_payload(
+        {'fields': extracted_fields or []},
+        method='local_template_refresh'
+    )
 
     conn = None
     cur = None
@@ -901,6 +907,7 @@ def refresh_master_template_from_local(template_type, template_name=None, force=
                         storage_path = %s,
                         file_size = %s,
                         pdf_blob = %s,
+                        form_fields = %s,
                         updated_at = NOW()
                     WHERE id = %s
                 '''
@@ -910,6 +917,7 @@ def refresh_master_template_from_local(template_type, template_name=None, force=
                     storage_path,
                     file_size,
                     psycopg2.Binary(pdf_bytes),
+                    Json(form_fields_payload),
                     target_id,
                 )
             else:
@@ -919,6 +927,7 @@ def refresh_master_template_from_local(template_type, template_name=None, force=
                         template_type = %s,
                         storage_path = %s,
                         file_size = %s,
+                        form_fields = %s,
                         updated_at = NOW()
                     WHERE id = %s
                 '''
@@ -927,6 +936,7 @@ def refresh_master_template_from_local(template_type, template_name=None, force=
                     template_type_key,
                     storage_path,
                     file_size,
+                    Json(form_fields_payload),
                     target_id,
                 )
 
@@ -947,7 +957,7 @@ def refresh_master_template_from_local(template_type, template_name=None, force=
                     storage_path,
                     file_size,
                     psycopg2.Binary(pdf_bytes),
-                    Json({}),
+                    Json(form_fields_payload),
                 )
             else:
                 insert_sql = '''
@@ -960,7 +970,7 @@ def refresh_master_template_from_local(template_type, template_name=None, force=
                     template_type_key,
                     storage_path,
                     file_size,
-                    Json({}),
+                    Json(form_fields_payload),
                 )
 
             cur.execute(insert_sql, insert_params)
@@ -1397,6 +1407,8 @@ def setup_system():
             'results': results
         })
     except Exception as e:
+        print(f"Error saving PDF fields: {e}")
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
