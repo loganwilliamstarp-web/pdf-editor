@@ -60,9 +60,9 @@
                             class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
                         Refresh
                     </button>
-                    <button id="generateAcord25Btn" disabled
+                    <button id="generateCertificatesBtn" disabled
                             class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 opacity-50 cursor-not-allowed">
-                        Generate ACORD 25
+                        Generate Certificates
                     </button>
                     <button id="openHolderModalBtn"
                             class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
@@ -187,6 +187,44 @@
                         </div>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generate Certificates Modal -->
+    <div id="generateModal" class="fixed inset-0 z-50 hidden items-center justify-center">
+        <div id="generateModalOverlay" class="absolute inset-0 bg-gray-900 bg-opacity-50"></div>
+        <div class="relative z-10 mx-auto w-full max-w-2xl px-4">
+            <div class="bg-white shadow-xl rounded-lg overflow-hidden">
+                <div class="flex items-center justify-between border-b px-6 py-4">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900">Select ACORD Forms</h3>
+                        <p class="text-sm text-gray-500">Choose which templates to generate for the selected certificate holders.</p>
+                    </div>
+                    <button id="generateModalCloseBtn" type="button" class="rounded-full p-1 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                        <span class="sr-only">Close</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 0 1 1.414 0L10 8.586l4.293-4.293a1 1 0 0 1 1.414 1.414L11.414 10l4.293 4.293a1 1 0 0 1-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 0 1-1.414-1.414L8.586 10 4.293 5.707a1 1 0 0 1 0-1.414Z" clip-rule="evenodd"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="px-6 py-5 space-y-4">
+                    <div id="generateModalAlert" class="hidden"></div>
+                    <p id="generateModalSelectionSummary" class="text-sm text-gray-600">Select at least one ACORD form.</p>
+                    <div id="templateSelectionContainer" class="divide-y divide-gray-100 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 max-h-72">
+                        <p class="px-3 py-4 text-sm text-gray-500">Loading templates...</p>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 border-t px-6 py-4">
+                    <button id="generateModalCancelBtn" type="button"
+                            class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Cancel
+                    </button>
+                    <button id="generateModalSubmitBtn" type="button"
+                            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        Generate
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -328,11 +366,14 @@
         const HOLDER_MODAL_TITLE_DEFAULT = 'Add Certificate Holder';
         const HOLDER_MODAL_TITLE_EDIT = 'Edit Certificate Holder';
         const AGENCY_SETTINGS_STORAGE_PREFIX = 'certificateManager.agencySettings';
+        const TEMPLATE_SELECTION_STORAGE_PREFIX = 'certificateManager.templateSelections';
         const SALESFORCE_ID_REGEX = /^[a-zA-Z0-9]{15,18}$/;
         const ACCOUNT_ID_PREFIXES = new Set(['001']);
         const OWNER_ID_PREFIXES = new Set(['005']);
         const DEFAULT_ACCOUNT_ID = '001000000000001';
         let agencySettings = null;
+        let availableGenerationTemplates = [];
+        let selectedTemplateKeys = new Set();
 
         function normalizeSalesforceId(value) {
             if (!value) {
@@ -428,6 +469,43 @@
             return `${AGENCY_SETTINGS_STORAGE_PREFIX}:${normalizedAccount}`;
         }
 
+        function getTemplateSelectionStorageKey() {
+            const accountId = getAccountId();
+            return `${TEMPLATE_SELECTION_STORAGE_PREFIX}:${accountId}`;
+        }
+
+        function loadTemplateSelectionsFromStorage() {
+            try {
+                const stored = window.localStorage.getItem(getTemplateSelectionStorageKey());
+                if (!stored) {
+                    selectedTemplateKeys = new Set();
+                    return;
+                }
+                const values = JSON.parse(stored);
+                if (Array.isArray(values)) {
+                    selectedTemplateKeys = new Set(
+                        values
+                            .map(value => String(value || '').trim().toLowerCase())
+                            .filter(Boolean)
+                    );
+                } else {
+                    selectedTemplateKeys = new Set();
+                }
+            } catch (error) {
+                console.warn('Unable to load template selections.', error);
+                selectedTemplateKeys = new Set();
+            }
+        }
+
+        function saveTemplateSelectionsToStorage() {
+            try {
+                const values = Array.from(selectedTemplateKeys);
+                window.localStorage.setItem(getTemplateSelectionStorageKey(), JSON.stringify(values));
+            } catch (error) {
+                console.warn('Unable to store template selections.', error);
+            }
+        }
+
         // Initialize the app
         function initApp() {
             const accountId = getAccountId();
@@ -453,6 +531,7 @@
                 window.lucide.createIcons();
             }
 
+            loadTemplateSelectionsFromStorage();
             setupAgencySettingsUI();
             setupCertificateHolderUI();
             loadTemplates();
@@ -795,12 +874,36 @@
                 });
             }
 
-            const generateBtn = document.getElementById('generateAcord25Btn');
+            const generateBtn = document.getElementById('generateCertificatesBtn');
             if (generateBtn) {
-                generateBtn.addEventListener('click', generateAcord25Certificates);
+                generateBtn.addEventListener('click', () => {
+                    if (selectedCertificateHolderIds.size === 0) {
+                        setHolderActionMessage('info', 'Select at least one certificate holder to generate certificates.');
+                        return;
+                    }
+                    openGenerateModal();
+                });
+            }
+
+            const generateModalOverlay = document.getElementById('generateModalOverlay');
+            if (generateModalOverlay) {
+                generateModalOverlay.addEventListener('click', closeGenerateModal);
+            }
+            const generateModalCloseBtn = document.getElementById('generateModalCloseBtn');
+            if (generateModalCloseBtn) {
+                generateModalCloseBtn.addEventListener('click', closeGenerateModal);
+            }
+            const generateModalCancelBtn = document.getElementById('generateModalCancelBtn');
+            if (generateModalCancelBtn) {
+                generateModalCancelBtn.addEventListener('click', closeGenerateModal);
+            }
+            const generateModalSubmitBtn = document.getElementById('generateModalSubmitBtn');
+            if (generateModalSubmitBtn) {
+                generateModalSubmitBtn.addEventListener('click', handleGenerateModalSubmit);
             }
 
             document.addEventListener('keydown', handleHolderModalKeydown);
+            document.addEventListener('keydown', handleGenerateModalKeydown);
 
             renderHolderStateOptions();
             showHolderAlert(); // hide by default
@@ -808,7 +911,7 @@
             window.editCertificateHolder = editCertificateHolder;
             updateHolderSelectionSummary();
             closeHolderModal(true); // ensure hidden on load
-            updateGenerateAcord25ButtonState();
+            updateGenerateCertificatesButtonState();
         }
 
         // Show tab content
@@ -902,14 +1005,14 @@
             if (total === 0) {
                 summaryEl.textContent = 'No certificate holders available.';
                 setHolderActionMessage('info', 'Add a certificate holder to generate certificates.');
-                updateGenerateAcord25ButtonState();
+                updateGenerateCertificatesButtonState();
                 return;
             }
 
             const count = selectedCertificateHolderIds.size;
             if (count === 0) {
                 summaryEl.textContent = 'No certificate holders selected.';
-                setHolderActionMessage('info', 'Select at least one certificate holder to generate ACORD 25 certificates.');
+                setHolderActionMessage('info', 'Select at least one certificate holder to generate certificates.');
             } else if (count === 1) {
                 summaryEl.textContent = '1 certificate holder selected.';
                 setHolderActionMessage('success', 'Ready to generate 1 certificate.');
@@ -918,7 +1021,7 @@
                 setHolderActionMessage('success', `Ready to generate ${count} certificates.`);
             }
         }
-        updateGenerateAcord25ButtonState();
+        updateGenerateCertificatesButtonState();
 
         function setHolderActionMessage(type = null, message = '') {
             const messageEl = document.getElementById('holderActionMessage');
@@ -941,8 +1044,8 @@
             messageEl.textContent = message;
         }
 
-        function updateGenerateAcord25ButtonState() {
-            const button = document.getElementById('generateAcord25Btn');
+        function updateGenerateCertificatesButtonState() {
+            const button = document.getElementById('generateCertificatesBtn');
             if (!button) {
                 return;
             }
@@ -998,7 +1101,7 @@
                     }
                     updateHolderSelectAllState(selectAllEl, checkboxEls);
                     updateHolderSelectionSummary(holders.length);
-                    updateGenerateAcord25ButtonState();
+                    updateGenerateCertificatesButtonState();
                 });
             });
 
@@ -1023,12 +1126,12 @@
                     });
                     updateHolderSelectAllState(selectAllEl, checkboxEls);
                     updateHolderSelectionSummary(holders.length);
-                    updateGenerateAcord25ButtonState();
+                    updateGenerateCertificatesButtonState();
                 });
             }
 
             updateHolderSelectionSummary(holders.length);
-            updateGenerateAcord25ButtonState();
+            updateGenerateCertificatesButtonState();
         }
 
         function populateHolderForm(holder) {
@@ -1148,6 +1251,167 @@
             }
         }
 
+        function isGenerateModalOpen() {
+            const modal = document.getElementById('generateModal');
+            return modal ? !modal.classList.contains('hidden') : false;
+        }
+
+        function setGenerateModalAlert(type = null, message = '') {
+            const alertEl = document.getElementById('generateModalAlert');
+            if (!alertEl) {
+                return;
+            }
+            if (!message) {
+                alertEl.className = 'hidden';
+                alertEl.textContent = '';
+                return;
+            }
+            const classMap = {
+                success: 'rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700',
+                error: 'rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700',
+                info: 'rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700'
+            };
+            alertEl.className = classMap[type] || classMap.info;
+            alertEl.textContent = message;
+        }
+
+        function updateGenerateModalSelectionSummary() {
+            const summaryEl = document.getElementById('generateModalSelectionSummary');
+            if (!summaryEl) {
+                return;
+            }
+            const count = selectedTemplateKeys.size;
+            if (count === 0) {
+                summaryEl.textContent = 'Select at least one ACORD form.';
+            } else if (count === 1) {
+                summaryEl.textContent = '1 ACORD form selected.';
+            } else {
+                summaryEl.textContent = `${count} ACORD forms selected.`;
+            }
+        }
+
+        function updateGenerateModalSubmitState() {
+            const submitBtn = document.getElementById('generateModalSubmitBtn');
+            if (!submitBtn) {
+                return;
+            }
+            const disabled = selectedTemplateKeys.size === 0;
+            submitBtn.disabled = disabled;
+            submitBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+        }
+
+        function ensureTemplateSelectionDefaults() {
+            const availableKeys = new Set(availableGenerationTemplates.map(template => template.key));
+            selectedTemplateKeys = new Set(
+                Array.from(selectedTemplateKeys).filter(key => availableKeys.has(key))
+            );
+            if (selectedTemplateKeys.size === 0 && availableGenerationTemplates.length > 0) {
+                const preferredOrder = ['acord25', 'acord24', 'acord27'];
+                const preferred = preferredOrder.find(key => availableKeys.has(key));
+                const fallback = preferred || availableGenerationTemplates[0].key;
+                if (fallback) {
+                    selectedTemplateKeys.add(fallback);
+                }
+            }
+            saveTemplateSelectionsToStorage();
+        }
+
+        function renderTemplateSelectionList() {
+            const container = document.getElementById('templateSelectionContainer');
+            if (!container) {
+                return;
+            }
+            if (!availableGenerationTemplates.length) {
+                container.innerHTML = '<p class="px-3 py-4 text-sm text-gray-500">No ACORD templates available.</p>';
+                updateGenerateModalSelectionSummary();
+                updateGenerateModalSubmitState();
+                return;
+            }
+
+            const rows = availableGenerationTemplates.map(template => {
+                const checkboxId = `templateOption_${template.key}`;
+                const checkedAttr = selectedTemplateKeys.has(template.key) ? 'checked' : '';
+                const missingLabel = template.missing ? '<span class="ml-2 text-xs text-amber-600">(Upload pending)</span>' : '';
+                return `
+                    <label for="${checkboxId}" class="flex items-center gap-3 px-3 py-3 hover:bg-white transition">
+                        <input type="checkbox" id="${checkboxId}" data-template-key="${template.key}"
+                               class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" ${checkedAttr}>
+                        <div>
+                            <p class="text-sm font-medium text-gray-900">${escapeHtml(template.label)} ${missingLabel}</p>
+                            <p class="text-xs text-gray-500">${template.key.toUpperCase()}</p>
+                        </div>
+                    </label>
+                `;
+            }).join('');
+
+            container.innerHTML = rows;
+            container.querySelectorAll('input[type="checkbox"]').forEach(input => {
+                input.addEventListener('change', () => {
+                    const key = input.dataset.templateKey;
+                    if (!key) {
+                        return;
+                    }
+                    if (input.checked) {
+                        selectedTemplateKeys.add(key);
+                    } else {
+                        selectedTemplateKeys.delete(key);
+                    }
+                    saveTemplateSelectionsToStorage();
+                    updateGenerateModalSelectionSummary();
+                    updateGenerateModalSubmitState();
+                });
+            });
+
+            updateGenerateModalSelectionSummary();
+            updateGenerateModalSubmitState();
+        }
+
+        function openGenerateModal() {
+            const modal = document.getElementById('generateModal');
+            if (!modal) {
+                return;
+            }
+            setGenerateModalAlert();
+            renderTemplateSelectionList();
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            modal.setAttribute('aria-hidden', 'false');
+            setTimeout(() => {
+                const firstCheckbox = document.querySelector('#templateSelectionContainer input[type="checkbox"]');
+                if (firstCheckbox) {
+                    firstCheckbox.focus();
+                }
+            }, 50);
+        }
+
+        function closeGenerateModal() {
+            const modal = document.getElementById('generateModal');
+            if (!modal) {
+                return;
+            }
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            modal.setAttribute('aria-hidden', 'true');
+            setGenerateModalAlert();
+        }
+
+        function handleGenerateModalKeydown(event) {
+            if (event.key === 'Escape' && isGenerateModalOpen()) {
+                event.preventDefault();
+                closeGenerateModal();
+            }
+        }
+
+        async function handleGenerateModalSubmit() {
+            if (selectedTemplateKeys.size === 0) {
+                setGenerateModalAlert('error', 'Select at least one template.');
+                return;
+            }
+            closeGenerateModal();
+            await generateCertificates(Array.from(selectedTemplateKeys));
+        }
+
+
         function escapeHtml(value) {
             if (value === null || value === undefined) {
                 return '';
@@ -1191,7 +1455,7 @@
             const accountId = getAccountId();
             holderList.innerHTML = '<p class="text-gray-600">Loading certificate holders...</p>';
             setHolderActionMessage('info', 'Loading certificate holders...');
-            updateGenerateAcord25ButtonState();
+            updateGenerateCertificatesButtonState();
 
             try {
                 const response = await fetch(`/api/account/${accountId}/certificate-holders`);
@@ -1217,7 +1481,7 @@
                 certificateHoldersLoaded = false;
                 updateHolderSelectionSummary();
                 setHolderActionMessage('error', `Error loading certificate holders: ${escapeHtml(error.message)}`);
-                updateGenerateAcord25ButtonState();
+                updateGenerateCertificatesButtonState();
             }
         }
 
@@ -1236,7 +1500,7 @@
                 selectedCertificateHolderIds.clear();
                 updateHolderSelectionSummary(0);
                 setHolderActionMessage('info', 'Add a certificate holder to generate certificates.');
-                updateGenerateAcord25ButtonState();
+                updateGenerateCertificatesButtonState();
                 return;
             }
 
@@ -1401,35 +1665,52 @@
             }
         }
 
-        async function generateAcord25Certificates() {
-            const button = document.getElementById('generateAcord25Btn');
-            if (!button) {
+        async function generateCertificates(templateKeysOverride = null) {
+            const button = document.getElementById('generateCertificatesBtn');
+            if (!button || button.disabled) {
                 return;
             }
 
             const rawSelectedIds = Array.from(selectedCertificateHolderIds)
                 .map(id => (typeof id === 'string' ? id.trim() : String(id).trim()))
                 .filter(id => id.length > 0);
-
             const selectedIds = Array.from(new Set(rawSelectedIds));
 
             if (selectedIds.length === 0) {
-                setHolderActionMessage('info', 'Select at least one certificate holder to generate ACORD 25 certificates.');
-                updateGenerateAcord25ButtonState();
+                setHolderActionMessage('info', 'Select at least one certificate holder to generate certificates.');
+                updateGenerateCertificatesButtonState();
+                return;
+            }
+
+            const masterHolderIds = new Set(certificateHolderCache.map(holder => holder.id));
+            const invalidIds = selectedIds.filter(id => !masterHolderIds.has(id));
+            if (invalidIds.length > 0) {
+                setHolderActionMessage('error', 'Some selected certificate holders are no longer available. Refreshing the list.');
+                selectedCertificateHolderIds = new Set(
+                    [...selectedCertificateHolderIds].filter(id => masterHolderIds.has(id))
+                );
+                await loadCertificateHolders(true);
+                return;
+            }
+
+            const templateKeys = Array.isArray(templateKeysOverride) && templateKeysOverride.length > 0
+                ? templateKeysOverride.map(value => String(value || '').trim().toLowerCase()).filter(Boolean)
+                : Array.from(selectedTemplateKeys);
+
+            if (templateKeys.length === 0) {
+                setHolderActionMessage('info', 'Select at least one ACORD form to generate.');
+                openGenerateModal();
                 return;
             }
 
             const originalText = button.textContent;
             button.disabled = true;
             button.classList.add('cursor-wait');
-            button.textContent = selectedIds.length > 1 ? 'Generating ZIP...' : 'Generating PDF...';
+            button.textContent = templateKeys.length > 1 || selectedIds.length > 1 ? 'Generating ZIP...' : 'Generating PDF...';
 
-            setHolderActionMessage(
-                'info',
-                selectedIds.length > 1
-                    ? 'Generating certificates and preparing ZIP download...'
-                    : 'Generating certificate download...'
-            );
+            const holderLabel = selectedIds.length === 1 ? '1 certificate holder' : `${selectedIds.length} certificate holders`;
+            const templateLabel = templateKeys.length === 1 ? '1 form' : `${templateKeys.length} forms`;
+            setHolderActionMessage('info', `Generating ${templateLabel} for ${holderLabel}...`);
 
             try {
                 loadAgencySettingsFromStorage();
@@ -1439,11 +1720,12 @@
 
                 const payload = {
                     holder_ids: selectedIds,
+                    template_keys: templateKeys,
                     owner_id: ownerId || null,
                     agency_settings: agencySettings || null
                 };
 
-                const response = await fetch(`/api/account/${accountId}/certificate-holders/generated/acord25`, {
+                const response = await fetch(`/api/account/${accountId}/certificate-holders/generated`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -1462,7 +1744,7 @@
                 }
 
                 const blob = await response.blob();
-                let filename = 'acord25.pdf';
+                let filename = 'certificates.zip';
                 const disposition = response.headers.get('Content-Disposition') || '';
                 const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/);
                 if (match) {
@@ -1473,9 +1755,10 @@
                     }
                 } else {
                     const today = new Date().toISOString().slice(0, 10);
-                    filename = selectedIds.length > 1
-                        ? `ACORD25_${today}.zip`
-                        : `ACORD25_${today}.pdf`;
+                    const multipleFiles = templateKeys.length > 1 || selectedIds.length > 1;
+                    filename = multipleFiles
+                        ? `Certificates_${today}.zip`
+                        : `${templateKeys[0].toUpperCase()}_${today}.pdf`;
                 }
 
                 const url = URL.createObjectURL(blob);
@@ -1489,7 +1772,7 @@
 
                 setHolderActionMessage(
                     'success',
-                    selectedIds.length > 1
+                    templateKeys.length > 1 || selectedIds.length > 1
                         ? 'Certificate ZIP downloaded successfully.'
                         : 'Certificate downloaded successfully.'
                 );
@@ -1498,9 +1781,34 @@
             } finally {
                 button.classList.remove('cursor-wait');
                 button.disabled = false;
-                button.textContent = originalText || 'Generate ACORD 25';
-                updateGenerateAcord25ButtonState();
+                button.textContent = originalText || 'Generate Certificates';
+                updateGenerateCertificatesButtonState();
             }
+        }
+
+        function syncGenerationTemplateOptions(rawTemplates = []) {
+            const templateMap = new Map();
+            (rawTemplates || []).forEach(template => {
+                if (!template) {
+                    return;
+                }
+                const templateType = String(template.template_type || template.id || '').trim().toLowerCase();
+                if (!templateType || !templateType.startsWith('acord')) {
+                    return;
+                }
+                if (templateMap.has(templateType)) {
+                    return;
+                }
+                const label = template.template_name || templateType.toUpperCase();
+                templateMap.set(templateType, {
+                    key: templateType,
+                    label,
+                    missing: Boolean(template.missing)
+                });
+            });
+            availableGenerationTemplates = Array.from(templateMap.values());
+            ensureTemplateSelectionDefaults();
+            renderTemplateSelectionList();
         }
 
         // Load templates
@@ -1511,6 +1819,8 @@
                 const response = await fetch(`/api/account/${accountId}/templates`);
                 const data = await response.json();
                 console.log('Templates response:', data);
+
+                syncGenerationTemplateOptions(data.templates || []);
                 
                 const templatesList = document.getElementById('templatesList');
                 if (data.success && data.templates && data.templates.length > 0) {
