@@ -17,6 +17,21 @@ import requests
 sf_session_cache = {}
 SF_SESSION_CACHE_TTL = 300  # 5 minutes
 
+def extract_sf_instance_url(instance_url):
+    """Extract base instance URL from Salesforce Partner Server URL or full URL"""
+    if not instance_url:
+        return None
+    # Handle Partner_Server_URL which looks like: https://na1.salesforce.com/services/Soap/u/26.0/00D...
+    # We just need the base: https://na1.salesforce.com
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(instance_url)
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
+    except:
+        pass
+    return instance_url
+
 def validate_salesforce_session(sid, instance_url=None):
     """Validate a Salesforce session ID by calling SF API"""
     if not sid:
@@ -27,15 +42,16 @@ def validate_salesforce_session(sid, instance_url=None):
     if cached and cached['expires'] > datetime.utcnow().timestamp():
         return cached['valid'], cached.get('error', '')
 
-    # Default instance URL or use provided one
-    if not instance_url:
-        instance_url = os.environ.get('SF_INSTANCE_URL', 'https://login.salesforce.com')
+    # Extract base URL from instance_url (handles Partner_Server_URL format)
+    base_url = extract_sf_instance_url(instance_url)
+    if not base_url:
+        base_url = os.environ.get('SF_INSTANCE_URL', 'https://login.salesforce.com')
 
     # Call Salesforce to validate the session
     try:
         # Use the UserInfo endpoint to validate session
         response = requests.get(
-            f"{instance_url}/services/oauth2/userinfo",
+            f"{base_url}/services/oauth2/userinfo",
             headers={'Authorization': f'Bearer {sid}'},
             timeout=10
         )
