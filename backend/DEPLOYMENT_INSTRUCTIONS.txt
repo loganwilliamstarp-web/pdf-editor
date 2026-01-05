@@ -1,0 +1,50 @@
+# Certificate Management System - Deployment Package
+
+## Files Created:
+1. backend/app.py - Main Flask application
+2. backend/requirements.txt - Python dependencies
+3. backend/Procfile - Heroku process configuration
+4. backend/runtime.txt - Python version
+5. frontend/build/index.html - Frontend interface
+
+## To Deploy:
+
+### Option 1: Using Heroku CLI (if installed)
+```bash
+cd backend
+git init
+git add .
+git commit -m "Initial deployment"
+git remote add heroku https://git.heroku.com/pdfeditorsalesforce.git
+git push heroku main
+```
+
+### Option 2: Manual Upload via GitHub
+1. Go to your GitHub repository
+2. Upload these files to the repository
+3. Connect Heroku to GitHub and deploy
+
+### Option 3: Heroku Dashboard
+1. Go to Heroku dashboard
+2. Select your app
+3. Go to Deploy tab
+4. Connect to GitHub repository
+5. Deploy
+
+## Environment Variables to Set:
+```bash
+heroku config:set REACT_APP_ADOBE_CLIENT_ID=<your-adobe-client-id> -a <your-app-name>
+heroku config:set DATABASE_URL=<your-database-url> -a <your-app-name>
+```
+
+NOTE: Get your Adobe Client ID from https://developer.adobe.com/
+NOTE: Get your DATABASE_URL from your Supabase or Heroku Postgres dashboard
+
+## Test After Deployment:
+- https://<your-app-name>.herokuapp.com/
+- https://<your-app-name>.herokuapp.com/api/health
+
+## Next Steps:
+1. Verify the app is working
+2. Upload your ACORD templates
+3. Set up Salesforce integration
