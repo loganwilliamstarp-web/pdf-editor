@@ -346,24 +346,24 @@
         function getSfSession() {
             const params = new URLSearchParams(window.location.search);
             return {
-                sid: params.get('sid') || '',
-                instanceUrl: params.get('instance_url') || ''
+                sfSession: params.get('sfSession') || '',
+                sfOrg: params.get('sfOrg') || ''
             };
         }
 
         // Helper to add SF session to fetch requests
         function apiFetch(url, options = {}) {
             const session = getSfSession();
-            if (!session.sid) {
+            if (!session.sfSession) {
                 console.error('No Salesforce session ID found in URL');
                 return Promise.reject(new Error('Authentication required. Please access this app from Salesforce.'));
             }
 
-            // Add sid to URL
+            // Add session params to URL
             const urlObj = new URL(url, window.location.origin);
-            urlObj.searchParams.set('sid', session.sid);
-            if (session.instanceUrl) {
-                urlObj.searchParams.set('instance_url', session.instanceUrl);
+            urlObj.searchParams.set('sfSession', session.sfSession);
+            if (session.sfOrg) {
+                urlObj.searchParams.set('sfOrg', session.sfOrg);
             }
 
             return fetch(urlObj.toString(), options);
@@ -1984,10 +1984,10 @@ function initializePDFEditorPopup(popupWindow, context) {
     // Helper to build API URLs with SF session
     function buildApiUrl(path) {
         const url = new URL(path, appOrigin);
-        if (sfSession && sfSession.sid) {
-            url.searchParams.set('sid', sfSession.sid);
-            if (sfSession.instanceUrl) {
-                url.searchParams.set('instance_url', sfSession.instanceUrl);
+        if (sfSession && sfSession.sfSession) {
+            url.searchParams.set('sfSession', sfSession.sfSession);
+            if (sfSession.sfOrg) {
+                url.searchParams.set('sfOrg', sfSession.sfOrg);
             }
         }
         return url.toString();

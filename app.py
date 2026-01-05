@@ -79,12 +79,22 @@ def require_sf_session(f):
     """Decorator to require valid Salesforce session for API endpoints"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # Get sid from query params or headers
-        sid = request.args.get('sid') or request.headers.get('X-SF-Session-Id')
-        instance_url = request.args.get('instance_url') or request.headers.get('X-SF-Instance-Url')
+        # Get session from query params (support both naming conventions)
+        sid = request.args.get('sfSession') or request.args.get('sid') or request.headers.get('X-SF-Session-Id')
+        org_id = request.args.get('sfOrg') or request.args.get('instance_url') or request.headers.get('X-SF-Instance-Url')
 
         if not sid:
             return jsonify({'error': 'Authentication required', 'code': 'NO_SESSION'}), 401
+
+        # For org ID, we need to construct the instance URL
+        # If it's an org ID (starts with 00D), use login.salesforce.com
+        # Otherwise treat it as instance URL
+        instance_url = None
+        if org_id and not org_id.startswith('http'):
+            # It's an org ID, use default login URL
+            instance_url = os.environ.get('SF_INSTANCE_URL', 'https://login.salesforce.com')
+        else:
+            instance_url = org_id
 
         valid, error = validate_salesforce_session(sid, instance_url)
         if not valid:
