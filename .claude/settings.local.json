@@ -7,7 +7,11 @@
       "Bash(git commit:*)",
       "Bash(git config:*)",
       "Bash(git push)",
-      "Bash(git remote add:*)"
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)"
     ]
   }
 }
