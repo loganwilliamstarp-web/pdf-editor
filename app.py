@@ -250,16 +250,21 @@ NAMED_INSURED_FIELD_MAPPINGS = {
 FIELD_MAPPING_SCOPES = {'certificate_holder', 'agency', 'named_insured'}
 
 # Agency/Producer field mapping
+# Maps database column names to PDF field names
+# Agency fields (company info):
+#   - name, street, suite, city, state, zip = Agency address block
+# Producer fields (contact person):
+#   - producerName, producerPhone, producerEmail = Contact person details
 DEFAULT_AGENCY_FIELD_MAPPING = {
+    # Agency/Company info
     "name": "Agency_FullName_A",
     "street": "Producer_MailingAddress_LineOne_A",
     "suite": "Producer_MailingAddress_LineTwo_A",
     "city": "Producer_MailingAddress_CityName_A",
     "state": "Producer_MailingAddress_StateOrProvinceCode_A",
     "zip": "Producer_MailingAddress_PostalCode_A",
-    "phone": "Producer_ContactPerson_PhoneNumber_A",
     "fax": "Producer.Fax",
-    "email": "Producer_ContactPerson_EmailAddress_A",
+    # Producer/Contact person info
     "producerName": "Producer_ContactPerson_FullName_A",
     "producerPhone": "Producer_ContactPerson_PhoneNumber_A",
     "producerEmail": "Producer_ContactPerson_EmailAddress_A",
