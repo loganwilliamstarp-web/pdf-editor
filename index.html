@@ -1704,10 +1704,13 @@
                 return;
             }
 
-            // Group certificates by generation date (day)
+            // Group certificates by generation date (day) in local timezone
             const grouped = {};
             certificates.forEach(cert => {
-                const dateKey = cert.generated_at ? cert.generated_at.split('T')[0] : 'Unknown';
+                // Convert UTC to local date for grouping
+                const utcDateStr = cert.generated_at ? (cert.generated_at.endsWith('Z') ? cert.generated_at : cert.generated_at + 'Z') : '';
+                const localDate = utcDateStr ? new Date(utcDateStr) : null;
+                const dateKey = localDate ? localDate.toLocaleDateString('en-CA') : 'Unknown'; // YYYY-MM-DD format
                 if (!grouped[dateKey]) {
                     grouped[dateKey] = [];
                 }
@@ -1716,13 +1719,15 @@
 
             const rows = Object.keys(grouped).map(dateKey => {
                 const certs = grouped[dateKey];
-                const formattedDate = dateKey !== 'Unknown' ? new Date(dateKey).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'Unknown Date';
+                const formattedDate = dateKey !== 'Unknown' ? new Date(dateKey + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'Unknown Date';
 
                 const certRows = certs.map(cert => {
                     const holderName = cert.holder_name || 'Unknown Holder';
                     const templateName = cert.template_name || cert.template_type || 'Unknown Template';
                     const filename = cert.filename || 'certificate.pdf';
-                    const generatedTime = cert.generated_at ? new Date(cert.generated_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '';
+                    // Append 'Z' to indicate UTC if not already present
+                    const dateStr = cert.generated_at ? (cert.generated_at.endsWith('Z') ? cert.generated_at : cert.generated_at + 'Z') : '';
+                    const generatedTime = dateStr ? new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '';
                     const certId = cert.id;
                     const hasPdf = cert.has_pdf !== false;
 
