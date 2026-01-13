@@ -1421,8 +1421,9 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
                                     widget.field_value = signature_text
                                     widget.text_color = (0, 0, 0.5)  # Dark blue
                                     widget.text_fontsize = font_size
+                                    widget.text_font = "TiIt"  # Times-Italic for signature style
                                     widget.update()
-                                    print(f"[SIGNATURE DEBUG] Styled signature field successfully")
+                                    print(f"[SIGNATURE DEBUG] Styled signature field with italic font")
                                 signature_applied = True
                                 filled_count += 1
                         except Exception as signature_error:
