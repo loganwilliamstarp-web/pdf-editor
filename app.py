@@ -2528,10 +2528,35 @@ def fetch_named_insured_from_supabase(sf_account_id):
         return None, 'Supabase not configured'
 
     try:
+        # Salesforce IDs can be 15 or 18 chars - try both formats
+        sf_id_15 = sf_account_id[:15] if len(sf_account_id) >= 15 else sf_account_id
+        sf_id_18 = sf_account_id if len(sf_account_id) == 18 else None
+
+        print(f"[Supabase] Looking for sf_id: {sf_account_id}")
+        print(f"[Supabase] Also trying 15-char version: {sf_id_15}")
+
         # Query Supabase accounts table by sf_id (Salesforce Account ID)
+        # Try exact match first
         response = supabase.table('accounts').select('*').eq('sf_id', sf_account_id).execute()
 
+        # If no match, try 15-char version
+        if (not response.data or len(response.data) == 0) and sf_id_15 != sf_account_id:
+            print(f"[Supabase] No match for 18-char, trying 15-char: {sf_id_15}")
+            response = supabase.table('accounts').select('*').eq('sf_id', sf_id_15).execute()
+
+        # If still no match, try case-insensitive with ilike
         if not response.data or len(response.data) == 0:
+            print(f"[Supabase] No exact match, trying ilike query")
+            response = supabase.table('accounts').select('*').ilike('sf_id', sf_account_id).execute()
+
+        if not response.data or len(response.data) == 0:
+            # Debug: show what sf_ids exist (first 5)
+            try:
+                all_accounts = supabase.table('accounts').select('sf_id').limit(5).execute()
+                existing_ids = [a.get('sf_id') for a in (all_accounts.data or [])]
+                print(f"[Supabase] Sample sf_ids in table: {existing_ids}")
+            except Exception as debug_err:
+                print(f"[Supabase] Could not fetch sample sf_ids: {debug_err}")
             return None, f'Account not found in Supabase for sf_id: {sf_account_id}'
 
         account = response.data[0]
