@@ -1416,17 +1416,15 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
 
                                     print(f"[SIGNATURE DEBUG] Drawing text: '{signature_text}' at ({text_x}, {text_y}) size {font_size}")
 
-                                    # Use draw_string with italic font for signature styling
-                                    # Built-in Base14 fonts: helv, heit (helvetica-oblique), tiro (times-roman), tiit (times-italic)
-                                    shape = page.new_shape()
-                                    shape.insert_text(
+                                    # Use page.insert_text for signature styling
+                                    # This draws directly on the page with specified color
+                                    page.insert_text(
                                         (text_x, text_y),
                                         signature_text,
-                                        fontname="tiit",  # Times-Italic for signature look
                                         fontsize=font_size,
                                         color=(0, 0, 0.5),  # Dark blue color
+                                        rotate=0,
                                     )
-                                    shape.commit()
                                     print(f"[SIGNATURE DEBUG] Successfully drew styled signature")
                                 signature_applied = True
                                 filled_count += 1
