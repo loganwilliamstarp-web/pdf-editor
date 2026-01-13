@@ -162,86 +162,107 @@ MASTER_TEMPLATE_CONFIG = {
 }
 LOCAL_TEMPLATE_FILES = {key: value["filename"] for key, value in MASTER_TEMPLATE_CONFIG.items()}
 
+# Standard Certificate Holder field mapping (used as default for most templates)
+DEFAULT_CERTIFICATE_HOLDER_FIELDS = {
+    "name": "CertificateHolder_FullName_A",
+    "address_line1": "CertificateHolder_MailingAddress_LineOne_A",
+    "address_line2": "CertificateHolder_MailingAddress_LineTwo_A",
+    "city": "CertificateHolder_MailingAddress_CityName_A",
+    "state": "CertificateHolder_MailingAddress_StateOrProvinceCode_A",
+    "postal_code": "CertificateHolder_MailingAddress_PostalCode_A",
+}
+
 CERTIFICATE_HOLDER_FIELD_MAPPINGS = {
+    # Standard templates using common field names
+    "acord24": {
+        **DEFAULT_CERTIFICATE_HOLDER_FIELDS,
+    },
     "acord25": {
-        "name": "CertificateHolder_FullName_A",
-        "address_line1": "CertificateHolder_MailingAddress_LineOne_A",
-        "address_line2": "CertificateHolder_MailingAddress_LineTwo_A",
-        "city": "CertificateHolder_MailingAddress_CityName_A",
-        "state": "CertificateHolder_MailingAddress_StateOrProvinceCode_A",
-        "postal_code": "CertificateHolder_MailingAddress_PostalCode_A",
+        **DEFAULT_CERTIFICATE_HOLDER_FIELDS,
         "master_remarks": "CertificateOfLiabilityInsurance_ACORDForm_RemarkText_A",
     },
     "acord27": {
-        "name": "AdditionalInterest_FullName_A",
-        "address_line1": "AdditionalInterest_MailingAddress_LineOne_A",
-        "address_line2": "AdditionalInterest_MailingAddress_LineTwo_A",
-        "city": "AdditionalInterest_MailingAddress_CityName_A",
-        "state": "AdditionalInterest_MailingAddress_StateOrProvinceCode_A",
-        "postal_code": "AdditionalInterest_MailingAddress_PostalCode_A",
+        **DEFAULT_CERTIFICATE_HOLDER_FIELDS,
         "master_remarks": "EvidenceOfProperty_RemarkText_A",
     },
     "acord28": {
-        "name": "AdditionalInterest_FullName_A",
-        "address_line1": "AdditionalInterest_MailingAddress_LineOne_A",
-        "address_line2": "AdditionalInterest_MailingAddress_LineTwo_A",
-        "city": "AdditionalInterest_MailingAddress_CityName_A",
-        "state": "AdditionalInterest_MailingAddress_StateOrProvinceCode_A",
-        "postal_code": "AdditionalInterest_MailingAddress_PostalCode_A",
+        **DEFAULT_CERTIFICATE_HOLDER_FIELDS,
         "master_remarks": "CertificateOfLiabilityInsurance_ACORDForm_RemarkText_A",
     },
     "acord30": {
-        "name": "F[0].P1[0].CertificateHolder_FullName_A[0]",
-        "address_line1": "F[0].P1[0].CertificateHolder_MailingAddress_LineOne_A[0]",
-        "address_line2": "F[0].P1[0].CertificateHolder_MailingAddress_LineTwo_A[0]",
-        "city": "F[0].P1[0].CertificateHolder_MailingAddress_CityName_A[0]",
-        "state": "F[0].P1[0].CertificateHolder_MailingAddress_StateOrProvinceCode_A[0]",
-        "postal_code": "F[0].P1[0].CertificateHolder_MailingAddress_PostalCode_A[0]",
-        "master_remarks": "F[0].P1[0].CertificateOfLiabilityInsurance_ACORDForm_RemarkText_A[0]",
+        **DEFAULT_CERTIFICATE_HOLDER_FIELDS,
+        "master_remarks": "CertificateOfLiabilityInsurance_ACORDForm_RemarkText_A",
     },
     "acord35": {
-        "name": "F[0].P1[0].CancelNonRenew_Distribution_FullName_A[0]",
-        "address_line1": "F[0].P1[0].CancelNonRenew_DistributionMailingAddress_LineOne_A[0]",
-        "address_line2": "F[0].P1[0].CancelNonRenew_DistributionMailingAddress_LineTwo_A[0]",
-        "city": "F[0].P1[0].CancelNonRenew_DistributionMailingAddress_CityName_A[0]",
-        "state": "F[0].P1[0].CancelNonRenew_DistributionMailingAddress_StateOrProvinceCode_A[0]",
-        "postal_code": "F[0].P1[0].CancelNonRenew_DistributionMailingAddress_PostalCode_A[0]",
-        "master_remarks": "F[0].P1[0].CancelNonRenew_RemarkText_A[0]",
+        **DEFAULT_CERTIFICATE_HOLDER_FIELDS,
+    },
+    "acord36": {
+        **DEFAULT_CERTIFICATE_HOLDER_FIELDS,
+    },
+    "acord37": {
+        **DEFAULT_CERTIFICATE_HOLDER_FIELDS,
+    },
+    "acord125": {
+        **DEFAULT_CERTIFICATE_HOLDER_FIELDS,
     },
     "acord126": {
-        "name": "AdditionalInterest_FullName_A",
-        "address_line1": "AdditionalInterest_MailingAddress_LineOne_A",
-        "address_line2": "AdditionalInterest_MailingAddress_LineTwo_A",
-        "city": "AdditionalInterest_MailingAddress_CityName_A",
-        "state": "AdditionalInterest_MailingAddress_StateOrProvinceCode_A",
-        "postal_code": "AdditionalInterest_MailingAddress_PostalCode_A",
+        **DEFAULT_CERTIFICATE_HOLDER_FIELDS,
+    },
+    "acord130": {
+        **DEFAULT_CERTIFICATE_HOLDER_FIELDS,
+    },
+    "acord131": {
+        **DEFAULT_CERTIFICATE_HOLDER_FIELDS,
     },
     "acord140": {
-        "name": "AdditionalInterest_FullName_A",
-        "address_line1": "AdditionalInterest_MailingAddress_LineOne_A",
-        "address_line2": "AdditionalInterest_MailingAddress_LineTwo_A",
-        "city": "AdditionalInterest_MailingAddress_CityName_A",
-        "state": "AdditionalInterest_MailingAddress_StateOrProvinceCode_A",
-        "postal_code": "AdditionalInterest_MailingAddress_PostalCode_A",
+        **DEFAULT_CERTIFICATE_HOLDER_FIELDS,
     },
 }
 
-FIELD_MAPPING_SCOPES = {'certificate_holder', 'agency'}
+# Named Insured (Applicant) field mappings - for injecting applicant data from Supabase
+DEFAULT_NAMED_INSURED_FIELDS = {
+    "name": "NamedInsured_FullName_A",
+    "address_line1": "NamedInsured_MailingAddress_LineOne_A",
+    "address_line2": "NamedInsured_MailingAddress_LineTwo_A",
+    "city": "NamedInsured_MailingAddress_CityName_A",
+    "state": "NamedInsured_MailingAddress_StateOrProvinceCode_A",
+    "postal_code": "NamedInsured_MailingAddress_PostalCode_A",
+    "email": "NamedInsured_Primary_EmailAddress_A",
+    "phone": "NamedInsured_Primary_PhoneNumber_A",
+}
 
+NAMED_INSURED_FIELD_MAPPINGS = {
+    "acord24": {**DEFAULT_NAMED_INSURED_FIELDS},
+    "acord25": {**DEFAULT_NAMED_INSURED_FIELDS},
+    "acord27": {**DEFAULT_NAMED_INSURED_FIELDS},
+    "acord28": {**DEFAULT_NAMED_INSURED_FIELDS},
+    "acord30": {**DEFAULT_NAMED_INSURED_FIELDS},
+    "acord35": {**DEFAULT_NAMED_INSURED_FIELDS},
+    "acord36": {**DEFAULT_NAMED_INSURED_FIELDS},
+    "acord37": {**DEFAULT_NAMED_INSURED_FIELDS},
+    "acord125": {**DEFAULT_NAMED_INSURED_FIELDS},
+    "acord126": {**DEFAULT_NAMED_INSURED_FIELDS},
+    "acord130": {**DEFAULT_NAMED_INSURED_FIELDS},
+    "acord131": {**DEFAULT_NAMED_INSURED_FIELDS},
+    "acord140": {**DEFAULT_NAMED_INSURED_FIELDS},
+}
+
+FIELD_MAPPING_SCOPES = {'certificate_holder', 'agency', 'named_insured'}
+
+# Agency/Producer field mapping
 DEFAULT_AGENCY_FIELD_MAPPING = {
-    "name": "Producer_FullName_A",
+    "name": "Agency_FullName_A",
     "street": "Producer_MailingAddress_LineOne_A",
     "suite": "Producer_MailingAddress_LineTwo_A",
     "city": "Producer_MailingAddress_CityName_A",
     "state": "Producer_MailingAddress_StateOrProvinceCode_A",
     "zip": "Producer_MailingAddress_PostalCode_A",
     "phone": "Producer_ContactPerson_PhoneNumber_A",
-    "fax": "Producer_FaxNumber_A",
+    "fax": "Producer.Fax",
     "email": "Producer_ContactPerson_EmailAddress_A",
     "producerName": "Producer_ContactPerson_FullName_A",
     "producerPhone": "Producer_ContactPerson_PhoneNumber_A",
     "producerEmail": "Producer_ContactPerson_EmailAddress_A",
-    "producerFax": "Producer_ContactPerson_FaxNumber_A"
 }
 
 def get_certificate_holder_field_map(template_type):
@@ -269,7 +290,23 @@ def get_default_field_mapping(template_key, scope):
         return dict(fallback)
     if scope == 'agency':
         return dict(DEFAULT_AGENCY_FIELD_MAPPING)
+    if scope == 'named_insured':
+        default_map = NAMED_INSURED_FIELD_MAPPINGS.get(normalized_key)
+        if default_map:
+            return dict(default_map)
+        return dict(DEFAULT_NAMED_INSURED_FIELDS)
     return {}
+
+
+def get_named_insured_field_map(template_type):
+    """Return the field-name mapping for Named Insured fields for a given template type."""
+    mapping = resolve_field_mapping(template_type, 'named_insured')
+    if mapping:
+        return mapping
+    default_map = NAMED_INSURED_FIELD_MAPPINGS.get(normalize_template_key(template_type), {})
+    if default_map:
+        return default_map
+    return dict(DEFAULT_NAMED_INSURED_FIELDS)
 
 
 def fetch_field_mapping_from_db(template_key, scope, cur=None):
@@ -674,7 +711,32 @@ def create_database_schema():
         cur.execute('UPDATE certificate_holders SET address_line1 = COALESCE(address_line1, address) WHERE address IS NOT NULL AND (address_line1 IS NULL OR address_line1 = \'\');')
         cur.execute('UPDATE certificate_holders SET updated_at = COALESCE(updated_at, created_at, NOW());')
         cur.execute('ALTER TABLE certificate_holders ALTER COLUMN updated_at SET DEFAULT NOW();')
-        
+
+        # Agency Settings - for storing agency/producer data per account
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS agency_settings (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                account_id VARCHAR(18) NOT NULL,
+                name VARCHAR(255),
+                street VARCHAR(255),
+                suite VARCHAR(100),
+                city VARCHAR(120),
+                state VARCHAR(2),
+                zip VARCHAR(20),
+                phone VARCHAR(50),
+                fax VARCHAR(50),
+                email VARCHAR(255),
+                producer_name VARCHAR(255),
+                producer_phone VARCHAR(50),
+                producer_email VARCHAR(255),
+                signature_image TEXT,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(account_id)
+            );
+        ''')
+        cur.execute('CREATE INDEX IF NOT EXISTS idx_agency_settings_account ON agency_settings(account_id);')
+
         # Create indexes
         cur.execute('CREATE INDEX IF NOT EXISTS idx_template_data_account ON template_data(account_id);')
         cur.execute('CREATE INDEX IF NOT EXISTS idx_template_data_template ON template_data(template_id);')
@@ -2282,6 +2344,345 @@ def delete_certificate_holder(account_id, holder_id):
         if conn:
             conn.close()
 
+
+# ============================================================================
+# AGENCY SETTINGS ENDPOINTS
+# ============================================================================
+
+def format_agency_settings(record):
+    """Format agency settings record for JSON response."""
+    if not record:
+        return None
+    return {
+        'id': str(record['id']) if record.get('id') else None,
+        'account_id': record.get('account_id'),
+        'name': record.get('name'),
+        'street': record.get('street'),
+        'suite': record.get('suite'),
+        'city': record.get('city'),
+        'state': record.get('state'),
+        'zip': record.get('zip'),
+        'phone': record.get('phone'),
+        'fax': record.get('fax'),
+        'email': record.get('email'),
+        'producerName': record.get('producer_name'),
+        'producerPhone': record.get('producer_phone'),
+        'producerEmail': record.get('producer_email'),
+        'signatureImage': record.get('signature_image'),
+        'created_at': record['created_at'].isoformat() if record.get('created_at') else None,
+        'updated_at': record['updated_at'].isoformat() if record.get('updated_at') else None,
+    }
+
+
+@app.route("/api/account/<account_id>/agency-settings", methods=['GET'])
+@require_sf_session
+def get_agency_settings(account_id):
+    """Get agency settings for an account."""
+    if not PSYCOPG2_AVAILABLE:
+        return database_not_configured_response()
+
+    try:
+        normalized_account_id = normalize_account_id(account_id)
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT * FROM agency_settings WHERE account_id = %s
+        ''', (normalized_account_id,))
+        record = cur.fetchone()
+
+        return jsonify({
+            'success': True,
+            'agency_settings': format_agency_settings(record) if record else None
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.route("/api/account/<account_id>/agency-settings", methods=['POST', 'PUT'])
+@require_sf_session
+def save_agency_settings(account_id):
+    """Create or update agency settings for an account."""
+    if not PSYCOPG2_AVAILABLE:
+        return database_not_configured_response()
+
+    try:
+        normalized_account_id = normalize_account_id(account_id)
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+
+    data = request.get_json() or {}
+
+    # Sanitize input
+    sanitized = {
+        'name': normalize_string(data.get('name'), 255),
+        'street': normalize_string(data.get('street'), 255),
+        'suite': normalize_string(data.get('suite'), 100),
+        'city': normalize_string(data.get('city'), 120),
+        'state': normalize_string(data.get('state'), 2),
+        'zip': normalize_string(data.get('zip'), 20),
+        'phone': normalize_string(data.get('phone'), 50),
+        'fax': normalize_string(data.get('fax'), 50),
+        'email': normalize_string(data.get('email'), 255),
+        'producer_name': normalize_string(data.get('producerName'), 255),
+        'producer_phone': normalize_string(data.get('producerPhone'), 50),
+        'producer_email': normalize_string(data.get('producerEmail'), 255),
+        'signature_image': data.get('signatureImage'),  # Base64 image, can be large
+    }
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+
+        # Upsert - insert or update on conflict
+        cur.execute('''
+            INSERT INTO agency_settings (account_id, name, street, suite, city, state, zip, phone, fax, email, producer_name, producer_phone, producer_email, signature_image)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (account_id) DO UPDATE SET
+                name = EXCLUDED.name,
+                street = EXCLUDED.street,
+                suite = EXCLUDED.suite,
+                city = EXCLUDED.city,
+                state = EXCLUDED.state,
+                zip = EXCLUDED.zip,
+                phone = EXCLUDED.phone,
+                fax = EXCLUDED.fax,
+                email = EXCLUDED.email,
+                producer_name = EXCLUDED.producer_name,
+                producer_phone = EXCLUDED.producer_phone,
+                producer_email = EXCLUDED.producer_email,
+                signature_image = EXCLUDED.signature_image,
+                updated_at = NOW()
+            RETURNING *
+        ''', (
+            normalized_account_id,
+            sanitized.get('name'),
+            sanitized.get('street'),
+            sanitized.get('suite'),
+            sanitized.get('city'),
+            sanitized.get('state'),
+            sanitized.get('zip'),
+            sanitized.get('phone'),
+            sanitized.get('fax'),
+            sanitized.get('email'),
+            sanitized.get('producer_name'),
+            sanitized.get('producer_phone'),
+            sanitized.get('producer_email'),
+            sanitized.get('signature_image'),
+        ))
+        record = cur.fetchone()
+        conn.commit()
+
+        return jsonify({
+            'success': True,
+            'agency_settings': format_agency_settings(record)
+        })
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+# ============================================================================
+# NAMED INSURED (FROM SUPABASE) ENDPOINTS
+# ============================================================================
+
+def fetch_named_insured_from_supabase(sf_account_id):
+    """
+    Fetch Named Insured data from Supabase accounts table by sf_id.
+    Returns mapped field values for PDF injection.
+    """
+    if not SUPABASE_AVAILABLE or not supabase:
+        return None, 'Supabase not configured'
+
+    try:
+        # Query Supabase accounts table by sf_id (Salesforce Account ID)
+        response = supabase.table('accounts').select('*').eq('sf_id', sf_account_id).execute()
+
+        if not response.data or len(response.data) == 0:
+            return None, f'Account not found in Supabase for sf_id: {sf_account_id}'
+
+        account = response.data[0]
+
+        # Map Supabase accounts columns to Named Insured PDF fields
+        named_insured = {
+            'name': account.get('name'),
+            'address_line1': account.get('billing_street'),
+            'address_line2': None,  # No separate line2 in Supabase
+            'city': account.get('billing_city'),
+            'state': account.get('billing_state'),
+            'postal_code': account.get('billing_zip'),
+            'email': account.get('primary_email'),
+            'phone': account.get('phone'),
+            'supabase_id': account.get('id'),
+        }
+
+        return named_insured, None
+
+    except Exception as e:
+        return None, str(e)
+
+
+def get_named_insured_field_values(sf_account_id, template_key):
+    """
+    Fetch Named Insured from Supabase and map to PDF field names.
+    Returns dict of {pdf_field_name: value} for injection.
+    """
+    named_insured, error = fetch_named_insured_from_supabase(sf_account_id)
+    if not named_insured:
+        return {}, error
+
+    field_map = get_named_insured_field_map(template_key)
+    field_values = {}
+
+    source_to_value = {
+        'name': named_insured.get('name') or '',
+        'address_line1': named_insured.get('address_line1') or '',
+        'address_line2': named_insured.get('address_line2') or '',
+        'city': named_insured.get('city') or '',
+        'state': named_insured.get('state') or '',
+        'postal_code': named_insured.get('postal_code') or '',
+        'email': named_insured.get('email') or '',
+        'phone': named_insured.get('phone') or '',
+    }
+
+    for source_key, target_field in field_map.items():
+        if target_field and source_to_value.get(source_key):
+            field_values[target_field] = source_to_value[source_key]
+
+    return field_values, None
+
+
+@app.route("/api/account/<account_id>/named-insured", methods=['GET'])
+@require_sf_session
+def get_named_insured(account_id):
+    """
+    Fetch Named Insured data from Supabase accounts table.
+    Matches the URL account_id to sf_id in Supabase.
+    """
+    try:
+        normalized_account_id = normalize_account_id(account_id)
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+
+    named_insured, error = fetch_named_insured_from_supabase(normalized_account_id)
+
+    if error:
+        return jsonify({
+            'success': False,
+            'error': error,
+            'named_insured': None
+        }), 404 if 'not found' in error.lower() else 500
+
+    return jsonify({
+        'success': True,
+        'named_insured': named_insured
+    })
+
+
+@app.route("/api/account/<account_id>/named-insured/field-values/<template_key>", methods=['GET'])
+@require_sf_session
+def get_named_insured_for_template(account_id, template_key):
+    """
+    Get Named Insured field values mapped to specific template PDF fields.
+    Used for injecting into PDF edit popup.
+    """
+    try:
+        normalized_account_id = normalize_account_id(account_id)
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+
+    field_values, error = get_named_insured_field_values(normalized_account_id, template_key)
+
+    if error and not field_values:
+        return jsonify({
+            'success': False,
+            'error': error,
+            'field_values': {}
+        }), 404 if 'not found' in error.lower() else 500
+
+    return jsonify({
+        'success': True,
+        'field_values': field_values,
+        'template_key': template_key
+    })
+
+
+@app.route("/api/account/<account_id>/prefill-data/<template_key>", methods=['GET'])
+@require_sf_session
+def get_prefill_data(account_id, template_key):
+    """
+    Get all prefill data for PDF edit popup: Agency Settings + Named Insured.
+    This is the main endpoint to call when opening a PDF for editing.
+    """
+    try:
+        normalized_account_id = normalize_account_id(account_id)
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+
+    result = {
+        'success': True,
+        'account_id': normalized_account_id,
+        'template_key': template_key,
+        'agency_field_values': {},
+        'named_insured_field_values': {},
+        'errors': []
+    }
+
+    # Fetch Agency Settings from local DB
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM agency_settings WHERE account_id = %s', (normalized_account_id,))
+        agency_record = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if agency_record:
+            agency_settings = format_agency_settings(agency_record)
+            agency_field_map = resolve_field_mapping(template_key, 'agency')
+            if agency_field_map and agency_settings:
+                for source_key, target_field in agency_field_map.items():
+                    if target_field:
+                        value = agency_settings.get(source_key)
+                        if value:
+                            result['agency_field_values'][target_field] = value
+    except Exception as e:
+        result['errors'].append(f'Agency settings error: {str(e)}')
+
+    # Fetch Named Insured from Supabase
+    named_insured_values, ni_error = get_named_insured_field_values(normalized_account_id, template_key)
+    if named_insured_values:
+        result['named_insured_field_values'] = named_insured_values
+    if ni_error:
+        result['errors'].append(f'Named Insured: {ni_error}')
+
+    # Combine all field values for easy injection
+    result['combined_field_values'] = {
+        **result['agency_field_values'],
+        **result['named_insured_field_values']
+    }
+
+    return jsonify(result)
+
+
 def process_certificate_generation_request(account_id, payload, default_template_keys=None):
     """Core generation logic shared across certificate generation endpoints."""
     if not PSYCOPG2_AVAILABLE:
@@ -2345,6 +2746,16 @@ def process_certificate_generation_request(account_id, payload, default_template
     signature_data_url = agency_settings.get('signatureDataUrl') or agency_settings.get('signature_data_url')
     signature_bytes = decode_data_url(signature_data_url) if signature_data_url else None
     signature_bytes = None  # Use text-based signature representation
+
+    # Fetch Named Insured data from Supabase for injection
+    named_insured_data = None
+    try:
+        named_insured_data, ni_error = fetch_named_insured_from_supabase(normalized_account_id)
+        if ni_error:
+            print(f"Warning: Could not fetch Named Insured from Supabase: {ni_error}")
+    except Exception as ni_exception:
+        print(f"Warning: Named Insured fetch error: {ni_exception}")
+        named_insured_data = None
 
     try:
         holders_by_id = fetch_selected_certificate_holders(normalized_account_id, holder_ids)
@@ -2434,6 +2845,30 @@ def process_certificate_generation_request(account_id, payload, default_template
                     existing = final_field_values.get(target_field)
                     if existing is None or str(existing).strip() == '':
                         final_field_values[target_field] = normalized_agency_value
+
+            # Apply Named Insured data from Supabase
+            if named_insured_data:
+                named_insured_field_map = get_named_insured_field_map(template_key)
+                named_insured_source_values = {
+                    'name': named_insured_data.get('name') or '',
+                    'address_line1': named_insured_data.get('address_line1') or '',
+                    'address_line2': named_insured_data.get('address_line2') or '',
+                    'city': named_insured_data.get('city') or '',
+                    'state': named_insured_data.get('state') or '',
+                    'postal_code': named_insured_data.get('postal_code') or '',
+                    'email': named_insured_data.get('email') or '',
+                    'phone': named_insured_data.get('phone') or '',
+                }
+                for source_key, target_field in named_insured_field_map.items():
+                    if not target_field:
+                        continue
+                    ni_value = named_insured_source_values.get(source_key)
+                    if ni_value in (None, ''):
+                        continue
+                    normalized_ni_value = normalize_checkbox_entry(target_field, ni_value)
+                    existing = final_field_values.get(target_field)
+                    if existing is None or str(existing).strip() == '':
+                        final_field_values[target_field] = normalized_ni_value
 
             for key in list(final_field_values.keys()):
                 final_field_values[key] = normalize_checkbox_entry(key, final_field_values[key])
@@ -3526,6 +3961,55 @@ def serve_pdf_template_with_fields(template_id, account_id):
         except Exception as init_error:
             print(f"Warning: unable to initialize template_data: {init_error}")
             conn.rollback()
+
+    # Merge in Agency Settings from local DB
+    effective_template_key = template_type or normalized_template_key
+    try:
+        agency_conn = get_db()
+        agency_cur = agency_conn.cursor()
+        agency_cur.execute('SELECT * FROM agency_settings WHERE account_id = %s', (account_id,))
+        agency_record = agency_cur.fetchone()
+        agency_cur.close()
+        agency_conn.close()
+
+        if agency_record:
+            agency_settings = format_agency_settings(agency_record)
+            agency_field_map = resolve_field_mapping(effective_template_key, 'agency')
+            if agency_field_map and agency_settings:
+                for source_key, target_field in agency_field_map.items():
+                    if target_field and agency_settings.get(source_key):
+                        # Only set if not already in field_values
+                        if target_field not in field_values or not field_values.get(target_field):
+                            field_values[target_field] = agency_settings[source_key]
+                print(f"Merged Agency Settings into field values")
+    except Exception as agency_error:
+        print(f"Warning: Could not fetch agency settings: {agency_error}")
+
+    # Merge in Named Insured from Supabase
+    try:
+        named_insured_data, ni_error = fetch_named_insured_from_supabase(account_id)
+        if named_insured_data:
+            named_insured_field_map = get_named_insured_field_map(effective_template_key)
+            named_insured_source = {
+                'name': named_insured_data.get('name') or '',
+                'address_line1': named_insured_data.get('address_line1') or '',
+                'address_line2': named_insured_data.get('address_line2') or '',
+                'city': named_insured_data.get('city') or '',
+                'state': named_insured_data.get('state') or '',
+                'postal_code': named_insured_data.get('postal_code') or '',
+                'email': named_insured_data.get('email') or '',
+                'phone': named_insured_data.get('phone') or '',
+            }
+            for source_key, target_field in named_insured_field_map.items():
+                if target_field and named_insured_source.get(source_key):
+                    # Only set if not already in field_values
+                    if target_field not in field_values or not field_values.get(target_field):
+                        field_values[target_field] = named_insured_source[source_key]
+            print(f"Merged Named Insured from Supabase into field values")
+        elif ni_error:
+            print(f"Named Insured not available: {ni_error}")
+    except Exception as ni_exception:
+        print(f"Warning: Could not fetch Named Insured: {ni_exception}")
 
     if field_values:
         print(f"Pre-filling PDF with {len(field_values)} saved field values")
