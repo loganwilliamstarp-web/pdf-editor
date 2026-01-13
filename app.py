@@ -500,12 +500,27 @@ if SUPABASE_AVAILABLE:
     try:
         supabase_url = os.environ.get('SUPABASE_URL')
         supabase_key = os.environ.get('SUPABASE_KEY')
-        
+
+        # Debug: check what env vars we're getting
+        print(f"=== SUPABASE INIT DEBUG ===")
+        print(f"SUPABASE_URL present: {bool(supabase_url)}")
+        print(f"SUPABASE_KEY present: {bool(supabase_key)}")
+        if supabase_url:
+            # Show just the domain part for debugging without exposing full URL
+            url_parts = supabase_url.split('.')
+            if len(url_parts) > 0:
+                print(f"SUPABASE_URL domain starts with: {url_parts[0][-8:]}")
+
         if supabase_url and supabase_key:
             supabase = create_client(supabase_url, supabase_key)
-            print("âœ… Supabase client initialized successfully")
+            print("Supabase client initialized successfully")
         else:
-            print("Warning: Supabase credentials not found. Storage functionality will be limited.")
+            missing = []
+            if not supabase_url:
+                missing.append('SUPABASE_URL')
+            if not supabase_key:
+                missing.append('SUPABASE_KEY')
+            print(f"Warning: Missing Supabase env vars: {', '.join(missing)}. Storage functionality will be limited.")
     except Exception as e:
         print(f"Warning: Failed to initialize Supabase client: {e}")
         supabase = None

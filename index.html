@@ -638,6 +638,57 @@
                 console.warn('Unable to load agency settings from storage.', error);
                 agencySettings = null;
             }
+
+            // Also try to load from database (async, will update UI when ready)
+            loadAgencySettingsFromDatabase();
+        }
+
+        async function loadAgencySettingsFromDatabase() {
+            const context = getAccountContext();
+            if (!context.accountId) {
+                console.log('[Agency Settings] No account ID, skipping database load');
+                return;
+            }
+
+            try {
+                const apiUrl = buildApiUrl('/api/account/' + context.accountId + '/agency-settings');
+                console.log('[Agency Settings] Loading from database:', apiUrl);
+
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+                console.log('[Agency Settings] Database load response:', data);
+
+                if (response.ok && data.agency_settings) {
+                    const dbSettings = data.agency_settings;
+                    // Map database fields to local format
+                    const mappedSettings = {
+                        accountId: context.accountId,
+                        ownerId: context.ownerId,
+                        name: dbSettings.name || '',
+                        street: dbSettings.street || '',
+                        suite: dbSettings.suite || '',
+                        city: dbSettings.city || '',
+                        state: dbSettings.state || '',
+                        zip: dbSettings.zip || '',
+                        producerName: dbSettings.producer_name || '',
+                        producerPhone: dbSettings.producer_phone || dbSettings.phone || '',
+                        producerEmail: dbSettings.producer_email || dbSettings.email || '',
+                        producerFax: dbSettings.fax || '',
+                        signatureDataUrl: dbSettings.signature_image || ''
+                    };
+
+                    // Update local state and localStorage
+                    agencySettings = mappedSettings;
+                    const storageKey = getAgencySettingsStorageKey();
+                    window.localStorage.setItem(storageKey, JSON.stringify(mappedSettings));
+
+                    // Update UI
+                    updateAgencySettingsSummary();
+                    console.log('[Agency Settings] Loaded from database and synced to localStorage');
+                }
+            } catch (error) {
+                console.warn('[Agency Settings] Error loading from database:', error);
+            }
         }
 
         function saveAgencySettingsToStorage(settings) {
@@ -646,6 +697,52 @@
                 window.localStorage.setItem(storageKey, JSON.stringify(settings));
             } catch (error) {
                 console.warn('Unable to persist agency settings.', error);
+            }
+
+            // Also save to database API for server-side injection
+            saveAgencySettingsToDatabase(settings);
+        }
+
+        async function saveAgencySettingsToDatabase(settings) {
+            if (!settings || !settings.accountId) {
+                console.warn('Cannot save agency settings to database: missing accountId');
+                return;
+            }
+
+            try {
+                const apiUrl = buildApiUrl('/api/account/' + settings.accountId + '/agency-settings');
+                console.log('[Agency Settings] Saving to database:', apiUrl);
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name: settings.name || '',
+                        street: settings.street || '',
+                        suite: settings.suite || '',
+                        city: settings.city || '',
+                        state: settings.state || '',
+                        zip: settings.zip || '',
+                        phone: settings.producerPhone || '',
+                        fax: settings.producerFax || '',
+                        email: settings.producerEmail || '',
+                        producer_name: settings.producerName || '',
+                        producer_phone: settings.producerPhone || '',
+                        producer_email: settings.producerEmail || '',
+                        signature_image: settings.signatureDataUrl || ''
+                    })
+                });
+
+                const data = await response.json();
+                console.log('[Agency Settings] Database save response:', data);
+
+                if (!response.ok) {
+                    console.error('[Agency Settings] Failed to save to database:', data);
+                }
+            } catch (error) {
+                console.error('[Agency Settings] Error saving to database:', error);
             }
         }
 
