@@ -3000,8 +3000,11 @@ def process_certificate_generation_request(account_id, payload, default_template
                 or agency_settings.get('name')
                 or ''
             )
+            print(f"[SIGNATURE] signature_text='{signature_text}', agency_settings keys: {list(agency_settings.keys()) if agency_settings else 'None'}")
+            print(f"[SIGNATURE] agency_settings name={agency_settings.get('name')}, signatureText={agency_settings.get('signatureText')}")
             if signature_text:
                 final_field_values['Producer_AuthorizedRepresentative_Signature_A'] = signature_text
+                print(f"[SIGNATURE] Set field to: {signature_text}")
 
             try:
                 filled_pdf = fill_acord25_fields(template_bytes, final_field_values, signature_bytes=signature_bytes)
