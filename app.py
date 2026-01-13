@@ -2998,6 +2998,7 @@ def process_certificate_generation_request(account_id, payload, default_template
                 file_path.write_bytes(pdf_bytes)
                 local_path = str(file_path.relative_to(LOCAL_TEMPLATE_DIR.parent))
 
+            print(f"[Generated Certs INSERT] account={normalized_account_id}, holder={holder_key}, template={template_id}, filename={filename}")
             cur.execute(
                 '''
                 INSERT INTO generated_certificates (
@@ -3015,9 +3016,14 @@ def process_certificate_generation_request(account_id, payload, default_template
                     psycopg2.Binary(pdf_bytes) if PSYCOPG2_AVAILABLE else None
                 )
             )
+            inserted_id = cur.fetchone()
+            print(f"[Generated Certs INSERT] Successfully inserted ID: {inserted_id}")
         conn.commit()
+        print(f"[Generated Certs INSERT] Committed {len(generated_files)} certificates to database")
     except Exception as store_error:
-        print(f"Warning: unable to persist generated certificates: {store_error}")
+        print(f"ERROR: unable to persist generated certificates: {store_error}")
+        import traceback
+        traceback.print_exc()
         if conn:
             conn.rollback()
     finally:
