@@ -1412,24 +1412,24 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
                                 else:
                                     # Draw signature-style text using textbox for proper positioning
                                     signature_text = str(value)
-                                    field_height = rect.height
+
+                                    # Save rect coordinates BEFORE deleting widget
+                                    sig_rect = fitz.Rect(rect.x0, rect.y0, rect.x1, rect.y1)
+                                    field_height = sig_rect.height
                                     font_size = min(field_height * 0.7, 12)  # Cap at 12pt
 
-                                    print(f"[SIGNATURE DEBUG] Drawing text: '{signature_text}' in rect {rect} size {font_size}")
+                                    print(f"[SIGNATURE DEBUG] Drawing text: '{signature_text}' in rect {sig_rect} size {font_size}")
 
                                     # Delete the widget to remove its appearance stream that covers our text
-                                    # Then draw text in the same location
                                     try:
-                                        widget_annot = widget
-                                        page.delete_annot(widget_annot)
+                                        page.delete_annot(widget)
                                         print(f"[SIGNATURE DEBUG] Deleted widget annotation")
                                     except Exception as del_err:
                                         print(f"[SIGNATURE DEBUG] Could not delete widget: {del_err}")
 
-                                    # Use insert_textbox to draw text within the field rectangle
-                                    # This handles positioning automatically
+                                    # Use insert_textbox to draw text within the saved rectangle
                                     rc = page.insert_textbox(
-                                        rect,
+                                        sig_rect,
                                         signature_text,
                                         fontsize=font_size,
                                         color=(0, 0, 0.5),  # Dark blue color
