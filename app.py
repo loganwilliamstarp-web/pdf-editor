@@ -1375,10 +1375,51 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
 
                 if value is not None:
                     is_checkbox_like = field_type_lower in {'checkbox', 'button', 'btn', 'radiobutton'}
+                    is_signature_field = normalized_name == 'Producer_AuthorizedRepresentative_Signature_A'
 
                     # Skip empty strings for non-checkbox fields
                     if not is_checkbox_like and str(value).strip() == '':
                         pass
+                    # Handle signature field with stylized text FIRST
+                    elif is_signature_field and not signature_applied:
+                        try:
+                            rect = widget.rect
+                            if rect and rect.get_area() > 0:
+                                # Clear the form field
+                                try:
+                                    widget.field_value = ''
+                                    widget.update()
+                                except Exception:
+                                    pass
+
+                                # If we have signature image bytes, use that
+                                if signature_bytes:
+                                    image_rect = fitz.Rect(rect.x0, rect.y0, rect.x1, rect.y1)
+                                    page.insert_image(image_rect, stream=signature_bytes, keep_proportion=True)
+                                else:
+                                    # Draw signature-style text using italic Times font
+                                    signature_text = str(value)
+                                    field_height = rect.height
+                                    font_size = min(field_height * 0.6, 14)  # Cap at 14pt
+                                    text_y = rect.y0 + (field_height + font_size) / 2 - 2
+                                    text_x = rect.x0 + 2
+
+                                    # Insert text with italic font
+                                    page.insert_text(
+                                        (text_x, text_y),
+                                        signature_text,
+                                        fontname="ti",  # Times-Italic built-in font
+                                        fontsize=font_size,
+                                        color=(0, 0, 0.4)  # Dark blue color for signature
+                                    )
+                                signature_applied = True
+                                filled_count += 1
+                        except Exception as signature_error:
+                            print(f"Warning: unable to insert signature: {signature_error}")
+                            # Fallback to regular text
+                            widget.field_value = str(value)
+                            widget.update()
+                            filled_count += 1
                     else:
                         try:
                             handled = False
@@ -1443,50 +1484,6 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
                         except Exception as fill_error:
                             failed_fields.append((normalized_name, str(fill_error)))
                             print(f"Warning: failed to set field '{normalized_name}': {fill_error}")
-
-                # Handle signature field with stylized text
-                if (
-                    normalized_name == 'Producer_AuthorizedRepresentative_Signature_A'
-                    and value
-                    and not signature_applied
-                ):
-                    try:
-                        rect = widget.rect
-                        if rect and rect.get_area() > 0:
-                            # Clear the form field
-                            try:
-                                widget.field_value = ''
-                                widget.update()
-                            except Exception:
-                                pass
-
-                            # If we have signature image bytes, use that
-                            if signature_bytes:
-                                image_rect = fitz.Rect(rect.x0, rect.y0, rect.x1, rect.y1)
-                                page.insert_image(image_rect, stream=signature_bytes, keep_proportion=True)
-                            else:
-                                # Draw signature-style text using italic Times font
-                                signature_text = str(value)
-                                # Calculate font size to fit the field (roughly 60% of field height)
-                                field_height = rect.height
-                                font_size = min(field_height * 0.6, 14)  # Cap at 14pt
-
-                                # Use Times-Italic for a more signature-like appearance
-                                # Position text vertically centered in the field
-                                text_y = rect.y0 + (field_height + font_size) / 2 - 2
-                                text_x = rect.x0 + 2  # Small left padding
-
-                                # Insert text with italic font (ti = Times-Italic)
-                                page.insert_text(
-                                    (text_x, text_y),
-                                    signature_text,
-                                    fontname="ti",  # Times-Italic built-in font
-                                    fontsize=font_size,
-                                    color=(0, 0, 0.4)  # Dark blue color for signature
-                                )
-                            signature_applied = True
-                    except Exception as signature_error:
-                        print(f"Warning: unable to insert signature: {signature_error}")
 
         filled_bytes = pdf_doc.write()
     finally:
