@@ -3048,6 +3048,190 @@ def generate_acord25_certificates(account_id):
     return process_certificate_generation_request(account_id, payload, default_template_keys=['acord25'])
 
 
+@app.route("/api/account/<account_id>/generated-certificates", methods=['GET'])
+@require_sf_session
+def list_generated_certificates(account_id):
+    """List all generated certificates for an account with history."""
+    normalized_account_id = normalize_account_id(account_id)
+    if not normalized_account_id:
+        return jsonify({'success': False, 'error': 'Invalid account ID'}), 400
+
+    if not PSYCOPG2_AVAILABLE:
+        return jsonify({'success': False, 'error': 'Database not available'}), 500
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Get generated certificates with holder and template info
+        cur.execute('''
+            SELECT
+                gc.id,
+                gc.account_id,
+                gc.template_id,
+                gc.certificate_holder_id,
+                gc.filename,
+                gc.generated_at,
+                ch.name as holder_name,
+                mt.template_name,
+                mt.template_type
+            FROM generated_certificates gc
+            LEFT JOIN certificate_holders ch ON gc.certificate_holder_id = ch.id
+            LEFT JOIN master_templates mt ON gc.template_id = mt.id
+            WHERE gc.account_id = %s OR gc.account_id = %s
+            ORDER BY gc.generated_at DESC
+        ''', (normalized_account_id, account_id))
+
+        certificates = cur.fetchall()
+
+        # Convert to list of dicts and format dates
+        result = []
+        for cert in certificates:
+            cert_dict = dict(cert)
+            if cert_dict.get('generated_at'):
+                cert_dict['generated_at'] = cert_dict['generated_at'].isoformat()
+            result.append(cert_dict)
+
+        return jsonify({
+            'success': True,
+            'certificates': result,
+            'count': len(result)
+        })
+
+    except Exception as e:
+        print(f"Error listing generated certificates: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.route("/api/account/<account_id>/generated-certificates/<certificate_id>", methods=['GET'])
+@require_sf_session
+def get_generated_certificate(account_id, certificate_id):
+    """Get a specific generated certificate PDF."""
+    normalized_account_id = normalize_account_id(account_id)
+    if not normalized_account_id:
+        return jsonify({'success': False, 'error': 'Invalid account ID'}), 400
+
+    if not PSYCOPG2_AVAILABLE:
+        return jsonify({'success': False, 'error': 'Database not available'}), 500
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Get the certificate with PDF blob
+        cur.execute('''
+            SELECT
+                gc.id,
+                gc.filename,
+                gc.pdf_blob,
+                gc.generated_at,
+                ch.name as holder_name,
+                mt.template_name
+            FROM generated_certificates gc
+            LEFT JOIN certificate_holders ch ON gc.certificate_holder_id = ch.id
+            LEFT JOIN master_templates mt ON gc.template_id = mt.id
+            WHERE gc.id = %s AND (gc.account_id = %s OR gc.account_id = %s)
+        ''', (certificate_id, normalized_account_id, account_id))
+
+        cert = cur.fetchone()
+
+        if not cert:
+            return jsonify({'success': False, 'error': 'Certificate not found'}), 404
+
+        pdf_blob = cert.get('pdf_blob')
+        if not pdf_blob:
+            return jsonify({'success': False, 'error': 'PDF data not available for this certificate'}), 404
+
+        # Convert memoryview to bytes if needed
+        try:
+            pdf_bytes = bytes(pdf_blob)
+        except (TypeError, ValueError):
+            pdf_bytes = pdf_blob
+
+        filename = cert.get('filename') or 'certificate.pdf'
+
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=False,
+            download_name=filename
+        )
+
+    except Exception as e:
+        print(f"Error getting generated certificate: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.route("/api/account/<account_id>/generated-certificates/<certificate_id>/download", methods=['GET'])
+@require_sf_session
+def download_generated_certificate(account_id, certificate_id):
+    """Download a specific generated certificate PDF."""
+    normalized_account_id = normalize_account_id(account_id)
+    if not normalized_account_id:
+        return jsonify({'success': False, 'error': 'Invalid account ID'}), 400
+
+    if not PSYCOPG2_AVAILABLE:
+        return jsonify({'success': False, 'error': 'Database not available'}), 500
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute('''
+            SELECT gc.filename, gc.pdf_blob
+            FROM generated_certificates gc
+            WHERE gc.id = %s AND (gc.account_id = %s OR gc.account_id = %s)
+        ''', (certificate_id, normalized_account_id, account_id))
+
+        cert = cur.fetchone()
+
+        if not cert:
+            return jsonify({'success': False, 'error': 'Certificate not found'}), 404
+
+        pdf_blob = cert.get('pdf_blob')
+        if not pdf_blob:
+            return jsonify({'success': False, 'error': 'PDF data not available'}), 404
+
+        try:
+            pdf_bytes = bytes(pdf_blob)
+        except (TypeError, ValueError):
+            pdf_bytes = pdf_blob
+
+        filename = cert.get('filename') or 'certificate.pdf'
+
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
+
+    except Exception as e:
+        print(f"Error downloading certificate: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
 @app.route("/api/provision-pdf", methods=['POST'])
 @require_sf_session
 def provision_pdf():
