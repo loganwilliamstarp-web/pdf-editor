@@ -3065,24 +3065,50 @@ def list_generated_certificates(account_id):
         conn = get_db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        # Get generated certificates with holder and template info
+        # Check if certificate_holder_id column exists
         cur.execute('''
-            SELECT
-                gc.id,
-                gc.account_id,
-                gc.template_id,
-                gc.certificate_holder_id,
-                gc.filename,
-                gc.generated_at,
-                ch.name as holder_name,
-                mt.template_name,
-                mt.template_type
-            FROM generated_certificates gc
-            LEFT JOIN certificate_holders ch ON gc.certificate_holder_id = ch.id
-            LEFT JOIN master_templates mt ON gc.template_id = mt.id
-            WHERE gc.account_id = %s OR gc.account_id = %s
-            ORDER BY gc.generated_at DESC
-        ''', (normalized_account_id, account_id))
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'generated_certificates' AND column_name = 'certificate_holder_id'
+        ''')
+        has_holder_id_column = cur.fetchone() is not None
+
+        if has_holder_id_column:
+            # Get generated certificates with holder and template info
+            cur.execute('''
+                SELECT
+                    gc.id,
+                    gc.account_id,
+                    gc.template_id,
+                    gc.certificate_holder_id,
+                    gc.filename,
+                    gc.generated_at,
+                    ch.name as holder_name,
+                    mt.template_name,
+                    mt.template_type
+                FROM generated_certificates gc
+                LEFT JOIN certificate_holders ch ON gc.certificate_holder_id::text = ch.id::text
+                LEFT JOIN master_templates mt ON gc.template_id = mt.id
+                WHERE gc.account_id = %s OR gc.account_id = %s
+                ORDER BY gc.generated_at DESC
+            ''', (normalized_account_id, account_id))
+        else:
+            # Fallback query without certificate_holder_id join
+            cur.execute('''
+                SELECT
+                    gc.id,
+                    gc.account_id,
+                    gc.template_id,
+                    NULL as certificate_holder_id,
+                    gc.filename,
+                    gc.generated_at,
+                    NULL as holder_name,
+                    mt.template_name,
+                    mt.template_type
+                FROM generated_certificates gc
+                LEFT JOIN master_templates mt ON gc.template_id = mt.id
+                WHERE gc.account_id = %s OR gc.account_id = %s
+                ORDER BY gc.generated_at DESC
+            ''', (normalized_account_id, account_id))
 
         certificates = cur.fetchall()
 
@@ -3092,6 +3118,12 @@ def list_generated_certificates(account_id):
             cert_dict = dict(cert)
             if cert_dict.get('generated_at'):
                 cert_dict['generated_at'] = cert_dict['generated_at'].isoformat()
+            # Extract holder name from filename if not available
+            if not cert_dict.get('holder_name') and cert_dict.get('filename'):
+                # Filename format: holdername_templatename_date.pdf
+                parts = cert_dict['filename'].rsplit('_', 2)
+                if len(parts) >= 2:
+                    cert_dict['holder_name'] = parts[0].replace('_', ' ')
             result.append(cert_dict)
 
         return jsonify({
@@ -3127,17 +3159,15 @@ def get_generated_certificate(account_id, certificate_id):
         conn = get_db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        # Get the certificate with PDF blob
+        # Get the certificate with PDF blob (simple query without holder join)
         cur.execute('''
             SELECT
                 gc.id,
                 gc.filename,
                 gc.pdf_blob,
                 gc.generated_at,
-                ch.name as holder_name,
                 mt.template_name
             FROM generated_certificates gc
-            LEFT JOIN certificate_holders ch ON gc.certificate_holder_id = ch.id
             LEFT JOIN master_templates mt ON gc.template_id = mt.id
             WHERE gc.id = %s AND (gc.account_id = %s OR gc.account_id = %s)
         ''', (certificate_id, normalized_account_id, account_id))
