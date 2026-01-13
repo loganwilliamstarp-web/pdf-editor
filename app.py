@@ -3071,11 +3071,13 @@ def list_generated_certificates(account_id):
             WHERE table_name = 'generated_certificates'
         ''')
         existing_columns = set(row['column_name'] for row in cur.fetchall())
+        print(f"[Generated Certs] Existing columns: {existing_columns}")
 
         has_filename = 'filename' in existing_columns
         has_certificate_name = 'certificate_name' in existing_columns
         has_holder_id = 'certificate_holder_id' in existing_columns
         has_pdf_blob = 'pdf_blob' in existing_columns
+        print(f"[Generated Certs] has_filename={has_filename}, has_certificate_name={has_certificate_name}, has_holder_id={has_holder_id}, has_pdf_blob={has_pdf_blob}")
 
         # Build dynamic SELECT based on available columns
         if has_filename:
@@ -3124,6 +3126,7 @@ def list_generated_certificates(account_id):
             ''', (normalized_account_id, account_id))
 
         certificates = cur.fetchall()
+        print(f"[Generated Certs] Query returned {len(certificates)} certificates for account_id={account_id}, normalized={normalized_account_id}")
 
         # Convert to list of dicts and format dates
         result = []
