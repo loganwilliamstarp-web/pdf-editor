@@ -1417,6 +1417,15 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
 
                                     print(f"[SIGNATURE DEBUG] Drawing text: '{signature_text}' in rect {rect} size {font_size}")
 
+                                    # Delete the widget to remove its appearance stream that covers our text
+                                    # Then draw text in the same location
+                                    try:
+                                        widget_annot = widget
+                                        page.delete_annot(widget_annot)
+                                        print(f"[SIGNATURE DEBUG] Deleted widget annotation")
+                                    except Exception as del_err:
+                                        print(f"[SIGNATURE DEBUG] Could not delete widget: {del_err}")
+
                                     # Use insert_textbox to draw text within the field rectangle
                                     # This handles positioning automatically
                                     rc = page.insert_textbox(
