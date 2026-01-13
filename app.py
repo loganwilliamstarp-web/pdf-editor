@@ -1444,25 +1444,49 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
                             failed_fields.append((normalized_name, str(fill_error)))
                             print(f"Warning: failed to set field '{normalized_name}': {fill_error}")
 
+                # Handle signature field with stylized text
                 if (
-                    signature_bytes
+                    normalized_name == 'Producer_AuthorizedRepresentative_Signature_A'
+                    and value
                     and not signature_applied
-                    and normalized_name == 'Producer_AuthorizedRepresentative_Signature_A'
                 ):
                     try:
                         rect = widget.rect
                         if rect and rect.get_area() > 0:
+                            # Clear the form field
                             try:
                                 widget.field_value = ''
                                 widget.update()
                             except Exception:
                                 pass
 
-                            image_rect = fitz.Rect(rect.x0, rect.y0, rect.x1, rect.y1)
-                            page.insert_image(image_rect, stream=signature_bytes, keep_proportion=True)
+                            # If we have signature image bytes, use that
+                            if signature_bytes:
+                                image_rect = fitz.Rect(rect.x0, rect.y0, rect.x1, rect.y1)
+                                page.insert_image(image_rect, stream=signature_bytes, keep_proportion=True)
+                            else:
+                                # Draw signature-style text using italic Times font
+                                signature_text = str(value)
+                                # Calculate font size to fit the field (roughly 60% of field height)
+                                field_height = rect.height
+                                font_size = min(field_height * 0.6, 14)  # Cap at 14pt
+
+                                # Use Times-Italic for a more signature-like appearance
+                                # Position text vertically centered in the field
+                                text_y = rect.y0 + (field_height + font_size) / 2 - 2
+                                text_x = rect.x0 + 2  # Small left padding
+
+                                # Insert text with italic font (ti = Times-Italic)
+                                page.insert_text(
+                                    (text_x, text_y),
+                                    signature_text,
+                                    fontname="ti",  # Times-Italic built-in font
+                                    fontsize=font_size,
+                                    color=(0, 0, 0.4)  # Dark blue color for signature
+                                )
                             signature_applied = True
                     except Exception as signature_error:
-                        print(f"Warning: unable to insert signature image: {signature_error}")
+                        print(f"Warning: unable to insert signature: {signature_error}")
 
         filled_bytes = pdf_doc.write()
     finally:
@@ -4435,7 +4459,34 @@ def serve_pdf_template_with_fields(template_id, account_id):
                             continue
 
                         try:
-                            if field_type == 'text':
+                            # Handle signature field with stylized text
+                            if field_name == 'Producer_AuthorizedRepresentative_Signature_A' and saved_value:
+                                try:
+                                    rect = widget.rect
+                                    if rect and rect.get_area() > 0:
+                                        # Clear the form field
+                                        widget.field_value = ''
+                                        widget.update()
+                                        # Draw signature-style text
+                                        signature_text = str(saved_value)
+                                        field_height = rect.height
+                                        font_size = min(field_height * 0.6, 14)
+                                        text_y = rect.y0 + (field_height + font_size) / 2 - 2
+                                        text_x = rect.x0 + 2
+                                        page.insert_text(
+                                            (text_x, text_y),
+                                            signature_text,
+                                            fontname="ti",  # Times-Italic
+                                            fontsize=font_size,
+                                            color=(0, 0, 0.4)  # Dark blue
+                                        )
+                                        filled_count += 1
+                                except Exception as sig_error:
+                                    print(f"Failed to style signature: {sig_error}")
+                                    widget.field_value = str(saved_value)
+                                    widget.update()
+                                    filled_count += 1
+                            elif field_type == 'text':
                                 widget.field_value = str(saved_value)
                                 widget.update()
                                 filled_count += 1
