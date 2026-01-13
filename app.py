@@ -2443,7 +2443,7 @@ def save_agency_settings(account_id):
 
     data = request.get_json() or {}
 
-    # Sanitize input
+    # Sanitize input - accept both camelCase and snake_case
     sanitized = {
         'name': normalize_string(data.get('name'), 255),
         'street': normalize_string(data.get('street'), 255),
@@ -2454,10 +2454,10 @@ def save_agency_settings(account_id):
         'phone': normalize_string(data.get('phone'), 50),
         'fax': normalize_string(data.get('fax'), 50),
         'email': normalize_string(data.get('email'), 255),
-        'producer_name': normalize_string(data.get('producerName'), 255),
-        'producer_phone': normalize_string(data.get('producerPhone'), 50),
-        'producer_email': normalize_string(data.get('producerEmail'), 255),
-        'signature_image': data.get('signatureImage'),  # Base64 image, can be large
+        'producer_name': normalize_string(data.get('producer_name') or data.get('producerName'), 255),
+        'producer_phone': normalize_string(data.get('producer_phone') or data.get('producerPhone'), 50),
+        'producer_email': normalize_string(data.get('producer_email') or data.get('producerEmail'), 255),
+        'signature_image': data.get('signature_image') or data.get('signatureImage'),  # Base64 image, can be large
     }
 
     conn = None
