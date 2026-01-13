@@ -1410,50 +1410,19 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
                                     page.insert_image(image_rect, stream=signature_bytes, keep_proportion=True)
                                     print(f"[SIGNATURE DEBUG] Inserted signature image")
                                 else:
-                                    # Style the signature field with colored italic text
+                                    # Set signature text in the widget field
                                     signature_text = str(value)
                                     field_height = rect.height
                                     font_size = min(field_height * 0.6, 11)  # Cap at 11pt
 
                                     print(f"[SIGNATURE DEBUG] Styling signature field with text: '{signature_text}', size {font_size}")
 
-                                    # Get field rect before we modify anything
-                                    sig_rect = fitz.Rect(rect)
-
-                                    # Clear the widget and remove its appearance so our text shows
-                                    widget.field_value = ""
+                                    # Set the field value with styling via widget properties
+                                    widget.field_value = signature_text
+                                    widget.text_color = (0, 0, 0)  # Black
+                                    widget.text_fontsize = font_size
                                     widget.update()
-
-                                    # Try to remove the widget's appearance stream
-                                    try:
-                                        # Access the annotation's xref and remove AP entry
-                                        xref = widget.xref
-                                        doc.xref_set_key(xref, "AP", "null")
-                                        print(f"[SIGNATURE DEBUG] Removed AP stream from widget xref {xref}")
-                                    except Exception as ap_err:
-                                        print(f"[SIGNATURE DEBUG] Could not remove AP: {ap_err}")
-
-                                    # Now draw styled italic text directly on the page
-                                    # Position text within the field bounds
-                                    text_point = fitz.Point(sig_rect.x0 + 2, sig_rect.y0 + font_size + 1)
-
-                                    # Use helv (Helvetica) which is always available, with oblique simulation
-                                    # Or we try Times-Italic as base14
-                                    try:
-                                        rc = page.insert_text(
-                                            text_point,
-                                            signature_text,
-                                            fontname="helv",  # Helvetica is always available
-                                            fontsize=font_size,
-                                            color=(0, 0, 0.5),  # Dark blue
-                                        )
-                                        print(f"[SIGNATURE DEBUG] insert_text with helv returned: {rc}")
-                                    except Exception as font_err:
-                                        print(f"[SIGNATURE DEBUG] Font error: {font_err}")
-                                        # Ultimate fallback - just set widget value
-                                        widget.field_value = signature_text
-                                        widget.text_color = (0, 0, 0.5)
-                                        widget.update()
+                                    print(f"[SIGNATURE DEBUG] Set signature field value")
                                 signature_applied = True
                                 filled_count += 1
                         except Exception as signature_error:
