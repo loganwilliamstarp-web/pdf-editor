@@ -1410,32 +1410,19 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
                                     page.insert_image(image_rect, stream=signature_bytes, keep_proportion=True)
                                     print(f"[SIGNATURE DEBUG] Inserted signature image")
                                 else:
-                                    # Draw signature-style text using textbox for proper positioning
+                                    # Style the signature field with colored text
                                     signature_text = str(value)
+                                    field_height = rect.height
+                                    font_size = min(field_height * 0.6, 11)  # Cap at 11pt
 
-                                    # Save rect coordinates BEFORE deleting widget
-                                    sig_rect = fitz.Rect(rect.x0, rect.y0, rect.x1, rect.y1)
-                                    field_height = sig_rect.height
-                                    font_size = min(field_height * 0.7, 12)  # Cap at 12pt
+                                    print(f"[SIGNATURE DEBUG] Styling signature field with text: '{signature_text}', size {font_size}")
 
-                                    print(f"[SIGNATURE DEBUG] Drawing text: '{signature_text}' in rect {sig_rect} size {font_size}")
-
-                                    # Delete the widget to remove its appearance stream that covers our text
-                                    try:
-                                        page.delete_annot(widget)
-                                        print(f"[SIGNATURE DEBUG] Deleted widget annotation")
-                                    except Exception as del_err:
-                                        print(f"[SIGNATURE DEBUG] Could not delete widget: {del_err}")
-
-                                    # Use insert_textbox to draw text within the saved rectangle
-                                    rc = page.insert_textbox(
-                                        sig_rect,
-                                        signature_text,
-                                        fontsize=font_size,
-                                        color=(0, 0, 0.5),  # Dark blue color
-                                        align=0,  # Left align
-                                    )
-                                    print(f"[SIGNATURE DEBUG] insert_textbox returned: {rc}")
+                                    # Set the field value with styling
+                                    widget.field_value = signature_text
+                                    widget.text_color = (0, 0, 0.5)  # Dark blue
+                                    widget.text_fontsize = font_size
+                                    widget.update()
+                                    print(f"[SIGNATURE DEBUG] Styled signature field successfully")
                                 signature_applied = True
                                 filled_count += 1
                         except Exception as signature_error:
