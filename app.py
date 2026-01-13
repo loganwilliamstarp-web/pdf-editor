@@ -3065,22 +3065,35 @@ def list_generated_certificates(account_id):
         conn = get_db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        # Check if certificate_holder_id column exists
+        # Check which columns exist in the table
         cur.execute('''
             SELECT column_name FROM information_schema.columns
-            WHERE table_name = 'generated_certificates' AND column_name = 'certificate_holder_id'
+            WHERE table_name = 'generated_certificates'
         ''')
-        has_holder_id_column = cur.fetchone() is not None
+        existing_columns = set(row['column_name'] for row in cur.fetchall())
 
-        if has_holder_id_column:
-            # Get generated certificates with holder and template info
-            cur.execute('''
+        has_filename = 'filename' in existing_columns
+        has_certificate_name = 'certificate_name' in existing_columns
+        has_holder_id = 'certificate_holder_id' in existing_columns
+        has_pdf_blob = 'pdf_blob' in existing_columns
+
+        # Build dynamic SELECT based on available columns
+        if has_filename:
+            filename_expr = 'gc.filename'
+        elif has_certificate_name:
+            filename_expr = 'gc.certificate_name as filename'
+        else:
+            filename_expr = "NULL as filename"
+
+        if has_holder_id:
+            # Query with holder join
+            cur.execute(f'''
                 SELECT
                     gc.id,
                     gc.account_id,
                     gc.template_id,
                     gc.certificate_holder_id,
-                    gc.filename,
+                    {filename_expr},
                     gc.generated_at,
                     ch.name as holder_name,
                     mt.template_name,
@@ -3092,14 +3105,14 @@ def list_generated_certificates(account_id):
                 ORDER BY gc.generated_at DESC
             ''', (normalized_account_id, account_id))
         else:
-            # Fallback query without certificate_holder_id join
-            cur.execute('''
+            # Query without holder join
+            cur.execute(f'''
                 SELECT
                     gc.id,
                     gc.account_id,
                     gc.template_id,
                     NULL as certificate_holder_id,
-                    gc.filename,
+                    {filename_expr},
                     gc.generated_at,
                     NULL as holder_name,
                     mt.template_name,
@@ -3124,6 +3137,8 @@ def list_generated_certificates(account_id):
                 parts = cert_dict['filename'].rsplit('_', 2)
                 if len(parts) >= 2:
                     cert_dict['holder_name'] = parts[0].replace('_', ' ')
+            # Flag whether PDF blob is available for viewing
+            cert_dict['has_pdf'] = has_pdf_blob
             result.append(cert_dict)
 
         return jsonify({
@@ -3159,11 +3174,32 @@ def get_generated_certificate(account_id, certificate_id):
         conn = get_db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        # Get the certificate with PDF blob (simple query without holder join)
+        # Check which columns exist
         cur.execute('''
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'generated_certificates'
+        ''')
+        existing_columns = set(row['column_name'] for row in cur.fetchall())
+
+        has_filename = 'filename' in existing_columns
+        has_certificate_name = 'certificate_name' in existing_columns
+        has_pdf_blob = 'pdf_blob' in existing_columns
+
+        if not has_pdf_blob:
+            return jsonify({'success': False, 'error': 'PDF storage not available. Certificates were generated before PDF blob storage was enabled.'}), 404
+
+        # Build filename expression
+        if has_filename:
+            filename_expr = 'gc.filename'
+        elif has_certificate_name:
+            filename_expr = 'gc.certificate_name as filename'
+        else:
+            filename_expr = "NULL as filename"
+
+        cur.execute(f'''
             SELECT
                 gc.id,
-                gc.filename,
+                {filename_expr},
                 gc.pdf_blob,
                 gc.generated_at,
                 mt.template_name
@@ -3223,8 +3259,30 @@ def download_generated_certificate(account_id, certificate_id):
         conn = get_db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
+        # Check which columns exist
         cur.execute('''
-            SELECT gc.filename, gc.pdf_blob
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'generated_certificates'
+        ''')
+        existing_columns = set(row['column_name'] for row in cur.fetchall())
+
+        has_filename = 'filename' in existing_columns
+        has_certificate_name = 'certificate_name' in existing_columns
+        has_pdf_blob = 'pdf_blob' in existing_columns
+
+        if not has_pdf_blob:
+            return jsonify({'success': False, 'error': 'PDF storage not available'}), 404
+
+        # Build filename expression
+        if has_filename:
+            filename_expr = 'gc.filename'
+        elif has_certificate_name:
+            filename_expr = 'gc.certificate_name as filename'
+        else:
+            filename_expr = "NULL as filename"
+
+        cur.execute(f'''
+            SELECT {filename_expr}, gc.pdf_blob
             FROM generated_certificates gc
             WHERE gc.id = %s AND (gc.account_id = %s OR gc.account_id = %s)
         ''', (certificate_id, normalized_account_id, account_id))
