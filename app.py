@@ -1407,7 +1407,7 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
                                     page.insert_image(image_rect, stream=signature_bytes, keep_proportion=True)
                                     print(f"[SIGNATURE DEBUG] Inserted signature image")
                                 else:
-                                    # Draw signature-style text using italic Times font
+                                    # Draw signature-style text
                                     signature_text = str(value)
                                     field_height = rect.height
                                     font_size = min(field_height * 0.6, 14)  # Cap at 14pt
@@ -1415,14 +1415,18 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
                                     text_x = rect.x0 + 2
 
                                     print(f"[SIGNATURE DEBUG] Drawing text: '{signature_text}' at ({text_x}, {text_y}) size {font_size}")
-                                    # Insert text with italic font
-                                    page.insert_text(
+
+                                    # Use draw_string with italic font for signature styling
+                                    # Built-in Base14 fonts: helv, heit (helvetica-oblique), tiro (times-roman), tiit (times-italic)
+                                    shape = page.new_shape()
+                                    shape.insert_text(
                                         (text_x, text_y),
                                         signature_text,
-                                        fontname="ti",  # Times-Italic built-in font
+                                        fontname="tiit",  # Times-Italic for signature look
                                         fontsize=font_size,
-                                        color=(0, 0, 0.4)  # Dark blue color for signature
+                                        color=(0, 0, 0.5),  # Dark blue color
                                     )
+                                    shape.commit()
                                     print(f"[SIGNATURE DEBUG] Successfully drew styled signature")
                                 signature_applied = True
                                 filled_count += 1
