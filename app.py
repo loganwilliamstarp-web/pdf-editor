@@ -3964,32 +3964,65 @@ def serve_pdf_template_with_fields(template_id, account_id):
 
     # Merge in Agency Settings from local DB
     effective_template_key = template_type or normalized_template_key
+    print(f"=== INJECTION DEBUG ===")
+    print(f"Effective template key: {effective_template_key}")
+    print(f"Account ID for injection: {account_id}")
+
     try:
         agency_conn = get_db()
         agency_cur = agency_conn.cursor()
-        agency_cur.execute('SELECT * FROM agency_settings WHERE account_id = %s', (account_id,))
-        agency_record = agency_cur.fetchone()
+
+        # First check if table exists
+        agency_cur.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables
+                WHERE table_name = 'agency_settings'
+            )
+        """)
+        table_exists = agency_cur.fetchone()
+        print(f"Agency settings table exists: {table_exists}")
+
+        if table_exists and table_exists.get('exists', False):
+            agency_cur.execute('SELECT * FROM agency_settings WHERE account_id = %s', (account_id,))
+            agency_record = agency_cur.fetchone()
+            print(f"Agency record found: {agency_record is not None}")
+
+            if agency_record:
+                agency_settings = format_agency_settings(agency_record)
+                print(f"Agency settings formatted: {list(agency_settings.keys()) if agency_settings else 'None'}")
+                agency_field_map = resolve_field_mapping(effective_template_key, 'agency')
+                print(f"Agency field map: {agency_field_map}")
+                if agency_field_map and agency_settings:
+                    for source_key, target_field in agency_field_map.items():
+                        if target_field and agency_settings.get(source_key):
+                            # Only set if not already in field_values
+                            if target_field not in field_values or not field_values.get(target_field):
+                                field_values[target_field] = agency_settings[source_key]
+                                print(f"Injected agency field: {target_field} = {agency_settings[source_key][:30] if len(str(agency_settings[source_key])) > 30 else agency_settings[source_key]}")
+                    print(f"Merged Agency Settings into field values")
+        else:
+            print("Agency settings table does not exist - run schema migration")
+
         agency_cur.close()
         agency_conn.close()
-
-        if agency_record:
-            agency_settings = format_agency_settings(agency_record)
-            agency_field_map = resolve_field_mapping(effective_template_key, 'agency')
-            if agency_field_map and agency_settings:
-                for source_key, target_field in agency_field_map.items():
-                    if target_field and agency_settings.get(source_key):
-                        # Only set if not already in field_values
-                        if target_field not in field_values or not field_values.get(target_field):
-                            field_values[target_field] = agency_settings[source_key]
-                print(f"Merged Agency Settings into field values")
     except Exception as agency_error:
         print(f"Warning: Could not fetch agency settings: {agency_error}")
+        import traceback
+        traceback.print_exc()
 
     # Merge in Named Insured from Supabase
+    print(f"=== NAMED INSURED DEBUG ===")
+    print(f"Supabase available: {SUPABASE_AVAILABLE}")
+    print(f"Supabase client: {supabase is not None}")
+
     try:
         named_insured_data, ni_error = fetch_named_insured_from_supabase(account_id)
+        print(f"Named Insured data: {named_insured_data}")
+        print(f"Named Insured error: {ni_error}")
+
         if named_insured_data:
             named_insured_field_map = get_named_insured_field_map(effective_template_key)
+            print(f"Named Insured field map: {named_insured_field_map}")
             named_insured_source = {
                 'name': named_insured_data.get('name') or '',
                 'address_line1': named_insured_data.get('address_line1') or '',
@@ -4000,16 +4033,22 @@ def serve_pdf_template_with_fields(template_id, account_id):
                 'email': named_insured_data.get('email') or '',
                 'phone': named_insured_data.get('phone') or '',
             }
+            print(f"Named Insured source values: {named_insured_source}")
             for source_key, target_field in named_insured_field_map.items():
                 if target_field and named_insured_source.get(source_key):
                     # Only set if not already in field_values
                     if target_field not in field_values or not field_values.get(target_field):
                         field_values[target_field] = named_insured_source[source_key]
+                        print(f"Injected Named Insured field: {target_field} = {named_insured_source[source_key]}")
             print(f"Merged Named Insured from Supabase into field values")
         elif ni_error:
             print(f"Named Insured not available: {ni_error}")
     except Exception as ni_exception:
         print(f"Warning: Could not fetch Named Insured: {ni_exception}")
+        import traceback
+        traceback.print_exc()
+
+    print(f"=== FINAL FIELD VALUES COUNT: {len(field_values)} ===")
 
     if field_values:
         print(f"Pre-filling PDF with {len(field_values)} saved field values")
