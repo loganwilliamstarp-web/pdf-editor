@@ -11,7 +11,21 @@
       "Bash(git branch:*)",
       "Bash(git push:*)",
       "Bash(git pull:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(dir /s /b \"C:\\\\Users\\\\ljohn\\\\Desktop\\\\Projects\\\\pdf-editor-main\")",
+      "Bash(xargs ls:*)",
+      "Bash(python -c:*)",
+      "Bash(python3:*)",
+      "Bash(where:*)",
+      "Bash(py -c \"from pypdf import PdfReader; print\\(''pypdf available''\\)\")",
+      "Bash(cmd /c \"py -c \"\"from pypdf import PdfReader; print\\(''pypdf available''\\)\"\"\")",
+      "Bash(cmd /c \"cd /d C:\\\\Users\\\\ljohn\\\\Desktop\\\\Projects\\\\pdf-editor-main && py -c \"\"from pypdf import PdfReader; pdf = PdfReader\\(''database/templates/acord25.pdf''\\); fields = pdf.get_form_text_fields\\(\\); print\\(chr\\(10\\).join\\(sorted\\(fields.keys\\(\\)\\)\\) if fields else ''No fields''\\)\"\"\")",
+      "Bash(cmd /c \"py extract_fields.py\")",
+      "Bash(powershell -Command \"cd ''C:\\\\Users\\\\ljohn\\\\Desktop\\\\Projects\\\\pdf-editor-main''; py extract_fields.py\")",
+      "Bash(heroku config:*)",
+      "Bash(curl:*)",
+      "Bash(heroku logs:*)",
+      "Bash(git reset:*)"
     ]
   }
 }
