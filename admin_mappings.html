@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Field Mapping Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-100 text-gray-900">
+    <div class="max-w-5xl mx-auto px-4 py-8">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+            <div>
+                <p class="text-sm uppercase tracking-wide text-gray-500">Admin</p>
+                <h1 class="text-3xl font-semibold text-gray-900">Field Mapping Editor</h1>
+                <p class="text-sm text-gray-600 mt-1">Configure how agency and certificate holder fields map to PDF field names.</p>
+            </div>
+            <a href="/" class="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <span aria-hidden="true">←</span> Back to App
+            </a>
+        </div>
+
+        <div class="mt-8 grid gap-4 md:grid-cols-3">
+            <div>
+                <label for="templateSelect" class="block text-sm font-medium text-gray-700">Template</label>
+                <select id="templateSelect" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="">Loading templates...</option>
+                </select>
+            </div>
+            <div>
+                <label for="scopeSelect" class="block text-sm font-medium text-gray-700">Mapping Scope</label>
+                <select id="scopeSelect" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="certificate_holder">Certificate Holder</option>
+                    <option value="agency">Agency Defaults</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button id="loadDefaultsBtn" class="flex-1 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    Load Defaults
+                </button>
+                <button id="addRowBtn" class="flex-1 rounded-md border border-transparent bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    Add Row
+                </button>
+            </div>
+        </div>
+
+        <div id="statusMessage" class="mt-4 text-sm"></div>
+
+        <div class="mt-6 overflow-hidden rounded-lg bg-white shadow">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Local Field Key</th>
+                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">PDF Field Name</th>
+                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"> </th>
+                        </tr>
+                    </thead>
+                    <tbody id="mappingTableBody" class="divide-y divide-gray-200 bg-white">
+                        <tr>
+                            <td colspan="3" class="px-4 py-4 text-sm text-gray-500">No mappings loaded yet.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-gray-50 px-4 py-3">
+                <div class="text-xs text-gray-500" id="sourceIndicator"></div>
+                <div class="flex gap-2">
+                    <button id="resetBtn" class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        Reset Changes
+                    </button>
+                    <button id="saveBtn" class="rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        Save Mapping
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <template id="mappingRowTemplate">
+        <tr>
+            <td class="px-4 py-3 align-middle">
+                <input type="text" class="field-key block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g. name" />
+            </td>
+            <td class="px-4 py-3 align-middle">
+                <input type="text" class="field-value block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g. CertificateHolder_FullName_A" />
+            </td>
+            <td class="px-4 py-3 text-right">
+                <button type="button" class="remove-row text-sm text-red-600 hover:text-red-800">Remove</button>
+            </td>
+        </tr>
+    </template>
+
+    <script>
+        const templateSelect = document.getElementById('templateSelect');
+        const scopeSelect = document.getElementById('scopeSelect');
+        const mappingTableBody = document.getElementById('mappingTableBody');
+        const sourceIndicator = document.getElementById('sourceIndicator');
+        const statusMessage = document.getElementById('statusMessage');
+        const loadDefaultsBtn = document.getElementById('loadDefaultsBtn');
+        const addRowBtn = document.getElementById('addRowBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const rowTemplate = document.getElementById('mappingRowTemplate');
+
+        let currentFields = {};
+        let lastLoadedFields = {};
+        let lastSource = 'default';
+        let defaultsCache = {};
+
+        function setStatus(type, message) {
+            statusMessage.textContent = message || '';
+            statusMessage.className = 'mt-4 text-sm';
+            if (!message) {
+                return;
+            }
+            if (type === 'error') {
+                statusMessage.classList.add('text-red-600');
+            } else if (type === 'success') {
+                statusMessage.classList.add('text-green-600');
+            } else {
+                statusMessage.classList.add('text-gray-600');
+            }
+        }
+
+        async function fetchTemplates() {
+            try {
+                const response = await fetch('/api/admin/templates');
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || 'Unable to load templates');
+                }
+                templateSelect.innerHTML = data.templates.map(t => `<option value="${t.key}">${t.name}</option>`).join('');
+                if (data.templates.length) {
+                    templateSelect.value = data.templates[0].key;
+                }
+                loadMapping();
+            } catch (error) {
+                setStatus('error', `Failed to load templates: ${error.message}`);
+                templateSelect.innerHTML = '<option value="">Error loading templates</option>';
+            }
+        }
+
+        function addRow(key = '', value = '', readOnlyKey = false, suggestion = '') {
+            const fragment = rowTemplate.content.cloneNode(true);
+            const row = fragment.querySelector('tr');
+            row.querySelector('.field-key').value = key;
+            row.querySelector('.field-value').value = value;
+            const keyInput = row.querySelector('.field-key');
+            const valueInput = row.querySelector('.field-value');
+            const removeBtn = row.querySelector('.remove-row');
+
+            if (readOnlyKey && key) {
+                keyInput.readOnly = true;
+                keyInput.classList.add('bg-gray-50', 'text-gray-600', 'cursor-not-allowed');
+                removeBtn.classList.add('text-gray-300', 'cursor-not-allowed');
+                removeBtn.disabled = true;
+            } else {
+                removeBtn.addEventListener('click', () => {
+                    row.remove();
+                });
+            }
+
+            if (suggestion && !value) {
+                valueInput.placeholder = `Default: ${suggestion}`;
+            } else if (!suggestion) {
+                valueInput.placeholder = 'PDF field name';
+            }
+
+            mappingTableBody.appendChild(fragment);
+        }
+
+        function renderMappingTable(fields) {
+            mappingTableBody.innerHTML = '';
+            const orderedKeys = [];
+            Object.keys(defaultsCache || {}).forEach(key => {
+                if (!orderedKeys.includes(key)) {
+                    orderedKeys.push(key);
+                }
+            });
+            Object.keys(fields || {}).forEach(key => {
+                if (!orderedKeys.includes(key)) {
+                    orderedKeys.push(key);
+                }
+            });
+
+            if (!orderedKeys.length) {
+                addRow();
+                return;
+            }
+
+            orderedKeys.forEach(key => {
+                const isDefaultKey = Object.prototype.hasOwnProperty.call(defaultsCache || {}, key);
+                const suggestion = (defaultsCache && defaultsCache[key]) || '';
+                const value = fields && Object.prototype.hasOwnProperty.call(fields, key) ? fields[key] : '';
+                addRow(key, value, isDefaultKey, suggestion);
+            });
+        }
+
+        function getFieldsFromTable() {
+            const rows = mappingTableBody.querySelectorAll('tr');
+            const collected = {};
+            rows.forEach(row => {
+                const keyInput = row.querySelector('.field-key');
+                const valueInput = row.querySelector('.field-value');
+                if (!keyInput || !valueInput) {
+                    return;
+                }
+                const key = keyInput.value.trim();
+                const value = valueInput.value.trim();
+                if (!key) {
+                    return;
+                }
+                collected[key] = value;
+            });
+            return collected;
+        }
+
+        async function fetchMapping(template, scope, defaults = false) {
+            const params = new URLSearchParams({ template_key: template, scope });
+            if (defaults) {
+                params.set('use_defaults', 'true');
+            }
+            const response = await fetch(`/api/admin/field-mappings?${params.toString()}`);
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.error || 'Unable to load mapping');
+            }
+            return data;
+        }
+
+        async function loadMapping(useDefaults = false) {
+            const template = templateSelect.value || 'default';
+            const scope = scopeSelect.value;
+            try {
+                setStatus('info', 'Loading mapping...');
+                if (useDefaults) {
+                    const defaultsData = await fetchMapping(template, scope, true);
+                    defaultsCache = defaultsData.fields || {};
+                    currentFields = { ...defaultsCache };
+                    lastLoadedFields = { ...currentFields };
+                    lastSource = 'default';
+                } else {
+                    const [actualData, defaultsData] = await Promise.all([
+                        fetchMapping(template, scope, false),
+                        fetchMapping(template, scope, true)
+                    ]);
+                    defaultsCache = defaultsData.fields || {};
+                    currentFields = actualData.fields || {};
+                    lastLoadedFields = { ...currentFields };
+                    lastSource = actualData.source || 'database';
+                }
+                sourceIndicator.textContent = lastSource === 'database'
+                    ? 'Source: Database (leave PDF field blank to skip mapping)'
+                    : 'Source: Default configuration (leave PDF field blank to skip mapping)';
+                renderMappingTable(currentFields);
+                setStatus('success', `Loaded ${Object.keys(currentFields).length} mapped fields (${lastSource}).`);
+            } catch (error) {
+                setStatus('error', `Failed to load mapping: ${error.message}`);
+                mappingTableBody.innerHTML = '<tr><td colspan="3" class="px-4 py-4 text-sm text-red-600">Unable to load mappings.</td></tr>';
+            }
+        }
+
+        async function saveMapping() {
+            const template = templateSelect.value || 'default';
+            const scope = scopeSelect.value;
+            const fields = getFieldsFromTable();
+            try {
+                setStatus('info', 'Saving mapping...');
+                const response = await fetch('/api/admin/field-mappings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        template_key: template,
+                        scope,
+                        fields,
+                        updated_by: 'admin-ui'
+                    })
+                });
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || 'Unable to save mapping');
+                }
+                lastLoadedFields = { ...fields };
+                lastSource = 'database';
+                sourceIndicator.textContent = 'Source: Database';
+                setStatus('success', 'Mapping saved successfully.');
+            } catch (error) {
+                setStatus('error', `Save failed: ${error.message}`);
+            }
+        }
+
+        function resetChanges() {
+            currentFields = { ...lastLoadedFields };
+            renderMappingTable(currentFields);
+            setStatus('info', 'Reverted to last loaded values.');
+        }
+
+        templateSelect.addEventListener('change', () => loadMapping());
+        scopeSelect.addEventListener('change', () => loadMapping());
+        loadDefaultsBtn.addEventListener('click', () => loadMapping(true));
+        addRowBtn.addEventListener('click', () => addRow());
+        saveBtn.addEventListener('click', saveMapping);
+        resetBtn.addEventListener('click', resetChanges);
+
+        fetchTemplates();
+    </script>
+</body>
+</html>

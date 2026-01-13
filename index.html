@@ -1,0 +1,2916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Acords Management System</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>PDF</text></svg>">
+    <script src="https://cdn.tailwindcss.com" defer></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body>
+    <div class="min-h-screen bg-gray-100">
+        <header class="bg-white shadow-sm">
+            <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center gap-4">
+                <h1 class="text-2xl font-bold text-gray-900 flex flex-wrap items-baseline gap-2">
+                    <span>Acords Management System</span>
+                    <span class="text-sm text-gray-500" id="accountId">Account: Loading...</span>
+                    <span class="hidden text-sm text-gray-400" id="ownerId"></span>
+                </h1>
+                <div class="flex items-center gap-3">
+                    <nav class="flex space-x-4">
+                        <button onclick="showTab('master')" id="masterTab" class="px-3 py-2 rounded-md text-sm font-medium bg-indigo-600 text-white">
+                            Acords
+                        </button>
+                        <button onclick="showTab('holders')" id="holdersTab" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Certificate Holders
+                        </button>
+                        <button onclick="showTab('generated')" id="generatedTab" class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Generated Certificates
+                        </button>
+                    </nav>
+                    <button id="openAgencySettingsBtn" type="button"
+                            class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition hover:border-indigo-300 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                            aria-label="Configure agency settings">
+                        <i data-lucide="settings" class="h-5 w-5"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            <!-- Acords Tab -->
+            <div id="masterContent" class="bg-white shadow overflow-hidden sm:rounded-lg p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">Acords (Templates)</h2>
+                
+                <div id="templatesList">
+                    <p class="text-gray-600">Loading templates...</p>
+                </div>
+            </div>
+
+        <!-- Certificate Holders Tab -->
+        <div id="holdersContent" class="bg-white shadow overflow-hidden sm:rounded-lg p-6 space-y-6" style="display: none;">
+            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h2 class="text-xl font-semibold text-gray-900">Certificate Holders</h2>
+                    <p class="text-gray-600">Add and manage the contacts who should receive certificates for this Salesforce account.</p>
+                </div>
+                <div class="flex gap-3">
+                    <button id="refreshHoldersBtn"
+                            class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Refresh
+                    </button>
+                    <button id="generateCertificatesBtn" disabled
+                            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 opacity-50 cursor-not-allowed">
+                        Generate Certificates
+                    </button>
+                    <button id="openHolderModalBtn"
+                            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                        + Add Certificate Holder
+                    </button>
+                </div>
+            </div>
+
+            <p id="holderSelectionSummary" class="text-sm text-gray-500">No certificate holders selected.</p>
+            <div id="holderActionMessage" class="hidden text-sm"></div>
+
+            <div id="holderList" class="space-y-4">
+                <p class="text-gray-600">Loading certificate holders...</p>
+            </div>
+        </div>
+
+            <!-- Generated Certificates Tab -->
+            <div id="generatedContent" class="bg-white shadow overflow-hidden sm:rounded-lg p-6" style="display: none;">
+                <h2 class="mb-4 text-xl font-semibold text-gray-900">Generated Certificates</h2>
+                <p class="text-gray-600">This section will display certificates generated from templates for specific holders. (Coming soon!)</p>
+                <div id="agencySettingsSummary" class="mt-4 rounded-md border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600">
+                    <p class="text-sm text-gray-500">No agency details saved yet. Use the gear icon to configure them.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Certificate Holder Modal -->
+    <div id="holderModal" class="fixed inset-0 z-50 hidden items-center justify-center">
+        <div id="holderModalOverlay" class="absolute inset-0 bg-gray-900 bg-opacity-50"></div>
+        <div class="relative z-10 mx-auto w-full max-w-3xl px-4">
+            <div class="bg-white shadow-xl rounded-lg overflow-hidden">
+                <div class="flex items-center justify-between border-b px-6 py-4">
+                    <div>
+                        <h3 id="holderModalTitle" class="text-lg font-semibold text-gray-900">Add Certificate Holder</h3>
+                        <p class="text-sm text-gray-500">Provide the details for the recipient who should receive certificates.</p>
+                    </div>
+                    <button id="holderModalCloseBtn" type="button" class="text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 rounded-full p-1">
+                        <span class="sr-only">Close</span>
+                        ✕
+                    </button>
+                </div>
+                <form id="holderForm" class="px-6 py-5 space-y-5">
+                    <div id="holderFormAlert" class="hidden"></div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="md:col-span-2">
+                            <label for="holderName" class="block text-sm font-medium text-gray-700">Name <span class="text-red-500">*</span></label>
+                            <input id="holderName" name="name" type="text" required autocomplete="off"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="ACME Inc. - Insurance Department">
+                        </div>
+
+                        <div class="md:col-span-2">
+                            <label for="holderMasterRemarks" class="block text-sm font-medium text-gray-700">Master Remarks</label>
+                            <textarea id="holderMasterRemarks" name="master_remarks" rows="3"
+                                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                      placeholder="Instructions or notes to include on generated certificates."></textarea>
+                        </div>
+
+                        <div class="md:col-span-2">
+                            <label for="holderAddress1" class="block text-sm font-medium text-gray-700">Address</label>
+                            <input id="holderAddress1" name="address_line1" type="text" autocomplete="off"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="123 Main Street">
+                        </div>
+
+                        <div class="md:col-span-2">
+                            <label for="holderAddress2" class="block text-sm font-medium text-gray-700">Address Line 2</label>
+                            <input id="holderAddress2" name="address_line2" type="text" autocomplete="off"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="Suite / Unit (optional)">
+                        </div>
+
+                        <div>
+                            <label for="holderCity" class="block text-sm font-medium text-gray-700">City</label>
+                            <input id="holderCity" name="city" type="text" autocomplete="off"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label for="holderState" class="block text-sm font-medium text-gray-700">State</label>
+                            <select id="holderState" name="state"
+                                    class="mt-1 block w-full rounded-md border-gray-300 bg-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">Select state</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="holderPostalCode" class="block text-sm font-medium text-gray-700">Postal Code</label>
+                            <input id="holderPostalCode" name="postal_code" type="text" autocomplete="off"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="12345">
+                        </div>
+
+                        <div>
+                            <label for="holderEmail" class="block text-sm font-medium text-gray-700">Email</label>
+                            <input id="holderEmail" name="email" type="email" autocomplete="off"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="certificates@example.com">
+                        </div>
+                        <div>
+                            <label for="holderPhone" class="block text-sm font-medium text-gray-700">Phone</label>
+                            <input id="holderPhone" name="phone" type="tel" autocomplete="off"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="(123) 456-7890">
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between gap-3 pt-4 border-t border-gray-200">
+                        <button id="holderResetBtn" type="button"
+                                class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                            Clear Form
+                        </button>
+                        <div class="flex gap-3">
+                            <button id="holderCancelBtn" type="button"
+                                    class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                                Cancel
+                            </button>
+                            <button id="holderSubmitBtn" type="submit"
+                                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                                Save Certificate Holder
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generate Certificates Modal -->
+    <div id="generateModal" class="fixed inset-0 z-50 hidden items-center justify-center">
+        <div id="generateModalOverlay" class="absolute inset-0 bg-gray-900 bg-opacity-50"></div>
+        <div class="relative z-10 mx-auto w-full max-w-2xl px-4">
+            <div class="bg-white shadow-xl rounded-lg overflow-hidden">
+                <div class="flex items-center justify-between border-b px-6 py-4">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900">Select ACORD Forms</h3>
+                        <p class="text-sm text-gray-500">Choose which templates to generate for the selected certificate holders.</p>
+                    </div>
+                    <button id="generateModalCloseBtn" type="button" class="rounded-full p-1 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                        <span class="sr-only">Close</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 0 1 1.414 0L10 8.586l4.293-4.293a1 1 0 0 1 1.414 1.414L11.414 10l4.293 4.293a1 1 0 0 1-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 0 1-1.414-1.414L8.586 10 4.293 5.707a1 1 0 0 1 0-1.414Z" clip-rule="evenodd"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="px-6 py-5 space-y-4">
+                    <div id="generateModalAlert" class="hidden"></div>
+                    <p id="generateModalSelectionSummary" class="text-sm text-gray-600">Select at least one ACORD form.</p>
+                    <div id="templateSelectionContainer" class="divide-y divide-gray-100 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 max-h-72">
+                        <p class="px-3 py-4 text-sm text-gray-500">Loading templates...</p>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 border-t px-6 py-4">
+                    <button id="generateModalCancelBtn" type="button"
+                            class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Cancel
+                    </button>
+                    <button id="generateModalSubmitBtn" type="button"
+                            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        Generate
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Agency Settings Modal -->
+    <div id="agencySettingsModal" class="fixed inset-0 z-50 hidden items-center justify-center">
+        <div id="agencySettingsModalOverlay" class="absolute inset-0 bg-gray-900 bg-opacity-50"></div>
+        <div class="relative z-10 mx-auto w-full max-w-2xl px-4">
+            <div class="overflow-hidden rounded-lg bg-white shadow-xl">
+                <div class="flex items-center justify-between border-b px-6 py-4">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900">Agency Settings</h3>
+                        <p class="text-sm text-gray-500">Store agency details used on generated certificates.</p>
+                    </div>
+                    <button id="agencySettingsCloseBtn" type="button"
+                            class="rounded-full p-1 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                        <span class="sr-only">Close</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 0 1 1.414 0L10 8.586l4.293-4.293a1 1 0 0 1 1.414 1.414L11.414 10l4.293 4.293a1 1 0 0 1-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 0 1-1.414-1.414L8.586 10 4.293 5.707a1 1 0 0 1 0-1.414Z" clip-rule="evenodd"/>
+                        </svg>
+                    </button>
+                </div>
+                <form id="agencySettingsForm" class="space-y-5 px-6 py-5">
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div class="md:col-span-2">
+                            <label for="agencyName" class="block text-sm font-medium text-gray-700">Agency Name</label>
+                            <input id="agencyName" name="agency_name" type="text" autocomplete="organization"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="Acme Insurance Agency">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label for="agencyStreet" class="block text-sm font-medium text-gray-700">Street Address</label>
+                            <input id="agencyStreet" name="agency_street" type="text" autocomplete="address-line1"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="123 Main Street">
+                        </div>
+                        <div>
+                            <label for="agencySuite" class="block text-sm font-medium text-gray-700">Suite Number</label>
+                            <input id="agencySuite" name="agency_suite" type="text" autocomplete="address-line2"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="Suite 400">
+                        </div>
+                        <div>
+                            <label for="agencyCity" class="block text-sm font-medium text-gray-700">City</label>
+                            <input id="agencyCity" name="agency_city" type="text" autocomplete="address-level2"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="Atlanta">
+                        </div>
+                        <div>
+                            <label for="agencyState" class="block text-sm font-medium text-gray-700">State</label>
+                            <select id="agencyState" name="agency_state"
+                                    class="mt-1 block w-full rounded-md border-gray-300 bg-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">Select state</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="agencyZip" class="block text-sm font-medium text-gray-700">Zip Code</label>
+                            <input id="agencyZip" name="agency_zip" type="text" inputmode="numeric" autocomplete="postal-code"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                   placeholder="30301">
+                        </div>
+                    </div>
+                    <div class="border-t pt-4">
+                        <h3 class="text-sm font-medium text-gray-900">Producer Contact</h3>
+                        <p class="text-xs text-gray-500 mb-3">These values populate the producer contact fields on generated certificates.</p>
+                        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div class="md:col-span-2">
+                                <label for="producerName" class="block text-sm font-medium text-gray-700">Producer Name</label>
+                                <input id="producerName" name="producer_name" type="text" autocomplete="name"
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                       placeholder="e.g. Jane Agent">
+                            </div>
+                            <div>
+                                <label for="producerPhone" class="block text-sm font-medium text-gray-700">Producer Phone Number</label>
+                                <input id="producerPhone" name="producer_phone" type="tel" autocomplete="tel"
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                       placeholder="(555) 555-1234">
+                            </div>
+                            <div>
+                                <label for="producerEmail" class="block text-sm font-medium text-gray-700">Producer Email</label>
+                                <input id="producerEmail" name="producer_email" type="email" autocomplete="email"
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                       placeholder="producer@example.com">
+                            </div>
+                            <div>
+                                <label for="producerFax" class="block text-sm font-medium text-gray-700">Producer Fax</label>
+                                <input id="producerFax" name="producer_fax" type="text"
+                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                       placeholder="(555) 555-9876">
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="agencySignatureText" class="block text-sm font-medium text-gray-700">Authorized Representative (Signature Text)</label>
+                        <input id="agencySignatureText" name="signature_text" type="text" autocomplete="name"
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                               placeholder="e.g. John Doe, Authorized Representative">
+                    </div>
+                    <div class="flex justify-end space-x-3 border-t pt-4">
+                        <button id="agencySettingsCancelBtn" type="button"
+                                class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Cancel
+                        </button>
+                        <button type="submit"
+                                class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                            Save
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration loaded from server
+        let appConfig = { adobeClientId: '' };
+
+        // Salesforce session info from URL
+        function getSfSession() {
+            const params = new URLSearchParams(window.location.search);
+            return {
+                sfSession: params.get('sfSession') || '',
+                sfOrg: params.get('sfOrg') || ''
+            };
+        }
+
+        // Helper to add SF session to fetch requests
+        function apiFetch(url, options = {}) {
+            const session = getSfSession();
+            if (!session.sfSession) {
+                console.error('No Salesforce session ID found in URL');
+                return Promise.reject(new Error('Authentication required. Please access this app from Salesforce.'));
+            }
+
+            // Add session params to URL
+            const urlObj = new URL(url, window.location.origin);
+            urlObj.searchParams.set('sfSession', session.sfSession);
+            if (session.sfOrg) {
+                urlObj.searchParams.set('sfOrg', session.sfOrg);
+            }
+
+            return fetch(urlObj.toString(), options);
+        }
+
+        const DEFAULT_STATE_OPTIONS = [
+            { code: 'AL', name: 'Alabama' }, { code: 'AK', name: 'Alaska' }, { code: 'AZ', name: 'Arizona' },
+            { code: 'AR', name: 'Arkansas' }, { code: 'CA', name: 'California' }, { code: 'CO', name: 'Colorado' },
+            { code: 'CT', name: 'Connecticut' }, { code: 'DE', name: 'Delaware' }, { code: 'DC', name: 'District of Columbia' },
+            { code: 'FL', name: 'Florida' }, { code: 'GA', name: 'Georgia' }, { code: 'HI', name: 'Hawaii' },
+            { code: 'ID', name: 'Idaho' }, { code: 'IL', name: 'Illinois' }, { code: 'IN', name: 'Indiana' },
+            { code: 'IA', name: 'Iowa' }, { code: 'KS', name: 'Kansas' }, { code: 'KY', name: 'Kentucky' },
+            { code: 'LA', name: 'Louisiana' }, { code: 'ME', name: 'Maine' }, { code: 'MD', name: 'Maryland' },
+            { code: 'MA', name: 'Massachusetts' }, { code: 'MI', name: 'Michigan' }, { code: 'MN', name: 'Minnesota' },
+            { code: 'MS', name: 'Mississippi' }, { code: 'MO', name: 'Missouri' }, { code: 'MT', name: 'Montana' },
+            { code: 'NE', name: 'Nebraska' }, { code: 'NV', name: 'Nevada' }, { code: 'NH', name: 'New Hampshire' },
+            { code: 'NJ', name: 'New Jersey' }, { code: 'NM', name: 'New Mexico' }, { code: 'NY', name: 'New York' },
+            { code: 'NC', name: 'North Carolina' }, { code: 'ND', name: 'North Dakota' }, { code: 'OH', name: 'Ohio' },
+            { code: 'OK', name: 'Oklahoma' }, { code: 'OR', name: 'Oregon' }, { code: 'PA', name: 'Pennsylvania' },
+            { code: 'RI', name: 'Rhode Island' }, { code: 'SC', name: 'South Carolina' }, { code: 'SD', name: 'South Dakota' },
+            { code: 'TN', name: 'Tennessee' }, { code: 'TX', name: 'Texas' }, { code: 'UT', name: 'Utah' },
+            { code: 'VT', name: 'Vermont' }, { code: 'VA', name: 'Virginia' }, { code: 'WA', name: 'Washington' },
+            { code: 'WV', name: 'West Virginia' }, { code: 'WI', name: 'Wisconsin' }, { code: 'WY', name: 'Wyoming' }
+        ];
+        let certificateHolderStateOptions = [...DEFAULT_STATE_OPTIONS];
+        let certificateHoldersLoaded = false;
+        let certificateHolderCache = [];
+        let selectedCertificateHolderIds = new Set();
+        let editingCertificateHolderId = null;
+        const HOLDER_MODAL_TITLE_DEFAULT = 'Add Certificate Holder';
+        const HOLDER_MODAL_TITLE_EDIT = 'Edit Certificate Holder';
+        const AGENCY_SETTINGS_STORAGE_PREFIX = 'certificateManager.agencySettings';
+        const TEMPLATE_SELECTION_STORAGE_PREFIX = 'certificateManager.templateSelections';
+        const SALESFORCE_ID_REGEX = /^[a-zA-Z0-9]{15,18}$/;
+        const ACCOUNT_ID_PREFIXES = new Set(['001']);
+        const OWNER_ID_PREFIXES = new Set(['005']);
+        const DEFAULT_ACCOUNT_ID = '001000000000001';
+        let agencySettings = null;
+        let availableGenerationTemplates = [];
+        let selectedTemplateKeys = new Set();
+
+        function normalizeSalesforceId(value) {
+            if (!value) {
+                return '';
+            }
+            const trimmed = String(value).trim();
+            if (!SALESFORCE_ID_REGEX.test(trimmed)) {
+                return trimmed;
+            }
+            if (trimmed.length === 15) {
+                return trimmed.toUpperCase();
+            }
+            return trimmed;
+        }
+
+        function classifySalesforceId(value) {
+            if (!value || !SALESFORCE_ID_REGEX.test(value)) {
+                return null;
+            }
+            const prefix = value.slice(0, 3);
+            if (ACCOUNT_ID_PREFIXES.has(prefix)) {
+                return 'account';
+            }
+            if (OWNER_ID_PREFIXES.has(prefix)) {
+                return 'owner';
+            }
+            return 'other';
+        }
+
+        function getAccountContext() {
+            const pathParts = window.location.pathname.split('/').filter(part => part);
+            const params = new URLSearchParams(window.location.search);
+            const explicitAccount = normalizeSalesforceId(params.get('accountId'));
+            const explicitOwner = normalizeSalesforceId(params.get('ownerId'));
+
+            let accountId = explicitAccount || null;
+            let ownerId = explicitOwner || null;
+
+            for (const part of pathParts) {
+                const normalized = normalizeSalesforceId(part);
+                const classification = classifySalesforceId(normalized);
+                if (!accountId && classification === 'account') {
+                    accountId = normalized;
+                    continue;
+                }
+                if (!ownerId && classification === 'owner') {
+                    ownerId = normalized;
+                    continue;
+                }
+            }
+
+            if (!accountId) {
+                const fallback = pathParts.find(part => normalizeSalesforceId(part) !== ownerId) || pathParts[0];
+                accountId = normalizeSalesforceId(fallback) || DEFAULT_ACCOUNT_ID;
+            }
+
+            if (!ownerId) {
+                const fallbackOwner = pathParts.find(part => normalizeSalesforceId(part) !== accountId);
+                if (fallbackOwner && SALESFORCE_ID_REGEX.test(fallbackOwner)) {
+                    ownerId = normalizeSalesforceId(fallbackOwner);
+                }
+            }
+
+            if (ownerId === accountId) {
+                ownerId = '';
+            }
+
+            return {
+                accountId: accountId || DEFAULT_ACCOUNT_ID,
+                ownerId: ownerId || ''
+            };
+        }
+
+        function getAccountId() {
+            return normalizeSalesforceId(getAccountContext().accountId);
+        }
+
+        function getOwnerId() {
+            return normalizeSalesforceId(getAccountContext().ownerId);
+        }
+
+        function getAgencySettingsStorageKey() {
+            const { accountId, ownerId } = getAccountContext();
+            const normalizedAccount = normalizeSalesforceId(accountId) || DEFAULT_ACCOUNT_ID;
+            const normalizedOwner = normalizeSalesforceId(ownerId);
+            const ownerSegment = normalizedOwner || 'default';
+            return `${AGENCY_SETTINGS_STORAGE_PREFIX}:${normalizedAccount}:${ownerSegment}`;
+        }
+
+        function getLegacyAgencySettingsStorageKey() {
+            const { accountId } = getAccountContext();
+            const normalizedAccount = normalizeSalesforceId(accountId) || DEFAULT_ACCOUNT_ID;
+            return `${AGENCY_SETTINGS_STORAGE_PREFIX}:${normalizedAccount}`;
+        }
+
+        function getTemplateSelectionStorageKey() {
+            const accountId = getAccountId();
+            return `${TEMPLATE_SELECTION_STORAGE_PREFIX}:${accountId}`;
+        }
+
+        function loadTemplateSelectionsFromStorage() {
+            try {
+                const stored = window.localStorage.getItem(getTemplateSelectionStorageKey());
+                if (!stored) {
+                    selectedTemplateKeys = new Set();
+                    return;
+                }
+                const values = JSON.parse(stored);
+                if (Array.isArray(values)) {
+                    selectedTemplateKeys = new Set(
+                        values
+                            .map(value => String(value || '').trim().toLowerCase())
+                            .filter(Boolean)
+                    );
+                } else {
+                    selectedTemplateKeys = new Set();
+                }
+            } catch (error) {
+                console.warn('Unable to load template selections.', error);
+                selectedTemplateKeys = new Set();
+            }
+        }
+
+        function saveTemplateSelectionsToStorage() {
+            try {
+                const values = Array.from(selectedTemplateKeys);
+                window.localStorage.setItem(getTemplateSelectionStorageKey(), JSON.stringify(values));
+            } catch (error) {
+                console.warn('Unable to store template selections.', error);
+            }
+        }
+
+        // Initialize the app
+        async function initApp() {
+            // Load configuration from server
+            try {
+                const configResponse = await fetch('/api/config');
+                if (configResponse.ok) {
+                    appConfig = await configResponse.json();
+                }
+            } catch (e) {
+                console.error('Failed to load config:', e);
+            }
+
+            const accountId = getAccountId();
+            const ownerId = getOwnerId();
+
+            const accountEl = document.getElementById('accountId');
+            if (accountEl) {
+                accountEl.textContent = `Account: ${accountId}`;
+            }
+
+            const ownerEl = document.getElementById('ownerId');
+            if (ownerEl) {
+                if (ownerId) {
+                    ownerEl.textContent = `Owner: ${ownerId}`;
+                    ownerEl.classList.remove('hidden');
+                } else {
+                    ownerEl.textContent = '';
+                    ownerEl.classList.add('hidden');
+                }
+            }
+
+            if (window.lucide && typeof window.lucide.createIcons === 'function') {
+                window.lucide.createIcons();
+            }
+
+            loadTemplateSelectionsFromStorage();
+            setupAgencySettingsUI();
+            setupCertificateHolderUI();
+            loadTemplates();
+            loadCertificateHolders(true);
+        }
+
+        function setupAgencySettingsUI() {
+            loadAgencySettingsFromStorage();
+            renderAgencyStateOptions();
+            updateAgencySettingsSummary();
+
+            const openBtn = document.getElementById('openAgencySettingsBtn');
+            if (openBtn) {
+                openBtn.addEventListener('click', openAgencySettingsModal);
+            }
+
+            const overlay = document.getElementById('agencySettingsModalOverlay');
+            if (overlay) {
+                overlay.addEventListener('click', () => closeAgencySettingsModal(true));
+            }
+
+            const closeBtn = document.getElementById('agencySettingsCloseBtn');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => closeAgencySettingsModal(true));
+            }
+
+            const cancelBtn = document.getElementById('agencySettingsCancelBtn');
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', () => closeAgencySettingsModal(true));
+            }
+
+            const form = document.getElementById('agencySettingsForm');
+            if (form) {
+                form.addEventListener('submit', handleAgencySettingsSubmit);
+            }
+
+            document.addEventListener('keydown', handleAgencySettingsKeydown);
+
+        }
+
+        function loadAgencySettingsFromStorage() {
+            const storageKey = getAgencySettingsStorageKey();
+            try {
+                let stored = window.localStorage.getItem(storageKey);
+                if (!stored) {
+                    const legacyKey = getLegacyAgencySettingsStorageKey();
+                    if (legacyKey !== storageKey) {
+                        stored = window.localStorage.getItem(legacyKey);
+                        if (stored) {
+                            try {
+                                const parsedLegacy = JSON.parse(stored);
+                                saveAgencySettingsToStorage(parsedLegacy);
+                                agencySettings = parsedLegacy;
+                                return;
+                            } catch (legacyError) {
+                                console.warn('Unable to parse legacy agency settings.', legacyError);
+                                stored = null;
+                            }
+                        }
+                    }
+                }
+                agencySettings = stored ? JSON.parse(stored) : null;
+            } catch (error) {
+                console.warn('Unable to load agency settings from storage.', error);
+                agencySettings = null;
+            }
+        }
+
+        function saveAgencySettingsToStorage(settings) {
+            const storageKey = getAgencySettingsStorageKey();
+            try {
+                window.localStorage.setItem(storageKey, JSON.stringify(settings));
+            } catch (error) {
+                console.warn('Unable to persist agency settings.', error);
+            }
+        }
+
+        function openAgencySettingsModal() {
+            const modal = document.getElementById('agencySettingsModal');
+            if (!modal) {
+                return;
+            }
+
+            populateAgencySettingsForm();
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            modal.setAttribute('aria-hidden', 'false');
+
+            requestAnimationFrame(() => {
+                resizeAgencySignatureCanvas();
+                if (agencySettings && agencySettings.signatureDataUrl) {
+                } else {
+                    clearAgencySignature();
+                }
+            });
+
+            setTimeout(() => {
+                const nameInput = document.getElementById('agencyName');
+                if (nameInput) {
+                    nameInput.focus();
+                }
+            }, 50);
+        }
+
+        function closeAgencySettingsModal(shouldReset = false) {
+            const modal = document.getElementById('agencySettingsModal');
+            if (!modal) {
+                return;
+            }
+
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            modal.setAttribute('aria-hidden', 'true');
+
+            if (shouldReset) {
+                populateAgencySettingsForm();
+            }
+        }
+
+        function isAgencySettingsModalOpen() {
+            const modal = document.getElementById('agencySettingsModal');
+            return modal ? !modal.classList.contains('hidden') : false;
+        }
+
+        function handleAgencySettingsKeydown(event) {
+            if (event.key === 'Escape' && isAgencySettingsModalOpen()) {
+                event.preventDefault();
+                closeAgencySettingsModal(true);
+            }
+        }
+
+        function populateAgencySettingsForm() {
+            const data = agencySettings || {};
+            const setValue = (id, value) => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.value = value ? String(value) : '';
+                }
+            };
+
+            setValue('agencyName', data.name);
+            setValue('agencyStreet', data.street);
+            setValue('agencySuite', data.suite);
+            setValue('agencyCity', data.city);
+            setValue('agencyZip', data.zip);
+            setValue('agencySignatureText', data.signatureText || data.signature_text || '');
+            setValue('producerName', data.producerName || data.producer_name || '');
+            setValue('producerPhone', data.producerPhone || data.producer_phone || '');
+            setValue('producerEmail', data.producerEmail || data.producer_email || '');
+            setValue('producerFax', data.producerFax || data.producer_fax || '');
+
+            const stateEl = document.getElementById('agencyState');
+            if (stateEl) {
+                stateEl.value = data.state || '';
+            }
+        }
+
+        function handleAgencySettingsSubmit(event) {
+            event.preventDefault();
+
+            const getValue = id => {
+                const el = document.getElementById(id);
+                return el ? el.value.trim() : '';
+            };
+
+            const stateEl = document.getElementById('agencyState');
+            const stateValue = stateEl ? stateEl.value : '';
+            let stateName = '';
+            if (stateEl && stateValue) {
+                const selectedOption = stateEl.options[stateEl.selectedIndex];
+                stateName = selectedOption ? selectedOption.text.trim() : '';
+            }
+
+            const previousSettings = agencySettings || {};
+            const signatureDataUrl = previousSettings.signatureDataUrl || '';
+
+            const context = getAccountContext();
+            const normalizedAccountId = normalizeSalesforceId(context.accountId) || DEFAULT_ACCOUNT_ID;
+            const normalizedOwnerId = normalizeSalesforceId(context.ownerId);
+
+            agencySettings = {
+                accountId: normalizedAccountId,
+                ownerId: normalizedOwnerId,
+                name: getValue('agencyName'),
+                street: getValue('agencyStreet'),
+                suite: getValue('agencySuite'),
+                city: getValue('agencyCity'),
+                state: stateValue,
+                stateName,
+                zip: getValue('agencyZip'),
+                signatureText: getValue('agencySignatureText'),
+                producerName: getValue('producerName'),
+                producerPhone: getValue('producerPhone'),
+                producerEmail: getValue('producerEmail'),
+                producerFax: getValue('producerFax'),
+                signatureDataUrl
+            };
+
+            saveAgencySettingsToStorage(agencySettings);
+            updateAgencySettingsSummary();
+            closeAgencySettingsModal(true);
+        }
+
+        function renderAgencyStateOptions() {
+            const select = document.getElementById('agencyState');
+            if (!select) {
+                return;
+            }
+
+            const currentValue = select.value || (agencySettings ? agencySettings.state : '');
+            const optionsMarkup = ['<option value="">Select state</option>']
+                .concat(
+                    certificateHolderStateOptions.map(option => `<option value="${option.code}">${option.name}</option>`)
+                )
+                .join('');
+
+            select.innerHTML = optionsMarkup;
+
+            if (currentValue && certificateHolderStateOptions.some(option => option.code === currentValue)) {
+                select.value = currentValue;
+            } else {
+                select.value = '';
+            }
+        }
+
+        function updateAgencySettingsSummary() {
+            const summaryEl = document.getElementById('agencySettingsSummary');
+            if (!summaryEl) {
+                return;
+            }
+
+            if (!agencySettings) {
+                summaryEl.innerHTML = '<p class="text-sm text-gray-500">No agency details saved yet. Use the gear icon to configure them.</p>';
+                return;
+            }
+
+            const lines = [];
+
+            if (agencySettings.name) {
+                lines.push(`<p class="text-sm font-medium text-gray-900">${escapeHtml(agencySettings.name)}</p>`);
+            }
+
+            const addressParts = [];
+            if (agencySettings.street) {
+                addressParts.push(agencySettings.street);
+            }
+            if (agencySettings.suite) {
+                addressParts.push(agencySettings.suite);
+            }
+            const cityStateParts = [];
+            if (agencySettings.city) {
+                cityStateParts.push(agencySettings.city);
+            }
+            const stateDisplay = agencySettings.stateName
+                ? `${agencySettings.stateName}${agencySettings.state ? ` (${agencySettings.state})` : ''}`
+                : agencySettings.state;
+            if (stateDisplay) {
+                cityStateParts.push(stateDisplay);
+            }
+            if (cityStateParts.length > 0) {
+                addressParts.push(cityStateParts.join(', '));
+            }
+            if (agencySettings.zip) {
+                addressParts.push(agencySettings.zip);
+            }
+
+            if (addressParts.length > 0) {
+                const escapedParts = addressParts.map(part => escapeHtml(part));
+                lines.push(`<p class="mt-1 text-sm text-gray-600">${escapedParts.join('<br>')}</p>`);
+            }
+
+            const producerLines = [];
+            if (agencySettings.producerName) {
+                producerLines.push(`<p class="text-sm text-gray-900">${escapeHtml(agencySettings.producerName)}</p>`);
+            }
+            if (agencySettings.producerPhone) {
+                producerLines.push(`<p class="text-xs text-gray-600">Phone: ${escapeHtml(agencySettings.producerPhone)}</p>`);
+            }
+            if (agencySettings.producerEmail) {
+                producerLines.push(`<p class="text-xs text-gray-600">Email: ${escapeHtml(agencySettings.producerEmail)}</p>`);
+            }
+            if (agencySettings.producerFax) {
+                producerLines.push(`<p class="text-xs text-gray-600">Fax: ${escapeHtml(agencySettings.producerFax)}</p>`);
+            }
+            if (producerLines.length > 0) {
+                lines.push('<div class="mt-3 border-t border-dashed border-gray-200 pt-3 text-xs text-gray-600">');
+                lines.push('<p class="mb-1 font-semibold text-gray-700">Producer Contact</p>');
+                lines.push(producerLines.join(''));
+                lines.push('</div>');
+            }
+
+            const signatureText = agencySettings.signatureText || agencySettings.signature_text || '';
+            if (signatureText) {
+                lines.push(`<p class="mt-2 text-xs text-gray-500">Signature: ${escapeHtml(signatureText)}</p>`);
+            } else {
+                lines.push('<p class="mt-2 text-xs text-gray-500">No signature text saved yet.</p>');
+            }
+            const ownerId = getOwnerId();
+            if (ownerId) {
+                lines.push(`<p class="mt-2 text-xs text-gray-500">Owner: ${escapeHtml(ownerId)}</p>`);
+            }
+            summaryEl.innerHTML = lines.join('');
+        }
+        function setupCertificateHolderUI() {
+            const form = document.getElementById('holderForm');
+            if (form) {
+                form.addEventListener('submit', submitCertificateHolder);
+            }
+
+            const resetBtn = document.getElementById('holderResetBtn');
+            if (resetBtn) {
+                resetBtn.addEventListener('click', resetHolderForm);
+            }
+
+            const cancelBtn = document.getElementById('holderCancelBtn');
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', () => closeHolderModal(true));
+            }
+
+            const closeBtn = document.getElementById('holderModalCloseBtn');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => closeHolderModal(true));
+            }
+
+            const overlay = document.getElementById('holderModalOverlay');
+            if (overlay) {
+                overlay.addEventListener('click', () => closeHolderModal(true));
+            }
+
+            const openBtn = document.getElementById('openHolderModalBtn');
+            if (openBtn) {
+                openBtn.addEventListener('click', openHolderModal);
+            }
+
+            const refreshBtn = document.getElementById('refreshHoldersBtn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', () => {
+                    certificateHoldersLoaded = false;
+                    loadCertificateHolders(true);
+                });
+            }
+
+            const generateBtn = document.getElementById('generateCertificatesBtn');
+            if (generateBtn) {
+                generateBtn.addEventListener('click', () => {
+                    if (selectedCertificateHolderIds.size === 0) {
+                        setHolderActionMessage('info', 'Select at least one certificate holder to generate certificates.');
+                        return;
+                    }
+                    openGenerateModal();
+                });
+            }
+
+            const generateModalOverlay = document.getElementById('generateModalOverlay');
+            if (generateModalOverlay) {
+                generateModalOverlay.addEventListener('click', closeGenerateModal);
+            }
+            const generateModalCloseBtn = document.getElementById('generateModalCloseBtn');
+            if (generateModalCloseBtn) {
+                generateModalCloseBtn.addEventListener('click', closeGenerateModal);
+            }
+            const generateModalCancelBtn = document.getElementById('generateModalCancelBtn');
+            if (generateModalCancelBtn) {
+                generateModalCancelBtn.addEventListener('click', closeGenerateModal);
+            }
+            const generateModalSubmitBtn = document.getElementById('generateModalSubmitBtn');
+            if (generateModalSubmitBtn) {
+                generateModalSubmitBtn.addEventListener('click', handleGenerateModalSubmit);
+            }
+
+            document.addEventListener('keydown', handleHolderModalKeydown);
+            document.addEventListener('keydown', handleGenerateModalKeydown);
+
+            renderHolderStateOptions();
+            showHolderAlert(); // hide by default
+            window.getSelectedCertificateHolderIds = () => Array.from(selectedCertificateHolderIds);
+            window.editCertificateHolder = editCertificateHolder;
+            updateHolderSelectionSummary();
+            closeHolderModal(true); // ensure hidden on load
+            updateGenerateCertificatesButtonState();
+        }
+
+        // Show tab content
+        function showTab(tab) {
+            // Hide all content
+            document.getElementById('masterContent').style.display = 'none';
+            document.getElementById('holdersContent').style.display = 'none';
+            document.getElementById('generatedContent').style.display = 'none';
+            
+            // Remove active class from all tabs
+            document.getElementById('masterTab').className = 'px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50';
+            document.getElementById('holdersTab').className = 'px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50';
+            document.getElementById('generatedTab').className = 'px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50';
+            
+            // Show selected content and highlight tab
+            document.getElementById(tab + 'Content').style.display = 'block';
+            document.getElementById(tab + 'Tab').className = 'px-3 py-2 rounded-md text-sm font-medium bg-indigo-600 text-white';
+
+            if (tab === 'holders') {
+                renderHolderStateOptions();
+                if (!certificateHoldersLoaded) {
+                    loadCertificateHolders(true);
+                }
+                updateHolderSelectionSummary();
+            }
+        }
+
+        function renderHolderStateOptions() {
+            const select = document.getElementById('holderState');
+            if (!select) {
+                return;
+            }
+
+            const currentValue = select.value;
+            const optionsMarkup = ['<option value="">Select state</option>']
+                .concat(
+                    certificateHolderStateOptions.map(option => `<option value="${option.code}">${option.name}</option>`)
+                )
+                .join('');
+
+            select.innerHTML = optionsMarkup;
+
+            if (currentValue && certificateHolderStateOptions.some(option => option.code === currentValue)) {
+                select.value = currentValue;
+            } else {
+                select.value = '';
+            }
+        }
+
+        function showHolderAlert(type, message) {
+            const alertEl = document.getElementById('holderFormAlert');
+            if (!alertEl) {
+                return;
+            }
+
+            if (!message) {
+                alertEl.className = 'hidden mb-3';
+                alertEl.innerHTML = '';
+                return;
+            }
+
+            const classMap = {
+                success: 'border-green-200 bg-green-50 text-green-700',
+                error: 'border-red-200 bg-red-50 text-red-700',
+                info: 'border-blue-200 bg-blue-50 text-blue-700'
+            };
+            const styleClass = classMap[type] || classMap.info;
+            alertEl.className = `mb-3 rounded-md border px-4 py-3 text-sm ${styleClass}`;
+            alertEl.innerHTML = message;
+        }
+
+        function resetHolderForm() {
+            const form = document.getElementById('holderForm');
+            if (form) {
+                form.reset();
+            }
+            renderHolderStateOptions();
+            showHolderAlert();
+        }
+
+        function updateHolderSelectionSummary(total = null) {
+            const summaryEl = document.getElementById('holderSelectionSummary');
+            if (!summaryEl) {
+                return;
+            }
+
+            if (total === null || total === undefined) {
+                total = certificateHolderCache.length;
+            }
+
+            if (total === 0) {
+                summaryEl.textContent = 'No certificate holders available.';
+                setHolderActionMessage('info', 'Add a certificate holder to generate certificates.');
+                updateGenerateCertificatesButtonState();
+                return;
+            }
+
+            const count = selectedCertificateHolderIds.size;
+            if (count === 0) {
+                summaryEl.textContent = 'No certificate holders selected.';
+                setHolderActionMessage('info', 'Select at least one certificate holder to generate certificates.');
+            } else if (count === 1) {
+                summaryEl.textContent = '1 certificate holder selected.';
+                setHolderActionMessage('success', 'Ready to generate 1 certificate.');
+            } else {
+                summaryEl.textContent = `${count} certificate holders selected.`;
+                setHolderActionMessage('success', `Ready to generate ${count} certificates.`);
+            }
+        }
+        updateGenerateCertificatesButtonState();
+
+        function setHolderActionMessage(type = null, message = '') {
+            const messageEl = document.getElementById('holderActionMessage');
+            if (!messageEl) {
+                return;
+            }
+
+            if (!message) {
+                messageEl.className = 'hidden text-sm';
+                messageEl.textContent = '';
+                return;
+            }
+
+            const classMap = {
+                success: 'text-sm text-green-600',
+                error: 'text-sm text-red-600',
+                info: 'text-sm text-gray-600'
+            };
+            messageEl.className = classMap[type] || classMap.info;
+            messageEl.textContent = message;
+        }
+
+        function updateGenerateCertificatesButtonState() {
+            const button = document.getElementById('generateCertificatesBtn');
+            if (!button) {
+                return;
+            }
+
+            const disabled = certificateHolderCache.length === 0 || selectedCertificateHolderIds.size === 0;
+            button.disabled = disabled;
+            button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+            button.classList.toggle('opacity-50', disabled);
+            button.classList.toggle('cursor-not-allowed', disabled);
+        }
+
+        function updateHolderSelectAllState(selectAllEl, checkboxEls) {
+            if (!selectAllEl) {
+                return;
+            }
+
+            const enabledCheckboxes = checkboxEls.filter(cb => !cb.disabled);
+            if (enabledCheckboxes.length === 0) {
+                selectAllEl.checked = false;
+                selectAllEl.indeterminate = false;
+                return;
+            }
+
+            const checkedCount = enabledCheckboxes.filter(cb => cb.checked).length;
+            if (checkedCount === 0) {
+                selectAllEl.checked = false;
+                selectAllEl.indeterminate = false;
+            } else if (checkedCount === enabledCheckboxes.length) {
+                selectAllEl.checked = true;
+                selectAllEl.indeterminate = false;
+            } else {
+                selectAllEl.checked = false;
+                selectAllEl.indeterminate = true;
+            }
+        }
+
+        function setupHolderSelectionHandlers(holders) {
+            const selectAllEl = document.getElementById('holderSelectAll');
+            const checkboxEls = Array.from(document.querySelectorAll('input.holder-select'));
+
+            checkboxEls.forEach(cb => {
+                const holderId = cb.dataset.holderId;
+                if (holderId && selectedCertificateHolderIds.has(holderId)) {
+                    cb.checked = true;
+                }
+                cb.addEventListener('change', () => {
+                    if (holderId) {
+                        if (cb.checked) {
+                            selectedCertificateHolderIds.add(holderId);
+                        } else {
+                            selectedCertificateHolderIds.delete(holderId);
+                        }
+                    }
+                    updateHolderSelectAllState(selectAllEl, checkboxEls);
+                    updateHolderSelectionSummary(holders.length);
+                    updateGenerateCertificatesButtonState();
+                });
+            });
+
+            if (selectAllEl) {
+                updateHolderSelectAllState(selectAllEl, checkboxEls);
+                selectAllEl.addEventListener('change', () => {
+                    const shouldSelect = selectAllEl.checked;
+                    checkboxEls.forEach(cb => {
+                        if (cb.disabled) {
+                            return;
+                        }
+                        cb.checked = shouldSelect;
+                        const holderId = cb.dataset.holderId;
+                        if (!holderId) {
+                            return;
+                        }
+                        if (shouldSelect) {
+                            selectedCertificateHolderIds.add(holderId);
+                        } else {
+                            selectedCertificateHolderIds.delete(holderId);
+                        }
+                    });
+                    updateHolderSelectAllState(selectAllEl, checkboxEls);
+                    updateHolderSelectionSummary(holders.length);
+                    updateGenerateCertificatesButtonState();
+                });
+            }
+
+            updateHolderSelectionSummary(holders.length);
+            updateGenerateCertificatesButtonState();
+        }
+
+        function populateHolderForm(holder) {
+            if (!holder) {
+                return;
+            }
+
+            renderHolderStateOptions();
+
+            const setValue = (id, value = '') => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.value = value || '';
+                }
+            };
+
+            setValue('holderName', holder.name);
+            setValue('holderMasterRemarks', holder.master_remarks);
+            setValue('holderAddress1', holder.address_line1);
+            setValue('holderAddress2', holder.address_line2);
+            setValue('holderCity', holder.city);
+            setValue('holderPostalCode', holder.postal_code);
+            setValue('holderEmail', holder.email);
+            setValue('holderPhone', holder.phone);
+
+            const stateField = document.getElementById('holderState');
+            if (stateField) {
+                stateField.value = holder.state || '';
+            }
+        }
+
+        function editCertificateHolder(holderId) {
+            if (!holderId) {
+                return;
+            }
+            const normalizedId = String(holderId);
+            const target = certificateHolderCache.find(holder => holder && String(holder.id) === normalizedId);
+            if (!target) {
+                console.warn('Certificate holder not found for edit:', holderId);
+                return;
+            }
+            openHolderModal(target);
+        }
+
+        function isHolderModalOpen() {
+            const modal = document.getElementById('holderModal');
+            return modal ? !modal.classList.contains('hidden') : false;
+        }
+
+        function openHolderModal(existingHolder = null) {
+            const modal = document.getElementById('holderModal');
+            if (!modal) {
+                return;
+            }
+
+            const titleEl = document.getElementById('holderModalTitle');
+            const submitBtn = document.getElementById('holderSubmitBtn');
+
+            resetHolderForm();
+
+            if (existingHolder && existingHolder.id) {
+                editingCertificateHolderId = String(existingHolder.id);
+                if (titleEl) {
+                    titleEl.textContent = HOLDER_MODAL_TITLE_EDIT;
+                }
+                if (submitBtn) {
+                    submitBtn.textContent = 'Save Changes';
+                }
+                populateHolderForm(existingHolder);
+            } else {
+                editingCertificateHolderId = null;
+                if (titleEl) {
+                    titleEl.textContent = HOLDER_MODAL_TITLE_DEFAULT;
+                }
+                if (submitBtn) {
+                    submitBtn.textContent = 'Save Certificate Holder';
+                }
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            modal.setAttribute('aria-hidden', 'false');
+            setTimeout(() => {
+                const nameInput = document.getElementById('holderName');
+                if (nameInput) {
+                    nameInput.focus();
+                }
+            }, 50);
+        }
+
+        function closeHolderModal(shouldReset = false) {
+            const modal = document.getElementById('holderModal');
+            if (!modal) {
+                return;
+            }
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            modal.setAttribute('aria-hidden', 'true');
+            if (shouldReset) {
+                editingCertificateHolderId = null;
+                const titleEl = document.getElementById('holderModalTitle');
+                const submitBtn = document.getElementById('holderSubmitBtn');
+                if (titleEl) {
+                    titleEl.textContent = HOLDER_MODAL_TITLE_DEFAULT;
+                }
+                if (submitBtn) {
+                    submitBtn.textContent = 'Save Certificate Holder';
+                }
+                resetHolderForm();
+            }
+        }
+
+        function handleHolderModalKeydown(event) {
+            if (event.key === 'Escape' && isHolderModalOpen()) {
+                event.preventDefault();
+                closeHolderModal(true);
+            }
+        }
+
+        function isGenerateModalOpen() {
+            const modal = document.getElementById('generateModal');
+            return modal ? !modal.classList.contains('hidden') : false;
+        }
+
+        function setGenerateModalAlert(type = null, message = '') {
+            const alertEl = document.getElementById('generateModalAlert');
+            if (!alertEl) {
+                return;
+            }
+            if (!message) {
+                alertEl.className = 'hidden';
+                alertEl.textContent = '';
+                return;
+            }
+            const classMap = {
+                success: 'rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700',
+                error: 'rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700',
+                info: 'rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700'
+            };
+            alertEl.className = classMap[type] || classMap.info;
+            alertEl.textContent = message;
+        }
+
+        function updateGenerateModalSelectionSummary() {
+            const summaryEl = document.getElementById('generateModalSelectionSummary');
+            if (!summaryEl) {
+                return;
+            }
+            const count = selectedTemplateKeys.size;
+            if (count === 0) {
+                summaryEl.textContent = 'Select at least one ACORD form.';
+            } else if (count === 1) {
+                summaryEl.textContent = '1 ACORD form selected.';
+            } else {
+                summaryEl.textContent = `${count} ACORD forms selected.`;
+            }
+        }
+
+        function updateGenerateModalSubmitState() {
+            const submitBtn = document.getElementById('generateModalSubmitBtn');
+            if (!submitBtn) {
+                return;
+            }
+            const disabled = selectedTemplateKeys.size === 0;
+            submitBtn.disabled = disabled;
+            submitBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+        }
+
+        function ensureTemplateSelectionDefaults() {
+            const availableKeys = new Set(availableGenerationTemplates.map(template => template.key));
+            selectedTemplateKeys = new Set(
+                Array.from(selectedTemplateKeys).filter(key => availableKeys.has(key))
+            );
+            if (selectedTemplateKeys.size === 0 && availableGenerationTemplates.length > 0) {
+                const preferredOrder = ['acord25', 'acord24', 'acord27'];
+                const preferred = preferredOrder.find(key => availableKeys.has(key));
+                const fallback = preferred || availableGenerationTemplates[0].key;
+                if (fallback) {
+                    selectedTemplateKeys.add(fallback);
+                }
+            }
+            saveTemplateSelectionsToStorage();
+        }
+
+        function renderTemplateSelectionList() {
+            const container = document.getElementById('templateSelectionContainer');
+            if (!container) {
+                return;
+            }
+            if (!availableGenerationTemplates.length) {
+                container.innerHTML = '<p class="px-3 py-4 text-sm text-gray-500">No ACORD templates available.</p>';
+                updateGenerateModalSelectionSummary();
+                updateGenerateModalSubmitState();
+                return;
+            }
+
+            const rows = availableGenerationTemplates.map(template => {
+                const checkboxId = `templateOption_${template.key}`;
+                const checkedAttr = selectedTemplateKeys.has(template.key) ? 'checked' : '';
+                const missingLabel = template.missing ? '<span class="ml-2 text-xs text-amber-600">(Upload pending)</span>' : '';
+                return `
+                    <label for="${checkboxId}" class="flex items-center gap-3 px-3 py-3 hover:bg-white transition">
+                        <input type="checkbox" id="${checkboxId}" data-template-key="${template.key}"
+                               class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" ${checkedAttr}>
+                        <div>
+                            <p class="text-sm font-medium text-gray-900">${escapeHtml(template.label)} ${missingLabel}</p>
+                            <p class="text-xs text-gray-500">${template.key.toUpperCase()}</p>
+                        </div>
+                    </label>
+                `;
+            }).join('');
+
+            container.innerHTML = rows;
+            container.querySelectorAll('input[type="checkbox"]').forEach(input => {
+                input.addEventListener('change', () => {
+                    const key = input.dataset.templateKey;
+                    if (!key) {
+                        return;
+                    }
+                    if (input.checked) {
+                        selectedTemplateKeys.add(key);
+                    } else {
+                        selectedTemplateKeys.delete(key);
+                    }
+                    saveTemplateSelectionsToStorage();
+                    updateGenerateModalSelectionSummary();
+                    updateGenerateModalSubmitState();
+                });
+            });
+
+            updateGenerateModalSelectionSummary();
+            updateGenerateModalSubmitState();
+        }
+
+        function openGenerateModal() {
+            const modal = document.getElementById('generateModal');
+            if (!modal) {
+                return;
+            }
+            setGenerateModalAlert();
+            renderTemplateSelectionList();
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            modal.setAttribute('aria-hidden', 'false');
+            setTimeout(() => {
+                const firstCheckbox = document.querySelector('#templateSelectionContainer input[type="checkbox"]');
+                if (firstCheckbox) {
+                    firstCheckbox.focus();
+                }
+            }, 50);
+        }
+
+        function closeGenerateModal() {
+            const modal = document.getElementById('generateModal');
+            if (!modal) {
+                return;
+            }
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            modal.setAttribute('aria-hidden', 'true');
+            setGenerateModalAlert();
+        }
+
+        function handleGenerateModalKeydown(event) {
+            if (event.key === 'Escape' && isGenerateModalOpen()) {
+                event.preventDefault();
+                closeGenerateModal();
+            }
+        }
+
+        async function handleGenerateModalSubmit() {
+            if (selectedTemplateKeys.size === 0) {
+                setGenerateModalAlert('error', 'Select at least one template.');
+                return;
+            }
+            closeGenerateModal();
+            await generateCertificates(Array.from(selectedTemplateKeys));
+        }
+
+
+        function escapeHtml(value) {
+            if (value === null || value === undefined) {
+                return '';
+            }
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatValue(value, placeholder = 'N/A') {
+            if (value === null || value === undefined) {
+                return placeholder;
+            }
+            const trimmed = String(value).trim();
+            return trimmed ? escapeHtml(trimmed) : placeholder;
+        }
+
+        function formatDate(value) {
+            if (!value) {
+                return 'N/A';
+            }
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return 'N/A';
+            }
+            return date.toLocaleString();
+        }
+
+        async function loadCertificateHolders(forceRefresh = false) {
+            const holderList = document.getElementById('holderList');
+            if (!holderList) {
+                return;
+            }
+            if (!forceRefresh && certificateHoldersLoaded) {
+                return;
+            }
+
+            const accountId = getAccountId();
+            holderList.innerHTML = '<p class="text-gray-600">Loading certificate holders...</p>';
+            setHolderActionMessage('info', 'Loading certificate holders...');
+            updateGenerateCertificatesButtonState();
+
+            try {
+                const response = await apiFetch(`/api/account/${accountId}/certificate-holders`);
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Unable to load certificate holders.');
+                }
+
+                if (Array.isArray(data.state_options) && data.state_options.length > 0) {
+                    certificateHolderStateOptions = data.state_options.map(option => ({
+                        code: option.code,
+                        name: option.name
+                    }));
+                    renderHolderStateOptions();
+                    renderAgencyStateOptions();
+                }
+
+                renderCertificateHolderList(Array.isArray(data.certificate_holders) ? data.certificate_holders : []);
+                certificateHoldersLoaded = true;
+            } catch (error) {
+                holderList.innerHTML = `<p class="text-red-600">Error loading certificate holders: ${escapeHtml(error.message)}</p>`;
+                certificateHoldersLoaded = false;
+                updateHolderSelectionSummary();
+                setHolderActionMessage('error', `Error loading certificate holders: ${escapeHtml(error.message)}`);
+                updateGenerateCertificatesButtonState();
+            }
+        }
+
+        function renderCertificateHolderList(holders) {
+            const holderList = document.getElementById('holderList');
+            if (!holderList) {
+                return;
+            }
+
+            certificateHolderCache = Array.isArray(holders)
+                ? holders.map(holder => holder ? { ...holder, id: holder.id ? String(holder.id) : '' } : holder)
+                : [];
+
+            if (!holders || holders.length === 0) {
+                holderList.innerHTML = '';
+                selectedCertificateHolderIds.clear();
+                updateHolderSelectionSummary(0);
+                setHolderActionMessage('info', 'Add a certificate holder to generate certificates.');
+                updateGenerateCertificatesButtonState();
+                return;
+            }
+
+            const validHolderIds = new Set();
+            holders.forEach(holder => {
+                if (holder && holder.id) {
+                    validHolderIds.add(String(holder.id));
+                }
+            });
+            selectedCertificateHolderIds = new Set(
+                [...selectedCertificateHolderIds].filter(id => validHolderIds.has(id))
+            );
+
+            const rows = holders.map(holder => {
+                const holderId = holder && holder.id ? String(holder.id) : '';
+                const emailMarkup = holder.email
+                    ? `<a class="text-indigo-600 hover:text-indigo-700" href="mailto:${encodeURIComponent(holder.email)}">${escapeHtml(holder.email)}</a>`
+                    : 'N/A';
+                const phoneMarkup = holder.phone ? escapeHtml(holder.phone) : 'N/A';
+                const stateLabel = holder.state
+                    ? `${escapeHtml(holder.state)}${holder.state_name ? ` (${escapeHtml(holder.state_name)})` : ''}`
+                    : 'N/A';
+                const addressSegments = [];
+                if (holder.address_line1) {
+                    addressSegments.push(escapeHtml(holder.address_line1));
+                }
+                if (holder.address_line2) {
+                    addressSegments.push(escapeHtml(holder.address_line2));
+                }
+                const addressMarkup = addressSegments.length > 0 ? addressSegments.join('<br>') : 'N/A';
+                const postalCodeMarkup = holder.postal_code ? escapeHtml(holder.postal_code) : 'N/A';
+                const isSelectable = Boolean(holderId);
+                const checkedAttr = isSelectable && selectedCertificateHolderIds.has(holderId) ? 'checked' : '';
+                const disabledAttr = isSelectable ? '' : 'disabled';
+                const dataAttr = isSelectable ? `data-holder-id="${escapeHtml(holderId)}"` : '';
+                const rowTitleAttr = holder && holder.master_remarks ? ` title="${escapeHtml(holder.master_remarks)}"` : '';
+                const rowDataAttr = holderId ? ` data-holder-id="${escapeHtml(holderId)}"` : '';
+                const editButton = holderId
+                    ? `<button type="button" class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-indigo-600 bg-white hover:bg-indigo-50" onclick="editCertificateHolder('${escapeHtml(holderId)}')">Edit</button>`
+                    : '<span class="text-gray-400 text-xs">N/A</span>';
+
+                return `
+                    <tr class="hover:bg-gray-50"${rowTitleAttr}${rowDataAttr}>
+                        <td class="px-4 py-3 text-center">
+                            <input type="checkbox" class="holder-select h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" ${dataAttr} ${checkedAttr} ${disabledAttr}>
+                        </td>
+                        <td class="px-4 py-3 text-sm font-medium text-gray-900">${formatValue(holder.name, 'Unnamed Holder')}</td>
+                        <td class="px-4 py-3 text-sm text-gray-700">${addressMarkup}</td>
+                        <td class="px-4 py-3 text-sm text-gray-700">${formatValue(holder.city)}</td>
+                        <td class="px-4 py-3 text-sm text-gray-700">${stateLabel}</td>
+                        <td class="px-4 py-3 text-sm text-gray-700">${postalCodeMarkup}</td>
+                        <td class="px-4 py-3 text-sm text-gray-700">${emailMarkup}</td>
+                        <td class="px-4 py-3 text-sm text-gray-700">${phoneMarkup}</td>
+                        <td class="px-4 py-3 text-sm text-right">${editButton}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            holderList.innerHTML = `
+                <div class="overflow-x-auto border border-gray-200 rounded-lg shadow-sm">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-4 py-3 text-center w-12">
+                                    <input id="holderSelectAll" type="checkbox" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                                </th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Address Line 1</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">City</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">State</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Postal Code</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
+                                <th scope="col" class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-100">
+                            ${rows}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            setHolderActionMessage(null, '');
+            setupHolderSelectionHandlers(holders);
+        }
+
+        async function submitCertificateHolder(event) {
+            event.preventDefault();
+
+            const submitBtn = document.getElementById('holderSubmitBtn');
+            const originalBtnText = submitBtn ? submitBtn.textContent : '';
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Saving...';
+            }
+
+            showHolderAlert('info', 'Saving certificate holder...');
+
+            const payload = {
+                name: document.getElementById('holderName')?.value?.trim() || '',
+                master_remarks: document.getElementById('holderMasterRemarks')?.value?.trim() || '',
+                address_line1: document.getElementById('holderAddress1')?.value?.trim() || '',
+                address_line2: document.getElementById('holderAddress2')?.value?.trim() || '',
+                city: document.getElementById('holderCity')?.value?.trim() || '',
+                state: document.getElementById('holderState')?.value?.trim() || '',
+                postal_code: document.getElementById('holderPostalCode')?.value?.trim() || '',
+                email: document.getElementById('holderEmail')?.value?.trim() || '',
+                phone: document.getElementById('holderPhone')?.value?.trim() || ''
+            };
+
+            if (payload.state) {
+                payload.state = payload.state.toUpperCase();
+            }
+
+            Object.keys(payload).forEach(key => {
+                if (payload[key] === '') {
+                    payload[key] = null;
+                }
+            });
+
+            const accountId = getAccountId();
+            const isEditing = Boolean(editingCertificateHolderId);
+            const endpoint = isEditing
+                ? `/api/account/${accountId}/certificate-holders/${editingCertificateHolderId}`
+                : `/api/account/${accountId}/certificate-holders`;
+            const method = isEditing ? 'PUT' : 'POST';
+
+            try {
+                const response = await apiFetch(endpoint, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (!result.success) {
+                    const messages = Array.isArray(result.errors) && result.errors.length > 0
+                        ? result.errors.map(escapeHtml).join('<br>')
+                        : escapeHtml(result.error || 'Unable to save certificate holder.');
+                    showHolderAlert('error', messages);
+                    return;
+                }
+
+                const successMessage = isEditing
+                    ? 'Certificate holder updated successfully.'
+                    : 'Certificate holder saved successfully.';
+                showHolderAlert('success', successMessage);
+                certificateHoldersLoaded = false;
+                await loadCertificateHolders(true);
+
+                setTimeout(() => {
+                    closeHolderModal(true);
+                }, 700);
+            } catch (error) {
+                showHolderAlert('error', `Failed to save certificate holder: ${escapeHtml(error.message)}`);
+            } finally {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = originalBtnText || 'Save Certificate Holder';
+                }
+            }
+        }
+
+        async function generateCertificates(templateKeysOverride = null) {
+            const button = document.getElementById('generateCertificatesBtn');
+            if (!button || button.disabled) {
+                return;
+            }
+
+            const rawSelectedIds = Array.from(selectedCertificateHolderIds)
+                .map(id => (typeof id === 'string' ? id.trim() : String(id).trim()))
+                .filter(id => id.length > 0);
+            const selectedIds = Array.from(new Set(rawSelectedIds));
+
+            if (selectedIds.length === 0) {
+                setHolderActionMessage('info', 'Select at least one certificate holder to generate certificates.');
+                updateGenerateCertificatesButtonState();
+                return;
+            }
+
+            const masterHolderIds = new Set(certificateHolderCache.map(holder => holder.id));
+            const invalidIds = selectedIds.filter(id => !masterHolderIds.has(id));
+            if (invalidIds.length > 0) {
+                setHolderActionMessage('error', 'Some selected certificate holders are no longer available. Refreshing the list.');
+                selectedCertificateHolderIds = new Set(
+                    [...selectedCertificateHolderIds].filter(id => masterHolderIds.has(id))
+                );
+                await loadCertificateHolders(true);
+                return;
+            }
+
+            const templateKeys = Array.isArray(templateKeysOverride) && templateKeysOverride.length > 0
+                ? templateKeysOverride.map(value => String(value || '').trim().toLowerCase()).filter(Boolean)
+                : Array.from(selectedTemplateKeys);
+
+            if (templateKeys.length === 0) {
+                setHolderActionMessage('info', 'Select at least one ACORD form to generate.');
+                openGenerateModal();
+                return;
+            }
+
+            const originalText = button.textContent;
+            button.disabled = true;
+            button.classList.add('cursor-wait');
+            button.textContent = templateKeys.length > 1 || selectedIds.length > 1 ? 'Generating ZIP...' : 'Generating PDF...';
+
+            const holderLabel = selectedIds.length === 1 ? '1 certificate holder' : `${selectedIds.length} certificate holders`;
+            const templateLabel = templateKeys.length === 1 ? '1 form' : `${templateKeys.length} forms`;
+            setHolderActionMessage('info', `Generating ${templateLabel} for ${holderLabel}...`);
+
+            try {
+                loadAgencySettingsFromStorage();
+                const context = getAccountContext();
+                const accountId = context.accountId;
+                const ownerId = context.ownerId;
+
+                const payload = {
+                    holder_ids: selectedIds,
+                    template_keys: templateKeys,
+                    owner_id: ownerId || null,
+                    agency_settings: agencySettings || null
+                };
+
+                const response = await apiFetch(`/api/account/${accountId}/certificate-holders/generated`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    let errorMessage = 'Failed to generate certificates.';
+                    try {
+                        const result = await response.json();
+                        errorMessage = result.error || errorMessage;
+                    } catch (jsonError) {
+                        errorMessage = `${errorMessage} (${response.status})`;
+                    }
+                    setHolderActionMessage('error', errorMessage);
+                    return;
+                }
+
+                const blob = await response.blob();
+                let filename = 'certificates.zip';
+                const disposition = response.headers.get('Content-Disposition') || '';
+                const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/);
+                if (match) {
+                    try {
+                        filename = decodeURIComponent(match[1] || match[2] || filename);
+                    } catch (decodeError) {
+                        filename = match[1] || match[2] || filename;
+                    }
+                } else {
+                    const today = new Date().toISOString().slice(0, 10);
+                    const multipleFiles = templateKeys.length > 1 || selectedIds.length > 1;
+                    filename = multipleFiles
+                        ? `Certificates_${today}.zip`
+                        : `${templateKeys[0].toUpperCase()}_${today}.pdf`;
+                }
+
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+
+                setHolderActionMessage(
+                    'success',
+                    templateKeys.length > 1 || selectedIds.length > 1
+                        ? 'Certificate ZIP downloaded successfully.'
+                        : 'Certificate downloaded successfully.'
+                );
+            } catch (error) {
+                setHolderActionMessage('error', `Failed to generate certificates: ${escapeHtml(error.message)}`);
+            } finally {
+                button.classList.remove('cursor-wait');
+                button.disabled = false;
+                button.textContent = originalText || 'Generate Certificates';
+                updateGenerateCertificatesButtonState();
+            }
+        }
+
+        function syncGenerationTemplateOptions(rawTemplates = []) {
+            const templateMap = new Map();
+            (rawTemplates || []).forEach(template => {
+                if (!template) {
+                    return;
+                }
+                const templateType = String(template.template_type || template.id || '').trim().toLowerCase();
+                if (!templateType || !templateType.startsWith('acord')) {
+                    return;
+                }
+                if (templateMap.has(templateType)) {
+                    return;
+                }
+                const label = template.template_name || templateType.toUpperCase();
+                templateMap.set(templateType, {
+                    key: templateType,
+                    label,
+                    missing: Boolean(template.missing)
+                });
+            });
+            availableGenerationTemplates = Array.from(templateMap.values());
+            ensureTemplateSelectionDefaults();
+            renderTemplateSelectionList();
+        }
+
+        // Load templates
+        async function loadTemplates() {
+            try {
+                const accountId = getAccountId();
+                console.log('Loading templates for account:', accountId);
+                const response = await apiFetch(`/api/account/${accountId}/templates`);
+                const data = await response.json();
+                console.log('Templates response:', data);
+
+                syncGenerationTemplateOptions(data.templates || []);
+                
+                const templatesList = document.getElementById('templatesList');
+                if (data.success && data.templates && data.templates.length > 0) {
+                    templatesList.innerHTML = `
+                        <ul class="divide-y divide-gray-200">
+                            ${data.templates.map(template => `
+                                <li class="py-4 flex items-center justify-between">
+                                    <div class="flex items-center">
+                                        <div class="w-6 h-6 text-gray-500 mr-3">PDF</div>
+                                        <div>
+                                            <p class="text-sm font-medium text-gray-900">${template.template_name}</p>
+                                            <p class="text-sm text-gray-500">Type: ${template.template_type}</p>
+                                        </div>
+                                    </div>
+                                    <button onclick="editTemplate('${template.id}')" class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700">
+                                        Edit
+                                    </button>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    `;
+                } else {
+                    templatesList.innerHTML = '<p class="text-gray-600">No templates found.</p>';
+                }
+            } catch (error) {
+                console.error('Error loading templates:', error);
+                document.getElementById('templatesList').innerHTML = `<p class="text-red-600">Error loading templates: ${error.message}</p>`;
+            }
+        }
+
+        // Edit template with Adobe PDF Editor (Popup Window)
+        function editTemplate(templateId) {
+            openPDFEditorWindow(templateId);
+        }
+
+        // Open PDF Editor in Popup Window
+        function openPDFEditorWindow(templateId) {
+    const accountId = getAccountId();
+    const windowFeatures = 'width=1200,height=800,scrollbars=yes,resizable=yes,toolbar=no,menubar=no,location=no,status=no';
+    const popupWindow = window.open('', `pdfEditor_${templateId}`, windowFeatures);
+
+    if (!popupWindow) {
+        alert('Popup blocked! Please allow popups for this site and try again.');
+        return;
+    }
+
+    const popupHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PDF Editor - Template</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>PDF</text></svg>">
+</head>
+<body class="bg-gray-100">
+    <div class="h-screen flex flex-col">
+        <!-- Header -->
+        <header class="bg-white shadow-sm border-b">
+            <div class="px-6 py-4 flex justify-between items-center">
+                <h1 class="text-xl font-semibold text-gray-900">PDF Editor</h1>
+                <div class="flex space-x-3">
+                    <button id="saveBtn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-gray-400 hover:bg-gray-500" disabled>Save PDF (Use Ctrl+S)</button>
+                    <button id="downloadBtn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700">Download PDF</button>
+                    <button id="closeBtn" class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50">Close</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Info Bar -->
+        <div class="bg-blue-50 border-b px-6 py-3">
+            <p class="text-sm text-blue-800">
+                <strong>PDF Editor:</strong> Click on any field in the PDF to edit it directly.
+                <strong>Press Ctrl+S directly in the PDF viewer</strong> to save your changes to the database.
+            </p>
+        </div>
+
+        <!-- PDF Container -->
+        <div class="flex-1 p-6">
+            <div id="pdfEditorContainer" class="h-full border border-gray-300 rounded-lg bg-white">
+                <!-- PDF Viewer -->
+                <div id="adobe-dc-view" style="width: 100%; height: 100%;"></div>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="bg-white border-t px-6 py-3">
+            <div class="flex justify-between items-center">
+            <div id="saveStatus" class="text-sm text-blue-600">Preparing Adobe PDF viewer...</div>
+                <div class="text-xs text-gray-500">Press Ctrl+S directly in the PDF viewer to save</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>`;
+
+    popupWindow.document.open('text/html');
+    popupWindow.document.write(popupHTML);
+    popupWindow.document.close();
+
+    const session = getSfSession();
+    initializePDFEditorPopup(popupWindow, { templateId, accountId, appOrigin: window.location.origin, sfSession: session });
+
+    popupWindow.focus();
+}
+
+function initializePDFEditorPopup(popupWindow, context) {
+    const { templateId, accountId, appOrigin: forcedOrigin, sfSession } = context;
+    const doc = popupWindow.document;
+
+    if (!doc) {
+        console.error('[PDF Popup] document unavailable');
+        return;
+    }
+
+    const appOrigin = forcedOrigin
+        || (popupWindow.opener && popupWindow.opener.location && popupWindow.opener.location.origin)
+        || (popupWindow.location && popupWindow.location.origin)
+        || window.location.origin;
+    console.log('[PDF Popup] init context', { templateId, accountId, appOrigin });
+
+    // Helper to build API URLs with SF session
+    function buildApiUrl(path) {
+        const url = new URL(path, appOrigin);
+        if (sfSession && sfSession.sfSession) {
+            url.searchParams.set('sfSession', sfSession.sfSession);
+            if (sfSession.sfOrg) {
+                url.searchParams.set('sfOrg', sfSession.sfOrg);
+            }
+        }
+        return url.toString();
+    }
+
+    popupWindow.PDF_DEBUG = popupWindow.PDF_DEBUG || {};
+    popupWindow.PDF_DEBUG.context = { templateId, accountId, appOrigin };
+    popupWindow.PDF_DEBUG.state = popupWindow.PDF_DEBUG.state || {};
+
+    let currentPDFViewer = null;
+    let currentPDFAPIs = null;
+    popupWindow.PDF_DEBUG.state.viewerReady = false;
+    
+    // Manual save only - no polling or auto-save
+    let isSaving = false;
+    let savedFieldValues = null; // Store field values to apply when PDF loads
+
+    const saveBtn = doc.getElementById('saveBtn');
+    const downloadBtn = doc.getElementById('downloadBtn');
+    const closeBtn = doc.getElementById('closeBtn');
+    const saveStatusEl = doc.getElementById('saveStatus');
+    const adobeContainer = doc.getElementById('adobe-dc-view');
+
+    function setSaveStatus(status, message) {
+        if (!saveStatusEl) {
+            return;
+        }
+        saveStatusEl.className = 'text-sm';
+        if (status === 'info') {
+            saveStatusEl.classList.add('text-blue-600');
+        } else if (status === 'success') {
+            saveStatusEl.classList.add('text-green-600');
+        } else if (status === 'error') {
+            saveStatusEl.classList.add('text-red-600');
+        }
+        saveStatusEl.textContent = message;
+    }
+
+    // No auto-save status function needed
+
+    popupWindow.addEventListener('error', function(event) {
+        setSaveStatus('error', 'Runtime error: ' + event.message);
+        if (event && event.error) {
+            console.error('[PDF Popup] uncaught error', event.error);
+        } else {
+            console.error('[PDF Popup] uncaught error', event.message);
+        }
+    });
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            popupWindow.close();
+        });
+    }
+
+    if (saveBtn) {
+        saveBtn.addEventListener('click', () => {
+            // Save button is disabled - show instruction
+            setSaveStatus('info', 'Please press Ctrl+S directly in the PDF viewer to save your changes.');
+        });
+    }
+
+    if (downloadBtn) {
+        downloadBtn.addEventListener('click', () => downloadPDF());
+    }
+
+    function ensureTailwindStyles() {
+        if (popupWindow.tailwind) {
+            console.log('[PDF Popup] Tailwind already available');
+            return Promise.resolve();
+        }
+
+        const existing = doc.getElementById('tailwind-popup-script');
+        if (existing) {
+            console.log('[PDF Popup] Waiting for existing Tailwind script to load');
+            return new Promise((resolve, reject) => {
+                existing.addEventListener('load', () => resolve(), { once: true });
+                existing.addEventListener('error', () => reject(new Error('Tailwind CDN failed to load')), { once: true });
+            });
+        }
+
+        return new Promise((resolve, reject) => {
+            console.log('[PDF Popup] Injecting Tailwind CDN script');
+            const script = doc.createElement('script');
+            script.id = 'tailwind-popup-script';
+            script.src = 'https://cdn.tailwindcss.com';
+            script.defer = true;
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Tailwind CDN failed to load'));
+            doc.head.appendChild(script);
+        });
+    }
+
+    function ensureAdobePDFSDK() {
+        if (popupWindow.AdobeDC && popupWindow.AdobeDC.View) {
+            console.log('[PDF Popup] Adobe SDK already available');
+            return Promise.resolve();
+        }
+
+        const existing = doc.getElementById('adobe-pdf-viewer-sdk');
+        if (existing) {
+            console.log('[PDF Popup] Waiting for existing Adobe SDK script');
+            return new Promise((resolve, reject) => {
+                existing.addEventListener('load', () => resolve(), { once: true });
+                existing.addEventListener('error', () => reject(new Error('Adobe PDF Embed API failed to load')), { once: true });
+            });
+        }
+
+        return new Promise((resolve, reject) => {
+            console.log('[PDF Popup] Injecting Adobe PDF Embed SDK script');
+            const script = doc.createElement('script');
+            script.id = 'adobe-pdf-viewer-sdk';
+            script.src = 'https://acrobatservices.adobe.com/view-sdk/viewer.js';
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Adobe PDF Embed API failed to load'));
+            doc.head.appendChild(script);
+        });
+    }
+
+    function showAdobeSDKError(localTemplateId) {
+        if (!adobeContainer) {
+            return;
+        }
+        adobeContainer.innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="text-center p-8"><div class="text-6xl mb-4">PDF</div><h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Editor Ready</h3><p class="text-gray-600 mb-4">Template ID: ' + localTemplateId + '</p><div class="space-y-2 text-sm text-gray-500 mb-6"><p>-  Click on form fields to edit them</p><p>-  Use the Save Fields button to save your changes</p><p>-  Data is automatically saved to the database</p></div><div class="p-4 bg-blue-50 rounded-lg"><p class="text-blue-800 text-sm"><strong>Adobe PDF Embed API:</strong> Demo mode - Form fields are simulated for testing.</p></div></div></div>';
+        setSaveStatus('info', 'Adobe viewer unavailable. Demo mode is active.');
+
+        currentPDFViewer = {
+            getFormFields: async function() {
+                return {
+                    company_name: 'Sample Company',
+                    policy_number: 'POL-123456',
+                    effective_date: '01/01/2025',
+                    expiration_date: '12/31/2025',
+                    insured_name: 'John Doe',
+                    address: '123 Main St, City, State 12345'
+                };
+            },
+            setFormFields: async function(fields) {
+                console.log('[PDF Popup] Demo mode setting form fields', fields);
+                return true;
+            }
+        };
+    }
+
+    function showPDFError(localTemplateId, errorMessage) {
+        if (!adobeContainer) {
+            return;
+        }
+        adobeContainer.innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="text-center p-8"><div class="text-6xl mb-4">Warning</div><h3 class="text-lg font-semibold text-gray-900 mb-2">PDF Loading Error</h3><p class="text-gray-600 mb-4">Template ID: ' + localTemplateId + '</p><p class="text-red-600 text-sm mb-6">Error: ' + errorMessage + '</p><div class="space-y-2 text-sm text-gray-500 mb-6"><p>-  PDF file may not be available</p><p>-  Check template storage configuration</p><p>-  Try refreshing the page</p></div><button id="retryLoadBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Retry Loading PDF</button></div></div>';
+
+        const retryBtn = doc.getElementById('retryLoadBtn');
+        if (retryBtn) {
+            retryBtn.addEventListener('click', () => startViewer());
+        }
+
+        setSaveStatus('error', errorMessage || 'Failed to load the PDF template.');
+
+        currentPDFViewer = {
+            getFormFields: async function() {
+                return {
+                    company_name: 'Sample Company',
+                    policy_number: 'POL-123456',
+                    effective_date: '01/01/2025',
+                    expiration_date: '12/31/2025',
+                    insured_name: 'John Doe',
+                    address: '123 Main St, City, State 12345'
+                };
+            },
+            setFormFields: async function(fields) {
+                console.log('[PDF Popup] Fallback: Setting form fields', fields);
+                return true;
+            }
+        };
+    }
+
+    async function loadExistingFieldValues(localTemplateId) {
+        try {
+            const url = buildApiUrl('/api/pdf/get-fields/' + localTemplateId + '/' + accountId);
+            console.log('[PDF Popup] Loading field values from:', url);
+
+            const response = await fetch(url);
+            console.log('[PDF Popup] Load response status:', response.status);
+            
+            const data = await response.json();
+            console.log('[PDF Popup] Load response data:', data);
+
+            // Store server field definitions for fallback
+            if (data.success && data.form_fields && Array.isArray(data.form_fields)) {
+                const serverFields = {};
+                data.form_fields.forEach(field => {
+                    if (field.name) {
+                        serverFields[field.name] = field.default_value || '';
+                    }
+                });
+                popupWindow.PDF_DEBUG = popupWindow.PDF_DEBUG || {};
+                popupWindow.PDF_DEBUG.serverFields = serverFields;
+                console.log('[PDF Popup] Stored server field definitions:', Object.keys(serverFields).length);
+            }
+
+            if (data.success && data.field_values) {
+                console.log('[PDF Popup] Loading existing field values', data.field_values);
+                console.log('[PDF Popup] Field values keys:', Object.keys(data.field_values || {}));
+                savedFieldValues = data.field_values; // Store for later application
+                return data.field_values;
+            } else {
+                console.log('[PDF Popup] No existing field values found');
+                console.log('[PDF Popup] Field values object:', data.field_values);
+                savedFieldValues = null;
+                return null;
+            }
+        } catch (error) {
+            console.error('[PDF Popup] Error loading existing field values', error);
+            savedFieldValues = null;
+            return null;
+        }
+    }
+
+    async function applySavedFieldValues(fieldValues) {
+        if (!fieldValues || Object.keys(fieldValues).length === 0) {
+            console.log('[PDF Popup] No field values to apply');
+            setSaveStatus('info', 'PDF ready for editing. Save to store your changes.');
+            return;
+        }
+        
+        // Check if any fields have non-empty values
+        const nonEmptyFields = Object.entries(fieldValues).filter(([key, value]) => value && String(value).trim() !== '');
+        console.log('[PDF Popup] Non-empty fields to apply:', nonEmptyFields.length);
+        
+        if (nonEmptyFields.length === 0) {
+            console.log('[PDF Popup] All field values are empty, skipping application');
+            setSaveStatus('info', 'PDF ready for editing. Save to store your changes.');
+            return;
+        }
+
+        console.log('[PDF Popup] Applying saved field values', fieldValues);
+
+        // Wait for PDF to be fully loaded
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        const adobeValueEntries = mapObjectToAdobeFormFieldValues(fieldValues);
+                console.log('[PDF Popup] Prepared Adobe value entries', adobeValueEntries);
+
+        // Method 1: Try Adobe API setFormFieldValues
+                if (adobeValueEntries.length && currentPDFAPIs && currentPDFAPIs.setFormFieldValues) {
+                    try {
+                console.log('[PDF Popup] Attempting setFormFieldValues with:', adobeValueEntries.slice(0, 3));
+                        await currentPDFAPIs.setFormFieldValues({ formFieldValues: adobeValueEntries });
+                console.log('[PDF Popup] Applied field values via Adobe API setFormFieldValues');
+                setSaveStatus('success', 'Existing field values applied from the database.');
+                return;
+                    } catch (apiError) {
+                console.warn('[PDF Popup] Adobe API setFormFieldValues failed', apiError);
+            }
+        } else {
+            console.log('[PDF Popup] setFormFieldValues not available - apis:', !!currentPDFAPIs, 'method:', typeof currentPDFAPIs?.setFormFieldValues);
+        }
+
+        // Method 2: Try Adobe API updateFormFieldValues
+        if (adobeValueEntries.length && currentPDFAPIs && currentPDFAPIs.updateFormFieldValues) {
+            try {
+                console.log('[PDF Popup] Attempting updateFormFieldValues with:', adobeValueEntries.slice(0, 3));
+                await currentPDFAPIs.updateFormFieldValues(adobeValueEntries);
+                console.log('[PDF Popup] Applied field values via Adobe API updateFormFieldValues');
+                setSaveStatus('success', 'Existing field values applied from the database.');
+                return;
+            } catch (apiError) {
+                console.warn('[PDF Popup] Adobe API updateFormFieldValues failed', apiError);
+            }
+        } else {
+            console.log('[PDF Popup] updateFormFieldValues not available - apis:', !!currentPDFAPIs, 'method:', typeof currentPDFAPIs?.updateFormFieldValues);
+        }
+
+        // Method 3: Try individual field updates
+        if (currentPDFAPIs && currentPDFAPIs.updateFormFieldValue) {
+            try {
+                console.log('[PDF Popup] Attempting individual field updates for', adobeValueEntries.length, 'fields');
+                for (const entry of adobeValueEntries.slice(0, 5)) { // Only try first 5 for testing
+                    await currentPDFAPIs.updateFormFieldValue(entry.name, entry.value);
+                }
+                console.log('[PDF Popup] Applied field values via individual updates');
+                setSaveStatus('success', 'Existing field values applied from the database.');
+                return;
+            } catch (apiError) {
+                console.warn('[PDF Popup] Individual field updates failed', apiError);
+            }
+        } else {
+            console.log('[PDF Popup] updateFormFieldValue not available - apis:', !!currentPDFAPIs, 'method:', typeof currentPDFAPIs?.updateFormFieldValue);
+        }
+
+        // Method 4: Try viewer setFormFields
+                if (currentPDFViewer && currentPDFViewer.setFormFields) {
+                    try {
+                console.log('[PDF Popup] Attempting viewer setFormFields with:', Object.keys(fieldValues).slice(0, 5));
+                await currentPDFViewer.setFormFields(fieldValues);
+                        console.log('[PDF Popup] Applied viewer field map');
+                setSaveStatus('success', 'Existing field values applied from the database.');
+                return;
+                    } catch (viewerError) {
+                console.warn('[PDF Popup] Primary setFormFields failed', viewerError);
+            }
+        } else {
+            console.log('[PDF Popup] setFormFields not available - viewer:', !!currentPDFViewer, 'method:', typeof currentPDFViewer?.setFormFields);
+        }
+
+        // Method 5: Try alternate viewer format
+        if (currentPDFViewer && currentPDFViewer.setFormFields) {
+            try {
+                const viewerValueMap = mapObjectToViewerFieldValues(fieldValues);
+                if (Object.keys(viewerValueMap).length) {
+                    console.log('[PDF Popup] Attempting alternate viewer setFormFields with:', Object.keys(viewerValueMap).slice(0, 5));
+                                await currentPDFViewer.setFormFields(viewerValueMap);
+                                console.log('[PDF Popup] Applied alternate viewer field map');
+                    setSaveStatus('success', 'Existing field values applied from the database.');
+                    return;
+                }
+                            } catch (alternateError) {
+                                console.warn('[PDF Popup] Alternate setFormFields failed', alternateError);
+                            }
+                        }
+
+        // If all methods fail, try to reload PDF with pre-filled values
+        console.error('[PDF Popup] All field value application methods failed');
+        console.log('[PDF Popup] Attempting to reload PDF with pre-filled values from server');
+        console.log('[PDF Popup] localTemplateId:', localTemplateId, 'accountId:', accountId, 'appOrigin:', appOrigin);
+        console.log('[PDF Popup] templateId from context:', templateId, 'accountId from context:', accountId);
+        
+        try {
+            // Reload the PDF with pre-filled values from the server endpoint
+            const prefilledUrl = appOrigin + '/api/pdf/template/' + templateId + '/' + accountId;
+            console.log('[PDF Popup] Reloading PDF from:', prefilledUrl);
+            
+            // Re-initialize the viewer with the pre-filled PDF
+            currentPDFViewer.previewFile({
+                content: {
+                    location: {
+                        url: prefilledUrl
+                    }
+                },
+                metaData: {
+                    fileName: "Certificate of Insurance",
+                    id: templateId
+                }
+            });
+            
+            setSaveStatus('success', 'PDF reloaded with saved field values.');
+            console.log('[PDF Popup] PDF reloaded with pre-filled values');
+        } catch (reloadError) {
+            console.error('[PDF Popup] Failed to reload PDF with pre-filled values:', reloadError);
+            setSaveStatus('error', 'Unable to apply saved field values. Fields may not be editable in this PDF.');
+        }
+    }
+
+    function mapObjectToAdobeFormFieldValues(obj) {
+        if (!obj || typeof obj !== 'object') {
+            return [];
+        }
+        return Object.keys(obj).map(name => ({ fieldName: name, value: obj[name] }));
+    }
+
+    function normalizeViewerFieldMap(raw) {
+        if (!raw || typeof raw !== 'object') {
+            return {};
+        }
+        return Object.keys(raw).reduce((acc, key) => {
+            const entry = raw[key];
+            if (entry && typeof entry === 'object' && entry.value !== undefined) {
+                acc[key] = entry.value;
+            } else if (entry && typeof entry === 'object' && entry.defaultValue !== undefined) {
+                acc[key] = entry.defaultValue;
+            } else {
+                acc[key] = entry;
+            }
+            return acc;
+        }, {});
+    }
+
+    function mapObjectToViewerFieldValues(obj) {
+        if (!obj || typeof obj !== 'object') {
+            return {};
+        }
+        const result = {};
+        Object.keys(obj).forEach(name => {
+            result[name] = { value: obj[name] };
+        });
+        return result;
+    }
+
+    function normalizeAdobeFieldDefinitions(raw) {
+        const source = Array.isArray(raw) ? raw
+            : (raw && Array.isArray(raw.formFieldList) ? raw.formFieldList
+                : (raw && Array.isArray(raw.data) ? raw.data : []));
+
+        return source.map(item => {
+            if (!item) {
+                return { name: '', type: 'text', label: '', required: false };
+            }
+
+            const name = item.name || item.fieldName || item.id || '';
+            const label = item.displayLabel || item.label || name;
+            const type = item.type || item.fieldType || 'text';
+            const required = Boolean(item.required || item.mandatory);
+            const readOnly = Boolean(item.readOnly || item.readonly);
+            const defaultValue = item.defaultValue !== undefined ? item.defaultValue : (item.value !== undefined ? item.value : null);
+
+            const normalized = {
+                name,
+                type,
+                label,
+                required,
+                read_only: readOnly,
+                default_value: defaultValue,
+            };
+
+            if (Array.isArray(item.options) && item.options.length > 0) {
+                normalized.options = item.options.map(option => {
+                    if (typeof option === 'string') {
+                        return option;
+                    }
+                    if (option && typeof option === 'object') {
+                        if (option.value !== undefined) {
+                            return String(option.value);
+                        }
+                        if (option.displayValue !== undefined) {
+                            return String(option.displayValue);
+                        }
+                    }
+                    return String(option ?? '');
+                });
+            }
+
+            if (Array.isArray(item.locations) && item.locations.length > 0) {
+                normalized.locations = item.locations.map(loc => ({
+                    page: loc && (loc.pageNumber ?? loc.page ?? null),
+                    x: loc && (loc.x ?? loc.left ?? null),
+                    y: loc && (loc.y ?? loc.top ?? null),
+                }));
+            }
+
+            if (item.maxLength !== undefined) {
+                normalized.max_length = item.maxLength;
+            }
+
+            return normalized;
+        });
+    }
+
+    function normalizeAdobeFieldValues(raw) {
+        if (!raw) {
+            return {};
+        }
+
+        if (Array.isArray(raw)) {
+            return raw.reduce((acc, entry) => {
+                if (!entry) {
+                    return acc;
+                }
+                const key = entry.fieldName || entry.name || entry.id;
+                if (!key) {
+                    return acc;
+                }
+                const value = entry.value !== undefined ? entry.value
+                    : (entry.fieldValue !== undefined ? entry.fieldValue : (entry.defaultValue !== undefined ? entry.defaultValue : ''));
+                acc[key] = value;
+                return acc;
+            }, {});
+        }
+
+        if (typeof raw === 'object') {
+            if (Array.isArray(raw.formFieldValues)) {
+                return normalizeAdobeFieldValues(raw.formFieldValues);
+            }
+            if (raw.formFieldValues && typeof raw.formFieldValues === 'object') {
+                return normalizeAdobeFieldValues(raw.formFieldValues);
+            }
+
+            return Object.keys(raw).reduce((acc, key) => {
+                const entry = raw[key];
+                acc[key] = (entry && typeof entry === 'object' && entry.value !== undefined) ? entry.value : entry;
+                return acc;
+            }, {});
+        }
+
+        return {};
+    }
+
+    function collectFieldsFromDOM() {
+        try {
+            console.log('[PDF Popup] Collecting fields from DOM...');
+            const fields = {};
+            
+            // Look for Adobe PDF form fields in the DOM
+            const adobeContainer = popupWindow.document.getElementById('adobe-dc-view');
+            if (adobeContainer) {
+                // Try to find form fields within the Adobe container
+                const inputs = adobeContainer.querySelectorAll('input, textarea, select');
+                console.log('[PDF Popup] Found DOM inputs:', inputs.length);
+                
+                inputs.forEach((input, index) => {
+                    if (input.name || input.id) {
+                        const fieldName = input.name || input.id || `field_${index}`;
+                        fields[fieldName] = input.value || '';
+                    }
+                });
+            }
+            
+            // Also try to find fields in iframes (Adobe PDF viewer might be in an iframe)
+            const iframes = popupWindow.document.querySelectorAll('iframe');
+            iframes.forEach(iframe => {
+                try {
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                    if (iframeDoc) {
+                        const inputs = iframeDoc.querySelectorAll('input, textarea, select');
+                        console.log('[PDF Popup] Found iframe inputs:', inputs.length);
+                        
+                        inputs.forEach((input, index) => {
+                            if (input.name || input.id) {
+                                const fieldName = input.name || input.id || `iframe_field_${index}`;
+                                fields[fieldName] = input.value || '';
+                            }
+                        });
+                    }
+                } catch (e) {
+                    // Cross-origin iframe, skip
+                    console.log('[PDF Popup] Cannot access iframe content (cross-origin)');
+                }
+            });
+            
+            console.log('[PDF Popup] DOM field collection result:', fields);
+            return fields;
+        } catch (error) {
+            console.warn('[PDF Popup] DOM field collection error:', error);
+            return {};
+        }
+    }
+
+    async function collectPdfFieldData() {
+        console.log('[PDF Popup] collectPdfFieldData called');
+        console.log('[PDF Popup] currentPDFAPIs:', !!currentPDFAPIs);
+        console.log('[PDF Popup] currentPDFViewer:', !!currentPDFViewer);
+        
+        let apis = currentPDFAPIs;
+        if ((!apis || typeof apis.getFormFieldList !== 'function') && currentPDFViewer && typeof currentPDFViewer.getAPIs === 'function') {
+            try {
+                console.log('[PDF Popup] Attempting to get APIs from viewer...');
+                apis = await currentPDFViewer.getAPIs();
+                currentPDFAPIs = apis;
+                console.log('[PDF Popup] Got APIs from viewer:', !!apis);
+            } catch (error) {
+                console.warn('[PDF Popup] Unable to resolve Adobe APIs on demand', error);
+                apis = null;
+            }
+        }
+
+        let definitions = [];
+        let values = {};
+
+        // Try Adobe APIs first
+        if (apis && typeof apis.getFormFieldList === 'function') {
+            try {
+                console.log('[PDF Popup] Calling getFormFieldList...');
+                const rawDefinitions = await apis.getFormFieldList({ includeFieldDefinition: true });
+                console.log('[PDF Popup] Raw Adobe definitions', rawDefinitions);
+                definitions = normalizeAdobeFieldDefinitions(rawDefinitions);
+                console.log('[PDF Popup] Normalized definitions', definitions.slice(0, 5));
+            } catch (error) {
+                console.warn('[PDF Popup] Error fetching Adobe form field definitions', error);
+            }
+        } else {
+            console.log('[PDF Popup] No Adobe APIs available for getFormFieldList');
+            console.log('[PDF Popup] Available API methods:', Object.keys(apis || {}));
+        }
+
+        if (apis && typeof apis.getFormFieldValues === 'function') {
+            try {
+                console.log('[PDF Popup] Calling getFormFieldValues...');
+                const rawValues = await apis.getFormFieldValues();
+                console.log('[PDF Popup] Raw Adobe values', rawValues);
+                values = normalizeAdobeFieldValues(rawValues);
+                console.log('[PDF Popup] Normalized values', values);
+            } catch (error) {
+                console.warn('[PDF Popup] Error fetching Adobe form field values', error);
+            }
+        } else {
+            console.log('[PDF Popup] No Adobe APIs available for getFormFieldValues');
+            console.log('[PDF Popup] Available API methods:', Object.keys(apis || {}));
+        }
+
+        // NOTE: Server-side extraction removed - it was extracting from template, not current PDF state
+        // Adobe doesn't provide a way to get current PDF blob programmatically
+        // Field values will only be extracted on manual save via save callback
+
+        // Final fallback to server-side field definitions (for field names only)
+                    if (Object.keys(values).length === 0) {
+            try {
+                console.log('[PDF Popup] Using server-side field definitions for field names...');
+                const serverFields = popupWindow.PDF_DEBUG?.serverFields || {};
+                if (serverFields && Object.keys(serverFields).length > 0) {
+                    console.log('[PDF Popup] Field names from server definitions', Object.keys(serverFields).length);
+                    // Use server fields as template with empty values
+                    values = Object.fromEntries(Object.keys(serverFields).map(key => [key, '']));
+                }
+            } catch (error) {
+                console.warn('[PDF Popup] Server field definitions failed', error);
+            }
+        }
+
+        console.log('[PDF Popup] Final result - definitions:', definitions.length, 'values:', Object.keys(values).length);
+        return { definitions, values };
+    }
+
+    // REMOVED: getCurrentPdfContent function
+    // Adobe PDF Embed API doesn't provide a way to get current PDF blob programmatically
+    // Field extraction will only happen on manual save via save callback
+
+    // No custom form UI - PDF editing only
+
+    // Manual save only - no field extraction function needed
+
+    // Save function is now handled by the save callback
+
+    // Manual save only - no auto-save functionality
+
+    // No field change tracking - manual save only
+
+    // No automatic saves - manual save only
+
+    async function downloadPDF() {
+        try {
+            // Download the pre-filled PDF with account-specific data
+            const response = await fetch(buildApiUrl('/api/pdf/template/' + templateId + '/' + accountId));
+            if (!response.ok) {
+                throw new Error('Failed to download PDF');
+            }
+
+            const blob = await response.blob();
+            const url = popupWindow.URL.createObjectURL(blob);
+            const link = doc.createElement('a');
+            link.href = url;
+            link.download = 'filled_template_' + templateId + '.pdf';
+            doc.body.appendChild(link);
+            link.click();
+            link.remove();
+            popupWindow.URL.revokeObjectURL(url);
+        } catch (error) {
+            popupWindow.alert('Download failed: ' + error.message);
+        }
+    }
+
+
+    function registerSaveCallback(adobeDCView) {
+        if (typeof popupWindow.AdobeDC !== 'undefined' && popupWindow.AdobeDC.View) {
+            try {
+                console.log('[PDF Popup] Registering save callback...');
+                adobeDCView.registerCallback(
+                    popupWindow.AdobeDC.View.Enum.CallbackType.SAVE_API,
+                    async (metaData, content, options) => {
+                        console.log('[PDF Popup] Save callback triggered', { metaData, content: content?.length, options });
+                        
+                        try {
+                            // Convert PDF content to blob
+                            const blob = new Blob([new Uint8Array(content)], { type: 'application/pdf' });
+                            console.log('[PDF Popup] Blob created, size:', blob.size, 'type:', blob.type);
+                            
+                            // Convert blob to base64 for server processing
+                            const reader = new FileReader();
+                            reader.onload = async () => {
+                                const base64Content = reader.result;
+                                console.log('[PDF Popup] Base64 content length:', base64Content.length);
+                                
+                                console.log('[PDF Popup] Gathering field values prior to save...');
+                                let collectedValues = {};
+                                try {
+                                    const collected = await collectPdfFieldData();
+                                    if (collected && collected.values && typeof collected.values === 'object') {
+                                        const sanitized = {};
+                                        Object.entries(collected.values).forEach(([key, value]) => {
+                                            if (!key) {
+                                                return;
+                                            }
+                                            const normalizeValue = (input) => {
+                                                if (input === undefined || input === null) {
+                                                    return '';
+                                                }
+                                                if (Array.isArray(input)) {
+                                                    return input.map(normalizeValue).join(', ');
+                                                }
+                                                if (typeof input === 'object') {
+                                                    if ('value' in input) {
+                                                        return normalizeValue(input.value);
+                                                    }
+                                                    if ('defaultValue' in input) {
+                                                        return normalizeValue(input.defaultValue);
+                                                    }
+                                                    if ('displayValue' in input) {
+                                                        return normalizeValue(input.displayValue);
+                                                    }
+                                                    try {
+                                                        return JSON.stringify(input);
+                                                    } catch (serializationError) {
+                                                        return String(input);
+                                                    }
+                                                }
+                                                if (typeof input === 'boolean') {
+                                                    return input ? 'true' : 'false';
+                                                }
+                                                return String(input);
+                                            };
+                                            sanitized[key] = normalizeValue(value);
+                                        });
+                                        collectedValues = sanitized;
+                                        console.log('[PDF Popup] Collected field value keys:', Object.keys(collectedValues));
+                                    }
+
+                                    if (!collectedValues || Object.keys(collectedValues).length === 0) {
+                                        console.log('[PDF Popup] Falling back to DOM field collection for values');
+                                        collectedValues = collectFieldsFromDOM();
+                                    }
+                                } catch (collectError) {
+                                    console.warn('[PDF Popup] Could not collect field values via Adobe APIs', collectError);
+                                    collectedValues = collectFieldsFromDOM();
+                                }
+
+                                console.log('[PDF Popup] Sending PDF to server for extraction...');
+
+                                // Send PDF content to server for extraction and saving
+                                const response = await fetch(buildApiUrl('/api/pdf/save-fields'), {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify({
+                                        template_id: templateId,
+                                        account_id: accountId,
+                                        pdf_content: base64Content,
+                                        field_values: collectedValues
+                                    })
+                                });
+                                
+                                const result = await response.json();
+                                console.log('[PDF Popup] Save result:', result);
+                                
+                                if (result.success) {
+                                    setSaveStatus('success', `Saved ${result.field_count} field values from PDF`);
+                                    console.log('[PDF Popup] Successfully saved extracted field values');
+                                } else {
+                                    setSaveStatus('error', 'Save failed: ' + result.error);
+                                    console.error('[PDF Popup] Save failed:', result.error);
+                                }
+                            };
+                            reader.readAsDataURL(blob);
+                            
+                        } catch (error) {
+                            console.error('[PDF Popup] Error processing saved PDF:', error);
+                            setSaveStatus('error', 'Error processing save: ' + error.message);
+                        }
+                        
+                        return {
+                            code: popupWindow.AdobeDC.View.Enum.ApiResponseCode.SUCCESS,
+                            data: {
+                                metaData: Object.assign(metaData, { updatedAt: new Date().toISOString() })
+                            }
+                        };
+                    },
+                    {
+                        enableFocusPolling: false,
+                        enableAutoSave: false
+                    }
+                );
+                console.log('[PDF Popup] Save callback registered successfully');
+            } catch (callbackError) {
+                console.warn('[PDF Popup] Failed to register save callback:', callbackError);
+            }
+        } else {
+            console.warn('[PDF Popup] AdobeDC not available for save callback registration');
+        }
+    }
+
+    async function initializeAdobePDF(localTemplateId) {
+        if (!adobeContainer) {
+            setSaveStatus('error', 'PDF container not available.');
+            return;
+        }
+
+        adobeContainer.innerHTML = '<div class="h-full flex flex-col items-center justify-center bg-gray-50"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div><p class="text-gray-600">Loading PDF...</p></div>';
+
+        setSaveStatus('info', 'Loading PDF...');
+
+        const initializeViewer = () => {
+            try {
+                // Ensure the container exists and is a proper DOM element
+                const container = popupWindow.document.getElementById('adobe-dc-view');
+                if (!container) {
+                    throw new Error('Adobe PDF container not found');
+                }
+                
+                console.log('[PDF Popup] Initializing Adobe PDF viewer with container:', container);
+                
+                const adobeDCView = new popupWindow.AdobeDC.View({
+                    clientId: appConfig.adobeClientId,
+                    divId: 'adobe-dc-view',
+                });
+
+                // Load PDF with pre-filled values from server
+                const prefilledUrl = buildApiUrl('/api/pdf/template/' + localTemplateId + '/' + accountId);
+                console.log('[PDF Popup] Loading PDF with pre-filled values from:', prefilledUrl);
+
+                adobeDCView.previewFile({
+                    content: {
+                        location: {
+                            url: prefilledUrl,
+                        },
+                    },
+                    metaData: {
+                        fileName: 'Template ' + localTemplateId,
+                    },
+                }, {
+                    embedMode: 'FULL_WINDOW',
+                    enableFormFilling: true,
+                    showAnnotationTools: false,
+                    showDownloadPDF: false,
+                    showPrintPDF: false,
+                    showSavePDF: true,
+                    showLeftHandPanel: false,
+                    showDisabledSaveButton: false,
+                }).then(async adobeViewerController => {
+                    currentPDFViewer = adobeViewerController;
+                    popupWindow.PDF_DEBUG = popupWindow.PDF_DEBUG || {};
+                    popupWindow.PDF_DEBUG.viewer = currentPDFViewer;
+                    popupWindow.PDF_DEBUG.state.viewerReady = true;
+                    
+                    // Register save callback
+                    registerSaveCallback(adobeDCView);
+                    
+                    currentPDFViewer.getAPIs().then(async apis => {
+                        currentPDFAPIs = apis;
+                        popupWindow.PDF_DEBUG.apis = currentPDFAPIs;
+                        
+                        console.log('[PDF Popup] Adobe APIs loaded, PDF ready for editing');
+                        console.log('[PDF Popup] Available API methods:', Object.keys(apis || {}));
+                        setSaveStatus('success', 'PDF loaded with pre-filled values. Click on fields to edit, then press Ctrl+S to save.');
+                    }).catch(async apiError => {
+                        console.warn('[PDF Popup] Unable to access Adobe viewer APIs', apiError);
+                        currentPDFAPIs = null;
+                        popupWindow.PDF_DEBUG.apis = null;
+                        
+                        console.log('[PDF Popup] PDF loaded without Adobe APIs');
+                        setSaveStatus('info', 'PDF loaded with pre-filled values. Use Ctrl+S to save changes.');
+                    });
+                    
+                }).catch(error => {
+                    console.error('[PDF Popup] Error loading PDF', error);
+                    showPDFError(localTemplateId, error.message || 'The PDF could not be loaded.');
+                });
+            } catch (error) {
+                console.error('[PDF Popup] Adobe PDF Embed initialization error', error);
+                showPDFError(localTemplateId, error.message || 'Adobe PDF Embed API failed to initialize.');
+            }
+        };
+
+        // Wait for Adobe SDK to be fully loaded with better error handling
+        const waitForAdobeSDK = () => {
+        if (popupWindow.AdobeDC && popupWindow.AdobeDC.View) {
+                console.log('[PDF Popup] AdobeDC is available, initializing viewer');
+            initializeViewer();
+        } else {
+                console.log('[PDF Popup] AdobeDC not yet available, waiting...');
+                // Check every 100ms for AdobeDC to be available
+                const checkInterval = setInterval(() => {
+                    if (popupWindow.AdobeDC && popupWindow.AdobeDC.View) {
+                        clearInterval(checkInterval);
+                        console.log('[PDF Popup] AdobeDC became available, initializing viewer');
+                        initializeViewer();
+                    }
+                }, 100);
+                
+                // Stop checking after 10 seconds
+                setTimeout(() => {
+                    clearInterval(checkInterval);
+            if (!popupWindow.AdobeDC || !popupWindow.AdobeDC.View) {
+                        console.warn('[PDF Popup] AdobeDC not available after 10 seconds, showing error');
+                showAdobeSDKError(localTemplateId);
+            }
+                }, 10000);
+            }
+        };
+        
+        // Listen for the SDK ready event as a fallback
+        popupWindow.document.addEventListener('adobe_dc_view_sdk.ready', () => {
+            console.log('[PDF Popup] Adobe SDK ready event received');
+            initializeViewer();
+        }, { once: true });
+        
+        // Start checking for AdobeDC immediately
+        waitForAdobeSDK();
+    }
+
+    const startViewer = () => {
+        setSaveStatus('info', 'Loading Adobe PDF viewer...');
+        ensureTailwindStyles().catch(error => {
+            console.warn('[PDF Popup] Tailwind stylesheet failed to load for PDF editor popup.', error);
+            setSaveStatus('error', 'Tailwind CDN failed to load. Styling may be limited.');
+        }).finally(async () => {
+            try {
+                await ensureAdobePDFSDK();
+                await initializeAdobePDF(templateId);
+            } catch (error) {
+                    console.error('[PDF Popup] Failed to load Adobe SDK', error);
+                    setSaveStatus('error', error.message || 'Adobe PDF Embed API failed to load.');
+                    showPDFError(templateId, error.message || 'Adobe PDF Embed API failed to load.');
+            }
+        });
+    };
+
+    if (popupWindow.document.readyState === 'complete') {
+        startViewer();
+    } else {
+        popupWindow.addEventListener('load', startViewer, { once: true });
+    }
+}
+
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
