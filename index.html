@@ -651,7 +651,17 @@
             }
 
             try {
-                const apiUrl = buildApiUrl('/api/account/' + context.accountId + '/agency-settings');
+                // Build URL with SF session params (buildApiUrl not available yet)
+                let apiUrl = '/api/account/' + context.accountId + '/agency-settings';
+                const params = new URLSearchParams(window.location.search);
+                const sfSession = params.get('sfSession');
+                const sfOrg = params.get('sfOrg');
+                if (sfSession) {
+                    apiUrl += '?sfSession=' + encodeURIComponent(sfSession);
+                    if (sfOrg) {
+                        apiUrl += '&sfOrg=' + encodeURIComponent(sfOrg);
+                    }
+                }
                 console.log('[Agency Settings] Loading from database:', apiUrl);
 
                 const response = await fetch(apiUrl);
@@ -710,7 +720,17 @@
             }
 
             try {
-                const apiUrl = buildApiUrl('/api/account/' + settings.accountId + '/agency-settings');
+                // Build URL with SF session params (buildApiUrl may not be available yet)
+                let apiUrl = '/api/account/' + settings.accountId + '/agency-settings';
+                const params = new URLSearchParams(window.location.search);
+                const sfSession = params.get('sfSession');
+                const sfOrg = params.get('sfOrg');
+                if (sfSession) {
+                    apiUrl += '?sfSession=' + encodeURIComponent(sfSession);
+                    if (sfOrg) {
+                        apiUrl += '&sfOrg=' + encodeURIComponent(sfOrg);
+                    }
+                }
                 console.log('[Agency Settings] Saving to database:', apiUrl);
 
                 const response = await fetch(apiUrl, {
