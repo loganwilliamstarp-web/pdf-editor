@@ -1377,13 +1377,22 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
                     is_checkbox_like = field_type_lower in {'checkbox', 'button', 'btn', 'radiobutton'}
                     is_signature_field = normalized_name == 'Producer_AuthorizedRepresentative_Signature_A'
 
+                    # Debug logging for signature field
+                    if is_signature_field:
+                        print(f"[SIGNATURE DEBUG] Found signature field: {normalized_name}")
+                        print(f"[SIGNATURE DEBUG] Value: {value}")
+                        print(f"[SIGNATURE DEBUG] signature_applied: {signature_applied}")
+                        print(f"[SIGNATURE DEBUG] signature_bytes: {signature_bytes is not None}")
+
                     # Skip empty strings for non-checkbox fields
                     if not is_checkbox_like and str(value).strip() == '':
                         pass
                     # Handle signature field with stylized text FIRST
                     elif is_signature_field and not signature_applied:
+                        print(f"[SIGNATURE DEBUG] Attempting to style signature...")
                         try:
                             rect = widget.rect
+                            print(f"[SIGNATURE DEBUG] Widget rect: {rect}, area: {rect.get_area() if rect else 0}")
                             if rect and rect.get_area() > 0:
                                 # Clear the form field
                                 try:
@@ -1396,6 +1405,7 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
                                 if signature_bytes:
                                     image_rect = fitz.Rect(rect.x0, rect.y0, rect.x1, rect.y1)
                                     page.insert_image(image_rect, stream=signature_bytes, keep_proportion=True)
+                                    print(f"[SIGNATURE DEBUG] Inserted signature image")
                                 else:
                                     # Draw signature-style text using italic Times font
                                     signature_text = str(value)
@@ -1404,6 +1414,7 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
                                     text_y = rect.y0 + (field_height + font_size) / 2 - 2
                                     text_x = rect.x0 + 2
 
+                                    print(f"[SIGNATURE DEBUG] Drawing text: '{signature_text}' at ({text_x}, {text_y}) size {font_size}")
                                     # Insert text with italic font
                                     page.insert_text(
                                         (text_x, text_y),
@@ -1412,10 +1423,13 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
                                         fontsize=font_size,
                                         color=(0, 0, 0.4)  # Dark blue color for signature
                                     )
+                                    print(f"[SIGNATURE DEBUG] Successfully drew styled signature")
                                 signature_applied = True
                                 filled_count += 1
                         except Exception as signature_error:
-                            print(f"Warning: unable to insert signature: {signature_error}")
+                            print(f"[SIGNATURE DEBUG] ERROR: {signature_error}")
+                            import traceback
+                            traceback.print_exc()
                             # Fallback to regular text
                             widget.field_value = str(value)
                             widget.update()
