@@ -1387,6 +1387,9 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
                     # Skip empty strings for non-checkbox fields
                     if not is_checkbox_like and str(value).strip() == '':
                         pass
+                    # Skip signature field if already applied (don't overwrite styled text)
+                    elif is_signature_field and signature_applied:
+                        pass  # Already handled
                     # Handle signature field with stylized text FIRST
                     elif is_signature_field and not signature_applied:
                         print(f"[SIGNATURE DEBUG] Attempting to style signature...")
