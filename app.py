@@ -2799,8 +2799,32 @@ def process_certificate_generation_request(account_id, payload, default_template
     if not template_keys:
         return jsonify({'success': False, 'error': 'No templates selected'}), 400
 
+    # Fetch agency settings from database (more reliable than frontend payload)
     agency_settings = payload.get('agency_settings') or {}
-    signature_data_url = agency_settings.get('signatureDataUrl') or agency_settings.get('signature_data_url')
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute('''
+            SELECT name, street, suite, city, state, zip, phone, fax, email,
+                   producer_name, producer_phone, producer_email, signature_image
+            FROM agency_settings
+            WHERE account_id = %s
+        ''', (normalized_account_id,))
+        db_agency_record = cur.fetchone()
+        cur.close()
+        conn.close()
+        if db_agency_record:
+            # Merge database settings with any frontend overrides
+            db_settings = format_agency_settings(db_agency_record)
+            print(f"[Generate] Loaded agency settings from DB: name={db_settings.get('name')}, producerName={db_settings.get('producerName')}, producerPhone={db_settings.get('producerPhone')}")
+            # Database settings take precedence, but frontend can fill gaps
+            for key, value in db_settings.items():
+                if value and (not agency_settings.get(key)):
+                    agency_settings[key] = value
+    except Exception as agency_db_error:
+        print(f"Warning: Could not fetch agency settings from database: {agency_db_error}")
+
+    signature_data_url = agency_settings.get('signatureDataUrl') or agency_settings.get('signature_data_url') or agency_settings.get('signatureImage')
     signature_bytes = decode_data_url(signature_data_url) if signature_data_url else None
     signature_bytes = None  # Use text-based signature representation
 
