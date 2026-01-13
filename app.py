@@ -1410,25 +1410,23 @@ def fill_acord25_fields(pdf_bytes, field_values, signature_bytes=None):
                                     page.insert_image(image_rect, stream=signature_bytes, keep_proportion=True)
                                     print(f"[SIGNATURE DEBUG] Inserted signature image")
                                 else:
-                                    # Draw signature-style text
+                                    # Draw signature-style text using textbox for proper positioning
                                     signature_text = str(value)
                                     field_height = rect.height
-                                    font_size = min(field_height * 0.6, 14)  # Cap at 14pt
-                                    text_y = rect.y0 + (field_height + font_size) / 2 - 2
-                                    text_x = rect.x0 + 2
+                                    font_size = min(field_height * 0.7, 12)  # Cap at 12pt
 
-                                    print(f"[SIGNATURE DEBUG] Drawing text: '{signature_text}' at ({text_x}, {text_y}) size {font_size}")
+                                    print(f"[SIGNATURE DEBUG] Drawing text: '{signature_text}' in rect {rect} size {font_size}")
 
-                                    # Use page.insert_text for signature styling
-                                    # This draws directly on the page with specified color
-                                    page.insert_text(
-                                        (text_x, text_y),
+                                    # Use insert_textbox to draw text within the field rectangle
+                                    # This handles positioning automatically
+                                    rc = page.insert_textbox(
+                                        rect,
                                         signature_text,
                                         fontsize=font_size,
                                         color=(0, 0, 0.5),  # Dark blue color
-                                        rotate=0,
+                                        align=0,  # Left align
                                     )
-                                    print(f"[SIGNATURE DEBUG] Successfully drew styled signature")
+                                    print(f"[SIGNATURE DEBUG] insert_textbox returned: {rc}")
                                 signature_applied = True
                                 filled_count += 1
                         except Exception as signature_error:
