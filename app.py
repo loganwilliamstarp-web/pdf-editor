@@ -877,20 +877,28 @@ def ensure_generated_certificates_table():
     try:
         conn = get_db()
         cur = conn.cursor()
+
+        # Create table if not exists
         cur.execute(
             '''
             CREATE TABLE IF NOT EXISTS generated_certificates (
                 id UUID PRIMARY KEY,
                 account_id VARCHAR(18) NOT NULL,
                 template_id UUID,
-                certificate_holder_id BIGINT,
-                filename TEXT NOT NULL,
+                certificate_holder_id UUID,
+                filename TEXT,
                 storage_path TEXT,
                 pdf_blob BYTEA,
                 generated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
             )
             '''
         )
+
+        # Add missing columns to existing table (migration)
+        cur.execute('ALTER TABLE generated_certificates ADD COLUMN IF NOT EXISTS certificate_holder_id UUID;')
+        cur.execute('ALTER TABLE generated_certificates ADD COLUMN IF NOT EXISTS filename TEXT;')
+        cur.execute('ALTER TABLE generated_certificates ADD COLUMN IF NOT EXISTS pdf_blob BYTEA;')
+
         cur.execute(
             '''
             CREATE INDEX IF NOT EXISTS idx_generated_certificates_account
@@ -904,10 +912,11 @@ def ensure_generated_certificates_table():
             '''
         )
         conn.commit()
+        print("[ensure_generated_certificates_table] Table and columns ensured successfully")
     except Exception as error:
         if conn:
             conn.rollback()
-        print("Warning: unable to ensure generated_certificates table:", error)
+        print(f"Warning: unable to ensure generated_certificates table: {error}")
     finally:
         if cur:
             cur.close()
@@ -1836,9 +1845,12 @@ def setup_system():
         if PSYCOPG2_AVAILABLE:
             db_result = create_database_schema()
             results['database_schema'] = db_result
+            # Run migrations to add new columns
+            ensure_generated_certificates_table()
+            results['generated_certificates_migration'] = True
         else:
             results['database_schema'] = False
-        
+
         return jsonify({
             'success': True,
             'message': 'System setup completed',
@@ -5252,6 +5264,8 @@ def get_pdf_fields(template_id, account_id):
 
 
 if __name__ == '__main__':
+    # Run migrations on startup
+    ensure_generated_certificates_table()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
 
