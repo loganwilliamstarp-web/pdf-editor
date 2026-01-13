@@ -4035,6 +4035,7 @@ def serve_pdf_template_with_fields(template_id, account_id):
             if agency_record:
                 agency_settings = format_agency_settings(agency_record)
                 print(f"Agency settings formatted: {list(agency_settings.keys()) if agency_settings else 'None'}")
+                print(f"Agency settings values: name={agency_settings.get('name')}, producerName={agency_settings.get('producerName')}, producerPhone={agency_settings.get('producerPhone')}, producerEmail={agency_settings.get('producerEmail')}")
                 agency_field_map = resolve_field_mapping(effective_template_key, 'agency')
                 print(f"Agency field map: {agency_field_map}")
                 if agency_field_map and agency_settings:
