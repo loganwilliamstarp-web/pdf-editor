@@ -1,0 +1,50 @@
+<template>
+    <!-- Loading Spinner -->
+    <template if:true={isLoading}>
+        <div class="slds-align_absolute-center slds-p-around_large">
+            <lightning-spinner
+                alternative-text="Loading PDF Editor"
+                size="medium">
+            </lightning-spinner>
+            <p class="slds-m-top_small">Loading PDF Editor...</p>
+        </div>
+    </template>
+
+    <!-- Error State -->
+    <template if:true={hasError}>
+        <div class="slds-align_absolute-center slds-p-around_large">
+            <lightning-icon
+                icon-name="utility:error"
+                size="large"
+                variant="error">
+            </lightning-icon>
+            <p class="slds-m-top_small slds-text-color_error">
+                Unable to load PDF Editor. Please try again later.
+            </p>
+        </div>
+    </template>
+
+    <!-- PDF Editor iFrame -->
+    <template if:true={iframeUrl}>
+        <iframe
+            src={iframeUrl}
+            class="pdf-editor-iframe"
+            onload={handleIframeLoad}
+            onerror={handleIframeError}
+            title="PDF Editor">
+        </iframe>
+    </template>
+
+    <!-- No Record ID State -->
+    <template if:false={iframeUrl}>
+        <div class="slds-align_absolute-center slds-p-around_large">
+            <lightning-icon
+                icon-name="utility:info"
+                size="large">
+            </lightning-icon>
+            <p class="slds-m-top_small">
+                This component must be placed on an Account record page.
+            </p>
+        </div>
+    </template>
+</template>
